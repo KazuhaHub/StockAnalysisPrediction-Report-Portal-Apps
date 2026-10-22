@@ -49,7 +49,7 @@ func TestComponentRevisionAndCredentialDeletion(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	in := ComponentInput{Label: "Account A", Enabled: true, Monitors: []MonitorInput{{Label: "Balance", Kind: "deepseek", CredentialID: credential.ID, Config: json.RawMessage(`{}`), Enabled: true, IntervalSeconds: 300, TimeoutSeconds: 5}}}
+	in := ComponentInput{Label: "Account A", Enabled: true, Monitors: []MonitorInput{{Label: "Balance", Kind: "deepseek", CredentialID: credential.ID, Config: json.RawMessage(`{"account_ref":"account-a"}`), Enabled: true, IntervalSeconds: 300, TimeoutSeconds: 5}}}
 	c, err := s.SaveComponent(admin, in)
 	if err != nil {
 		t.Fatal(err)

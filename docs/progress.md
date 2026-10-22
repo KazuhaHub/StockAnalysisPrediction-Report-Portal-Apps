@@ -230,3 +230,20 @@ and absent financial values. All three UI locales explain unsupported billing,
 missing permission, wrong site, missing currency, authentication failure, observer
 failure and stale evidence. Five frontend contract tests, full service race tests
 and four real browser scenarios pass locally. No real provider call was needed.
+
+
+## Billing identity and anonymous budgets (2026-10-22)
+
+Billing configuration now requires an operator-reviewed local account reference in
+the existing versioned monitor JSON. Active keys for one provider/account cannot
+create separate component balance pools; same-component currency projections are
+kept separate and duplicate currencies/inconsistent sites are refused. Provider
+APIs cannot automatically establish the funding relationship of arbitrary keys;
+the UI/runbook require the administrator to verify account ownership. No new
+column or table was added.
+
+Anonymous reads now have bounded per-socket-peer and global token budgets, with a
+hard origin registry cap and idle eviction. Spoofed forwarding headers do not
+allocate new budgets; 429 includes retry guidance, and private auth remains
+independent. Tests cover bursts, global work, registry bounds and expiry. The
+runbook explains trusted-gateway client limits and the shared proxy budget.

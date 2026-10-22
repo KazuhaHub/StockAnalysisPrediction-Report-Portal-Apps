@@ -123,6 +123,18 @@ Probe configuration:
 | Qwen | Minimal RAM AccessKey ID/secret; optional STS token | Correct China/international billing site and currency. This reports cloud account credit/cash, not a model key's quota. |
 | Heartbeat | At least 32 characters of signing secret | Interval defines the expected job cadence; see the signed ingress format below. |
 
+Use **Billing account reference** for a stable local alias of the actual funding
+account, such as `research-main`. It is required for saved DeepSeek/Qwen monitors;
+use lowercase letters, numbers, dot, dash or underscore (1–64 characters). Verify
+the actual account relationship before assigning aliases. Different keys do not
+prove independent funding accounts. All active monitors for a provider/account
+reference must belong to one component. Within that component, multiple currencies
+are allowed, with one monitor per currency and one consistent billing site. They
+remain distinct currencies, never a summed total. Reusing a credential under a
+different account reference is refused. The alias stays in administrator-only
+configuration and is not a public account identifier. Existing development billing
+configurations need an alias saved before their next configuration update.
+
 Defaults are 60-second checks and 300-second billing checks, with bounded jitter.
 Intervals are 30 seconds–24 hours; timeouts are 1–15 seconds. A stale sample becomes
 unknown after `max(3 * interval, 2 * timeout)`. Three failures confirm an ordinary
@@ -250,6 +262,21 @@ Check the public page in a signed-out browser. Verify that no internal labels,
 hostnames, database names, amounts, OU identities, provider IDs or private narrative
 appear. The Status service can itself become unreachable; independent external
 monitoring is required to detect that observer failure reliably.
+
+## Anonymous request limits
+
+Public assets and API requests share a bounded backend budget: 10 requests/second
+per socket peer with a burst of 20, and 40 requests/second overall with a burst of
+80. The peer registry holds at most 1,024 entries and evicts idle entries after a
+minute when capacity is needed. Rejected requests return HTTP 429 with
+`Retry-After: 1`. Health/readiness and authenticated routes do not consume this
+anonymous budget. Existing total request concurrency limits still apply.
+
+The backend deliberately ignores caller-supplied forwarding headers. When nginx
+proxies all requests, its address is one peer; add a client-IP rate policy at the
+trusted gateway for high-traffic publication. Do not enable arbitrary forwarded
+header trust to obtain separate budgets. This is a bounded development service,
+not a claim of an unmeasured public traffic capacity.
 
 ## Backup, restore and rollback
 

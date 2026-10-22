@@ -66,6 +66,7 @@ type MonitorInput struct {
 	TimeoutSeconds  int             `json:"timeout_seconds"`
 }
 type ProbeConfig struct {
+	AccountRef      string         `json:"account_ref,omitempty"`
 	Version         int            `json:"version"`
 	URL             string         `json:"url,omitempty"`
 	Host            string         `json:"host,omitempty"`
@@ -132,6 +133,9 @@ func validateMonitor(m *MonitorInput) error {
 			return ErrInvalid
 		}
 	case "deepseek", "qwen":
+		if !billingReference.MatchString(c.AccountRef) {
+			return ErrInvalid
+		}
 		if c.LowBalance != "" {
 			if _, ok := decimal(c.LowBalance); !ok {
 				return ErrInvalid
@@ -209,6 +213,9 @@ func (s *Store) SaveComponent(v protocol.Viewer, in ComponentInput) (ComponentIn
 		return ComponentInput{}, err
 	}
 	defer tx.Rollback()
+	if err := validateBillingIdentity(tx, in); err != nil {
+		return ComponentInput{}, err
+	}
 	now := time.Now().UnixMilli()
 	if in.ID == "" {
 		if in.Revision != 0 {
@@ -282,15 +289,6 @@ func (s *Store) SaveComponent(v protocol.Viewer, in ComponentInput) (ComponentIn
 			var owner string
 			if tx.QueryRow(`SELECT component_id FROM monitors WHERE id=?`, m.ID).Scan(&owner) != nil || owner != in.ID {
 				return ComponentInput{}, ErrConflict
-			}
-		}
-		if (m.Kind == "deepseek" || m.Kind == "qwen") && m.Enabled {
-			var n int
-			if err := tx.QueryRow(`SELECT COUNT(*) FROM monitors WHERE credential_id=? AND kind=? AND enabled=1 AND id<>?`, m.CredentialID, m.Kind, m.ID).Scan(&n); err != nil {
-				return ComponentInput{}, err
-			}
-			if n != 0 {
-				return ComponentInput{}, ErrInvalid
 			}
 		}
 		var credential any

@@ -141,5 +141,7 @@
   "currencyHint": "The selected currency was not reported. Balances in other currencies are not converted or summed.",
   "authenticationHint": "Authentication failed. Review the saved credential; no balance or availability was inferred.",
   "observerHint": "The observer could not finish this check. This does not establish a target outage.",
-  "staleHint": "This observation is stale. Wait for a fresh check before relying on it."
+  "staleHint": "This observation is stale. Wait for a fresh check before relying on it.",
+  "accountRef": "Billing account reference",
+  "accountRefHint": "Use one local reference for each real billing account (lowercase letters, numbers, dot, dash or underscore; up to 64 characters). Keys sharing an account belong to one component. Verify account ownership yourself; the balance API cannot identify shared accounts reliably."
 }

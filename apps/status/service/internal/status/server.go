@@ -13,10 +13,11 @@ import (
 )
 
 type Server struct {
-	store    *Store
-	signer   protocol.Signer
-	verifier *protocol.Verifier
-	slots    chan struct{}
+	publicBudget publicBudget
+	store        *Store
+	signer       protocol.Signer
+	verifier     *protocol.Verifier
+	slots        chan struct{}
 }
 
 func NewServer(store *Store, signer protocol.Signer) (*Server, error) {
@@ -71,6 +72,11 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	raw, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 65536))
 	if err != nil {
 		apiError(w, ErrInvalid)
+		return
+	}
+	if (r.URL.Path == "/" || r.URL.Path == "/app.js" || r.URL.Path == "/style.css" || strings.HasPrefix(r.URL.Path, "/public/")) && !s.publicBudget.allow(r.RemoteAddr, time.Now()) {
+		w.Header().Set("Retry-After", "1")
+		write(w, 429, map[string]bool{"ok": false})
 		return
 	}
 	if s.publicRoute(w, r) {
