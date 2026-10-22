@@ -111,3 +111,42 @@ func TestUptimeNeverBackfillsAnIntervalWithItsNewState(t *testing.T) {
 		t.Fatalf("confirmed recovery retroactively rewrote %d ms as healthy", healthy)
 	}
 }
+
+func TestMaintenanceExitRequiresTwoNewObservations(t *testing.T) {
+	s := testStore(t)
+	c := monitoredComponent(t, s)
+	now := time.Now().Add(time.Minute)
+	sample := func(at time.Time) {
+		t.Helper()
+		m, ok, err := s.ClaimDue(at)
+		if err != nil || !ok {
+			t.Fatal("claim failed")
+		}
+		if err := s.Record(m, Result{Outcome: "success", ReasonCode: "reachable"}, at); err != nil {
+			t.Fatal(err)
+		}
+	}
+	sample(now)
+	now = now.Add(2 * time.Minute)
+	sample(now)
+	end := now.Add(time.Minute)
+	if _, err := s.db.Exec(`INSERT INTO maintenance_windows(id,component_id,starts_at,ends_at,safe_summary,created_by,created_at) VALUES('window',?,?,?,'planned','admin',?)`, c.ID, now.Add(-time.Minute).UnixMilli(), end.UnixMilli(), now.UnixMilli()); err != nil {
+		t.Fatal(err)
+	}
+	views, err := s.Components(protocol.Viewer{Subject: "admin", Role: "admin"}, false, end.Add(time.Second))
+	if err != nil || views[0].State != "unknown" {
+		t.Fatal("maintenance ended with stale green evidence")
+	}
+	now = now.Add(2 * time.Minute)
+	sample(now)
+	views, err = s.Components(protocol.Viewer{Subject: "admin", Role: "admin"}, false, now)
+	if err != nil || views[0].State != "unknown" {
+		t.Fatal("first post-maintenance success recovered early")
+	}
+	now = now.Add(2 * time.Minute)
+	sample(now)
+	views, err = s.Components(protocol.Viewer{Subject: "admin", Role: "admin"}, false, now)
+	if err != nil || views[0].State != "operational" {
+		t.Fatal("confirmed post-maintenance recovery missing")
+	}
+}

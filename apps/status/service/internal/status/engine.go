@@ -88,6 +88,14 @@ func (s *Store) Record(m Monitor, result Result, now time.Time) error {
 		return err
 	}
 	intervalState := state
+	var maintenanceEnd int64
+	if err := tx.QueryRow(`SELECT COALESCE(MAX(ends_at),0) FROM maintenance_windows WHERE component_id=? AND ends_at<=?`, m.ComponentID, now.UnixMilli()).Scan(&maintenanceEnd); err != nil {
+		return err
+	}
+	if maintenanceEnd > updated {
+		state = "unknown"
+		success, failure = 0, 0
+	}
 	if now.UnixMilli()-updated > int64(max(3*m.IntervalSeconds, 2*m.TimeoutSeconds))*1000 {
 		state = "unknown"
 		success, failure = 0, 0
@@ -181,13 +189,19 @@ func aggregateInterval(tx *sql.Tx, m Monitor, previous, now int64, state string)
 				}
 			}
 		}
+		effectiveState := state
+		for _, window := range windows {
+			if window.end > previous && window.end <= from {
+				effectiveState = "unknown"
+			}
+		}
 		duration := end - from
 		operational, outage, degraded, unknown, excluded := int64(0), int64(0), int64(0), duration, int64(0)
 		if maintained {
 			unknown = 0
 			excluded = duration
 		} else if end <= freshUntil {
-			switch state {
+			switch effectiveState {
 			case "operational":
 				operational = duration
 				unknown = 0

@@ -128,3 +128,21 @@ and restart evidence, explicit test controls, full failure/recovery drills,
 container/gateway runtime validation and independently versioned immutable release
 and catalogue rollout. Status stays at 0.1.0-dev and out of the production index.
 Production credentials, deployment and marketplace settings remain untouched.
+
+
+## Development review and first complete CI (2026-10-22)
+
+Draft application PR #2 is open against the shared protocol foundation. At head
+636db6f, all five GitHub Actions jobs passed: catalogue, protocol, Status service
+checks, real Portal/Status browser acceptance and development container smoke.
+The container was built and exercised as a non-root user, including readiness,
+default-private output, offline backup/restore and retained rollback snapshot.
+The browser job pins Portal platform commit b4eabb4f and uses isolated fixtures.
+These results do not publish an image/release or migrate the production catalogue.
+
+A subsequent failing maintenance-exit regression demonstrated that an observation
+made inside maintenance could retain a green state afterward. The reducer and
+snapshot now require two fresh post-maintenance observations; interval accounting
+also refuses to extend old healthy evidence past the maintenance boundary. The
+service race suite passes after this fix. Partial-hour/unknown/paused-time history
+and the other explicit acceptance gaps remain open.
