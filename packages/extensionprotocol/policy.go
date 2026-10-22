@@ -176,6 +176,11 @@ func (c *BackendClient) Do(ctx context.Context, method, path string, body []byte
 	if !c.policy.Allows(method, path) || len(body) > 65536 || (method == "GET" && len(body) != 0) || assertion == "" || len(assertion) > maxToken {
 		return empty, ErrInvalid
 	}
+	return c.send(ctx, method, path, body, assertion)
+}
+
+func (c *BackendClient) send(ctx context.Context, method, path string, body []byte, assertion string) (BackendResponse, error) {
+	var empty BackendResponse
 	select {
 	case c.slots <- struct{}{}:
 		defer func() { <-c.slots }()
@@ -191,7 +196,9 @@ func (c *BackendClient) Do(ctx context.Context, method, path string, body []byte
 	if err != nil {
 		return empty, ErrInvalid
 	}
-	req.Header.Set(Header, assertion)
+	if assertion != "" {
+		req.Header.Set(Header, assertion)
+	}
 	req.Header.Set("Accept", "application/json")
 	if len(body) > 0 {
 		req.Header.Set("Content-Type", "application/json")
@@ -216,3 +223,26 @@ func (c *BackendClient) Do(ctx context.Context, method, path string, body []byte
 }
 
 func (c *BackendClient) Close() { c.client.CloseIdleConnections() }
+
+// Handshake uses the same destination checks, bounds and capacity as private
+// requests. Its fixed endpoint cannot be selected by a browser caller.
+func (c *BackendClient) Handshake(ctx context.Context, signer Signer, now time.Time) (string, error) {
+	challenge, err := signer.NewChallenge(now)
+	if err != nil {
+		return "", err
+	}
+	body, _ := json.Marshal(map[string]string{"challenge": challenge})
+	result, err := c.send(ctx, "POST", "/v1/handshake", body, "")
+	if err != nil || result.Status != http.StatusOK {
+		return "", ErrBackend
+	}
+	var response struct {
+		Answer string `json:"answer"`
+	}
+	decoder := json.NewDecoder(bytes.NewReader(result.Body))
+	decoder.DisallowUnknownFields()
+	if decoder.Decode(&response) != nil {
+		return "", ErrBackend
+	}
+	return signer.VerifyAnswer(challenge, response.Answer, time.Now())
+}
