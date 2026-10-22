@@ -76,3 +76,14 @@ installation-generation checks and backend registry/proxy wiring. Exact storage
 approval is still pending and no migration is written. The app-repository protocol
 PR #1 head 28ee089 has passing GitHub Actions catalogue/protocol jobs. Production
 market configuration, provider credentials and runtime have not been touched.
+
+
+## Toolchain security gate
+
+Portal draft PR #142's first go-test job stopped at govulncheck for standard-library
+GO-2026-6809 under Go 1.26.9, before running its test suite. The minimum toolchain
+in both Portal and the shared protocol module is now Go 1.26.10. The shared module
+also gains the same govulncheck CI gate. Local scans with that exact compiler
+report no reachable vulnerabilities; shared-module race tests and vet pass.
+This does not approve or implement new storage. Owner schema approval remains
+required before the dependent connection/persistence packages can proceed.
