@@ -13,11 +13,11 @@ or browser test is evidence for its own behavior, not a claim of full acceptance
 | S04 | Four workers, persisted leases, credential/target revision fences, read-only probes and signed heartbeat | Restart stale-observer evidence, timeout/rebinding/private-policy acceptance and explicit test controls |
 | S05 | DeepSeek exact-decimal/currency fixtures, Qwen cash/credit distinction, ACS3 official vector, pinned endpoints | Deployment-specific non-production billing authorization check and unsupported capability presentation |
 | S06 | Confirmation/hysteresis reducer, incident transitions, maintenance and hourly aggregates | Partial-hour and missing/paused-time accounting plus both history charts tested; remaining historical maintenance-edit/retention boundaries and broader restart evidence audit |
-| S07 | Atomic immutable outbox, namespace preflight, same-occurrence retries, publisher revision fences and queue review | Two-component notification audience drill, uncertain-restore lifecycle and storm/retry acceptance |
+| S07 | Atomic immutable outbox, namespace preflight, same-occurrence retries, publisher revision fences and queue review | Two-component/two-OU inbox routing, duplicate/changed-content checks, restart lease retry, uncertain restore/discard and storm suppression now tested; remaining full sender-to-channel timeout/quota drill |
 | S08 | Three-locale sandbox ZIP; admin component/monitor/grant/credential/operations UI; browser multi-monitor save | Remaining form/failure/accessibility/theme workflows and authorized component detail completeness |
 | S09 | Private redirect and exact public proxy templates; real browser prefix/public-isolation check | Real gateway smoke and public load/rate acceptance; actual-observation freshness and prefix-relative public history tested |
 | S10 | Deterministic local ZIP and checksum; service Dockerfile/compose; independent version field | Immutable app release (development image build/non-root smoke passed CI), migration/index compatibility and operator upgrade/rollback |
-| S11 | Local Go race/vet/build/vulnerability checks; CLI storage tests; frontend contract tests; three real browser scenarios | Full requirement-by-requirement audit, remaining failure drills and operator sign-off; first complete CI run passed at 636db6f |
+| S11 | Local Go race/vet/build/vulnerability checks; CLI storage tests; frontend contract tests; four real browser scenarios | Full requirement-by-requirement audit, remaining failure drills and operator sign-off; first complete CI run passed at 636db6f |
 
 No released app or production deployment is claimed. Keep the default Portal
 market and deployment overrides unchanged until the release artifacts and this

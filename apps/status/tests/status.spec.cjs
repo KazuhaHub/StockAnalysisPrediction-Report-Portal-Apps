@@ -123,3 +123,31 @@ test('public prefix projection remains closed until enabled and excludes private
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
   await page.close()
 })
+
+test('two component publishers route only to their configured OU and deduplicate retries', async () => {
+  const inbox = (await body(await adminAPI.post('/api/admin/notifications/channels', { data: { label: 'Status fixture inbox', adapter: 'inbox', enabled: true } }))).channel
+  const fixtures = []
+  for (const [component, group, username] of [[componentA, groupA, 'notice-a'], [componentB, groupB, 'notice-b']]) {
+    await body(await adminAPI.post('/api/admin/users', { data: { username, password, role: 'user', primary_group: group } }))
+    const token = (await body(await adminAPI.post('/api/admin/tokens', { data: { name: 'Status fixture publisher', scope: 'notify:status-' + component.id } }))).token
+    const event = 'extension.service.status-' + component.id + '.notice'
+    await body(await adminAPI.post('/api/admin/notifications/routes', { data: { label: 'Status fixture audience', channel_id: inbox.id, events: [event], recipient_mode: 'grant', enabled: true, grants: ['g:' + group] } }))
+    const publication = { occurrence_id: 'status:' + component.id + ':fixture:1', title: 'Service status changed', message: 'Component ' + component.id + ': outage', severity: 'error' }
+    const publish = data => adminAPI.post('/api/v1/notifications', { headers: { Authorization: 'Bearer ' + token }, data })
+    const first = await body(await publish(publication)), retry = await body(await publish(publication))
+    expect(retry.id).toBe(first.id)
+    expect(retry.created).toBe(false)
+    expect((await publish({ ...publication, message: 'Changed content' })).status()).toBe(409)
+    fixtures.push({ component, event, api: await login(username), eventID: first.id })
+  }
+  for (const [index, fixture] of fixtures.entries()) {
+    const notifications = await body(await fixture.api.get('/api/notifications'))
+    expect(notifications.items.filter(item => item.event_type === fixture.event)).toHaveLength(1)
+    expect(notifications.items.some(item => item.event_id === fixtures[1 - index].eventID)).toBe(false)
+    expect(JSON.stringify(notifications)).not.toContain('Private operations')
+    expect(JSON.stringify(notifications)).not.toContain('fixture-publisher-token')
+  }
+  await body(await adminAPI.put('/api/admin/users/notice-a', { data: { primary_group: groupB } }))
+  const moved = await body(await fixtures[0].api.get('/api/notifications'))
+  expect(moved.items.some(item => item.event_id === fixtures[0].eventID)).toBe(false)
+})

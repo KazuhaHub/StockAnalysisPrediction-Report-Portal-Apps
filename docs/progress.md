@@ -165,3 +165,22 @@ leave future maintenance to its actual boundary. Targeted and full race tests
 pass. The real browser suite covers private/public history interaction; final
 post-fix verification is recorded with the development commit. Historical
 maintenance-edit/retention edge cases and all other ledger gates remain open.
+
+
+## Notification recovery and audience drills (2026-10-22)
+
+The history commit 09ff928 passed all five CI jobs. Additional service race tests
+now exercise reopening the database with an unacknowledged publication lease,
+waiting for expiry and retrying identical occurrence/payload with a new lease.
+Stale acknowledgements are refused. A restored uncertain publication remains
+review-required after resume, cannot reuse a rotated publisher revision, and can
+be explicitly discarded without losing immutable reconciliation evidence.
+A storm of eleven transitions preserves every transition, publishes five notices
+and records six suppressions within the component's hourly bound.
+
+Four real Portal/Status browser scenarios pass locally. The added scenario creates
+two independent component publication tokens and exact OU inbox rules. Each OU
+sees only its event; a retry returns the original ID, changed content returns 409,
+and removing an account from its OU revokes access to the old notification.
+Only isolated fixture accounts and internal inboxes are involved. Full external
+channel timeout/quota drills and the other acceptance gates remain open.
