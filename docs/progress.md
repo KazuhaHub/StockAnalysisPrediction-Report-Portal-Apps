@@ -203,3 +203,15 @@ semantics. Full race tests, vet/build and four real browser scenarios pass;
 the browser check verifies a manual request cannot bypass global pause.
 Notification acceptance commit d14d557 passed all five CI jobs. No new schema or
 production configuration changes are involved.
+
+
+## Gateway runtime acceptance expansion (2026-10-22)
+
+Expanded the isolated container smoke to run the actual nginx public template
+against the real Status image on a dedicated temporary network. It exercises
+public HTML/assets/status/incidents/history and refusal of management, handshake,
+heartbeat and readiness paths through the public prefix. Fixture publication is
+seeded offline after the restore drill; no production data/configuration is used.
+Both containers run without capabilities, with read-only filesystems. Local Docker
+is unavailable, so runtime evidence is pending the container CI job; syntax
+compilation alone is not considered acceptance.
