@@ -59,3 +59,17 @@ class CatalogueTests(unittest.TestCase):
         (self.root / "apps/sample/app.json").write_text(json.dumps(self.manifest))
         self.save([{**self.entry, "scopes": ["extension.read"]}])
         with self.assertRaises(ValueError): c.check(self.root)
+
+    def test_symlinked_asset_root_rejected(self):
+        assets = self.root / "apps/sample/frontend"
+        (assets / "index.html").unlink()
+        assets.rmdir()
+        other = self.root / "outside"
+        other.mkdir()
+        (other / "index.html").write_text("private content")
+        assets.symlink_to(other, target_is_directory=True)
+        with self.assertRaises(ValueError): c.package("sample", self.root)
+
+    def test_release_tag_and_asset_must_match_identity(self):
+        self.save([{**self.entry, "url": "https://github.com/example/apps/releases/download/other%2Fv9.0.0/wrong.zip"}])
+        with self.assertRaises(ValueError): c.check(self.root)

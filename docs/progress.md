@@ -37,3 +37,25 @@ outstanding. No Status feature, live provider check or deployment is claimed.
 - Deployment-specific Dify version, Qwen account/site/credentials, installed Portal
   version and custom market override remain unverified. No production access was
   attempted and no genuine upstream credential is stored here.
+
+
+## Published bootstrap and protocol work
+
+The public repository was created and its bootstrap pushed on 2026-10-22. The
+Portal default market URL and every deployment override remain unchanged.
+Pinned legacy demo archive availability and its manifest ID/version/scopes were
+verified over HTTPS; Python's local CA configuration failed, so the download was
+verified with the system curl trust store without disabling TLS verification.
+
+Seven catalogue/package tests now pass, including regressions that failed before
+fixes for symlinked asset roots and release-tag/asset identity mismatch. The shared
+protocol additionally provides a signed challenge/answer boot handshake, request
+nonce replay protection and current-boot binding. A backend restart cannot accept
+an assertion signed for the prior boot. Transport policy tests cover segment
+boundaries, DNS pinning/mixed answers, private-network permission, reserved/metadata/
+translation ranges, redirects, size limits and malformed JSON. These are reusable
+library foundations; the Portal proxy is not wired or deployed yet.
+
+Pending owner input: exact Portal/Status schema proposal. No schema code has been
+written and no Status database was initialized. Complete S01/S02 implementation
+continues after that decision. The full objective remains incomplete.

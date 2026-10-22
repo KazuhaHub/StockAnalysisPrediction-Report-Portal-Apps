@@ -39,6 +39,7 @@ type Claims struct {
 	Audience   string `json:"aud"`
 	AppID      string `json:"app"`
 	InstanceID string `json:"instance"`
+	BootID     string `json:"boot"`
 	RequestID  string `json:"jti"`
 	IssuedAt   int64  `json:"iat"`
 	ExpiresAt  int64  `json:"exp"`
@@ -49,14 +50,14 @@ type Claims struct {
 }
 
 type Signer struct {
-	Issuer, Audience, AppID, InstanceID, KeyID string
-	Key                                        []byte
+	Issuer, Audience, AppID, InstanceID, BootID, KeyID string
+	Key                                                []byte
 }
 
 type VerifyConfig struct {
-	Issuer, Audience, AppID, InstanceID string
-	Keys                                map[string][]byte
-	ReplayCapacity                      int
+	Issuer, Audience, AppID, InstanceID, BootID string
+	Keys                                        map[string][]byte
+	ReplayCapacity                              int
 }
 
 type Verifier struct {
@@ -120,14 +121,14 @@ func signature(key []byte, encoded string) []byte {
 // Sign uses identity facts already verified by the host for this request. It
 // does not turn client-supplied identities into trusted facts.
 func (s Signer) Sign(method, path string, body []byte, viewer Viewer, now time.Time) (string, error) {
-	if len(s.Key) < 32 || s.KeyID == "" || s.Issuer == "" || s.Audience == "" || s.AppID == "" || s.InstanceID == "" || !validRequest(method, path) || !validViewer(viewer) {
+	if len(s.Key) < 32 || s.KeyID == "" || s.Issuer == "" || s.Audience == "" || s.AppID == "" || s.InstanceID == "" || s.BootID == "" || !validRequest(method, path) || !validViewer(viewer) {
 		return "", ErrInvalid
 	}
 	nonce := make([]byte, 24)
 	if _, err := rand.Read(nonce); err != nil {
 		return "", err
 	}
-	claims := Claims{Version: 1, KeyID: s.KeyID, Issuer: s.Issuer, Audience: s.Audience, AppID: s.AppID, InstanceID: s.InstanceID, RequestID: base64.RawURLEncoding.EncodeToString(nonce), IssuedAt: now.Unix(), ExpiresAt: now.Add(Lifetime).Unix(), Method: method, Path: path, BodyDigest: digest(body), Viewer: viewer}
+	claims := Claims{Version: 1, KeyID: s.KeyID, Issuer: s.Issuer, Audience: s.Audience, AppID: s.AppID, InstanceID: s.InstanceID, BootID: s.BootID, RequestID: base64.RawURLEncoding.EncodeToString(nonce), IssuedAt: now.Unix(), ExpiresAt: now.Add(Lifetime).Unix(), Method: method, Path: path, BodyDigest: digest(body), Viewer: viewer}
 	raw, err := json.Marshal(claims)
 	if err != nil {
 		return "", err
@@ -170,7 +171,7 @@ func (v *Verifier) Verify(token, method, path string, body []byte, now time.Time
 	if err != nil || len(key) < 32 || !hmac.Equal(signature(key, encoded), got) {
 		return empty, ErrInvalid
 	}
-	if c.Version != 1 || c.Issuer != v.config.Issuer || c.Audience != v.config.Audience || c.AppID != v.config.AppID || c.InstanceID != v.config.InstanceID || c.RequestID == "" || len(c.RequestID) > 128 || c.Method != method || c.Path != path || c.BodyDigest != digest(body) || !validViewer(c.Viewer) {
+	if c.Version != 1 || c.Issuer != v.config.Issuer || c.Audience != v.config.Audience || c.AppID != v.config.AppID || c.InstanceID != v.config.InstanceID || c.BootID != v.config.BootID || c.BootID == "" || c.RequestID == "" || len(c.RequestID) > 128 || c.Method != method || c.Path != path || c.BodyDigest != digest(body) || !validViewer(c.Viewer) {
 		return empty, ErrInvalid
 	}
 	if c.IssuedAt > now.Add(5*time.Second).Unix() || c.ExpiresAt <= now.Unix() || c.ExpiresAt <= c.IssuedAt || c.ExpiresAt-c.IssuedAt > int64(Lifetime/time.Second) {
