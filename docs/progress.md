@@ -276,3 +276,20 @@ allocation of aggregate health. The reconstruction fetches bounded evidence once
 per monitor and clips it per bucket, avoiding one database scan per corrected
 hour. A 2,000-observation regression covers ranges beyond a single bucket limit.
 The overlap hour survives cleanup. Full service race/vet/build checks pass.
+
+
+## Sandbox form recovery and theme workflows (2026-10-22)
+
+A real-browser failing regression showed invalid configuration submissions erased
+unsaved component/monitor fields. Errors now preserve the existing form and focus
+an alert; busy mutations guard duplicate actions and restore prior control state.
+Safe HTTP statuses map to localized actionable messages without upstream text.
+The operations page now loads at most two backend requests concurrently, matching
+the Portal's app connection budget.
+
+Five real Portal/Status browser scenarios pass: the new workflow covers operations
+loading, dark theme, all three languages and keyboard navigation; the component
+scenario covers an invalid target, retained multi-monitor fields, correction and
+successful save. Six frontend contract tests pass. Historical boundary commit
+b390adf passed CI. These checks are specific workflow evidence, not a blanket
+accessibility certification or final production acceptance.

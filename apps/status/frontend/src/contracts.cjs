@@ -15,7 +15,10 @@
     if (monitor.stale) return 'staleHint'
     return ({ billing_unsupported: 'billingUnsupportedHint', billing_permission_required: 'billingPermissionHint', billing_site_mismatch: 'billingSiteHint', currency_unavailable: 'currencyHint', authentication_failed: 'authenticationHint', observer_unavailable: 'observerHint' })[monitor.reason_code] || ''
   }
-  const contracts = Object.freeze({ proxyRequest, safeState, selectLocale, percentage, monitorHint })
+  function requestErrorKey(status) {
+    return ({ 400: 'invalidConfiguration', 401: 'accessDenied', 403: 'accessDenied', 404: 'itemUnavailable', 409: 'configurationConflict', 422: 'invalidConfiguration', 429: 'requestBusy' })[status] || 'unavailable'
+  }
+  const contracts = Object.freeze({ proxyRequest, safeState, selectLocale, percentage, monitorHint, requestErrorKey })
   globalThis.StatusContracts = contracts
   if (typeof module !== 'undefined') module.exports = contracts
 })()

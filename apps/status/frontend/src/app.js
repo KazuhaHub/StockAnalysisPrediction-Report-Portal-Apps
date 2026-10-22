@@ -1,9 +1,9 @@
 (function () {
   'use strict'
-  const { proxyRequest, safeState, selectLocale, percentage, monitorHint } = StatusContracts
+  const { proxyRequest, safeState, selectLocale, percentage, monitorHint, requestErrorKey } = StatusContracts
   let language = selectLocale(navigator.language), tab = 'overview', adminTab = 'components', admin = false, initialized = false
   let error = '', notice = '', generation = 0, sequence = 0, incidentOffset = 0, selectedComponent = '', selectedIncident = ''
-  let editingComponent = null, editingCredential = null, directory = [], directoryOffset = 0, rendering = false, rerender = false
+  let editingComponent = null, editingCredential = null, directory = [], directoryOffset = 0, rendering = false, rerender = false, busy = false
   const pending = new Map(), root = document.getElementById('app')
   const t = key => STATUS_LOCALES[language][key] || key
   function h(tag, props, ...children) {
@@ -40,7 +40,24 @@
     return node
   }
   function errorText(e) { return e instanceof Error ? e.message : t('failed') }
-  function run(action, successKey = 'saved') { return async () => { try { error = ''; await action(); notice = t(successKey); await render() } catch (e) { error = errorText(e); await render() } } }
+  function showError(e) {
+    error = errorText(e)
+    root.querySelector('[data-app-error]')?.remove()
+    const alert = h('div', { class: 'notice error', role: 'alert', tabIndex: -1, 'data-app-error': '' }, error)
+    root.querySelector('header')?.after(alert)
+    alert.focus()
+  }
+  function run(action, successKey = 'saved') { return async () => {
+    if (busy) return
+    busy = true
+    root.setAttribute('aria-busy', 'true')
+    const controls = [...root.querySelectorAll('button,input,select,textarea')].map(node => [node, node.disabled])
+    controls.forEach(([node]) => { node.disabled = true })
+    try { error = ''; await action(); notice = t(successKey); await render() }
+    catch (e) { showError(e) }
+    finally { controls.forEach(([node, disabled]) => { if (node.isConnected) node.disabled = disabled }); busy = false; root.removeAttribute('aria-busy') }
+  } }
+
   function host(request) {
     if (window.parent === window) return Promise.reject(new Error(t('privateOnly')))
     return new Promise((resolve, reject) => {
@@ -69,7 +86,7 @@
     const request = pending.get(data.reqId); if (!request) return
     clearTimeout(request.timer); pending.delete(data.reqId)
     if (data.ok) request.resolve(data.data)
-    else request.reject(new Error(t('unavailable') + (data.status ? ' (' + data.status + ')' : '')))
+    else request.reject(new Error(t(requestErrorKey(data.status))))
   })
   async function start() {
     try { const viewer = await api('GET', '/v1/me'); admin = viewer.admin === true; error = '' } catch (e) { error = errorText(e) }
@@ -90,7 +107,7 @@
     root.append(h('header', {}, h('div', {}, h('h1', {}, t('title')), text('subtitle')), h('div', { class: 'row' }, locale, button('refresh', () => render()))))
     const tabs = ['overview', 'incidents', ...(admin ? ['manage'] : [])]
     root.append(h('nav', { 'aria-label': t('title') }, tabs.map(key => h('button', { class: tab === key ? 'active' : '', onClick: () => { tab = key; render() } }, t(key)))))
-    if (error) root.append(h('div', { class: 'notice error', role: 'alert' }, error))
+    if (error) root.append(h('div', { class: 'notice error', role: 'alert', tabIndex: -1, 'data-app-error': '' }, error))
     if (notice) root.append(h('div', { class: 'notice', role: 'status' }, notice))
     if (!initialized) { root.append(text(window.parent === window ? 'privateOnly' : 'loading')); return }
     const content = h('section', {}, text('loading')); root.append(content)
@@ -207,7 +224,8 @@
     form.addEventListener('submit', event => { event.preventDefault(); run(async () => { const secret = Object.fromEntries(keys().filter(key => secrets[key].value).map(key => [key, secrets[key].value])); await api('PUT', '/v1/manage/credentials', { id: value.id, revision: value.revision || 0, label: name.value, kind: kind.value, ...(Object.keys(secret).length ? { secret } : {}) }); editingCredential = null })() }); content.append(form)
   }
   async function operations(content, current) {
-    const [ops, components, credentials] = await Promise.all([api('GET', '/v1/manage/operations'), api('GET', '/v1/manage/components'), api('GET', '/v1/manage/credentials')]); if (current !== generation) return
+    const [ops, components] = await Promise.all([api('GET', '/v1/manage/operations'), api('GET', '/v1/manage/components')]); if (current !== generation) return
+    const credentials = await api('GET', '/v1/manage/credentials'); if (current !== generation) return
     const settings = ops.settings, published = check('publicEnabled', settings.public_enabled), paused = check('probesPaused', settings.probes_paused), outboxPaused = check('outboxPaused', settings.outbox_paused), portal = input(settings.portal_url), networks = h('textarea', { value: (settings.portal_networks || []).join('\n'), rows: 2 })
     const settingsForm = h('form', {}, h('h2', {}, t('operations')), text('publicHint', 'muted'), published.label, paused.label, outboxPaused.label, field('portalURL', portal), field('portalNetworks', networks), h('button', { type: 'submit', class: 'primary' }, t('save')))
     settingsForm.addEventListener('submit', event => { event.preventDefault(); run(() => api('PUT', '/v1/manage/settings', { public_enabled: published.node.checked, probes_paused: paused.node.checked, outbox_paused: outboxPaused.node.checked, portal_url: portal.value, portal_networks: networks.value.split(/\s+/).filter(Boolean) }))() }); content.append(settingsForm)
