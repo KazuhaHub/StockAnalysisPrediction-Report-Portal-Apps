@@ -150,38 +150,8 @@ type Uptime struct {
 	EligibleMS    int64  `json:"eligible_ms"`
 	CoverageMS    int64  `json:"coverage_ms"`
 	Version       int    `json:"denominator_version"`
-}
-
-func (s *Store) History(v protocol.Viewer, component string, from, to time.Time) ([]Uptime, error) {
-	if !s.canRead(v, component, "read") {
-		return nil, ErrNotFound
-	}
-	if !from.Before(to) || to.Sub(from) > 90*24*time.Hour || to.After(time.Now().Add(24*time.Hour)) {
-		return nil, ErrInvalid
-	}
-	// Whole buckets are explicit; unobserved partial hours are not extrapolated.
-	start := from.UTC().Truncate(time.Hour)
-	if start.Before(from) {
-		start = start.Add(time.Hour)
-	}
-	end := to.UTC().Truncate(time.Hour)
-	rows, err := s.db.Query(`SELECT a.monitor_id,SUM(a.operational_ms),SUM(a.outage_ms),SUM(a.degraded_ms),SUM(a.unknown_ms),SUM(a.excluded_ms) FROM hourly_aggregates a JOIN monitors m ON m.id=a.monitor_id WHERE m.component_id=? AND a.hour_at>=? AND a.hour_at<? GROUP BY a.monitor_id ORDER BY a.monitor_id LIMIT 32`, component, start.UnixMilli(), end.UnixMilli())
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	out := []Uptime{}
-	for rows.Next() {
-		var h Uptime
-		if rows.Scan(&h.MonitorID, &h.OperationalMS, &h.OutageMS, &h.DegradedMS, &h.UnknownMS, &h.ExcludedMS) != nil {
-			return nil, ErrInvalid
-		}
-		h.EligibleMS = h.OperationalMS + h.OutageMS + h.DegradedMS
-		h.CoverageMS = h.EligibleMS + h.UnknownMS
-		h.Version = 1
-		out = append(out, h)
-	}
-	return out, rows.Err()
+	SpanMS        int64  `json:"span_ms"`
+	ObservedMS    int64  `json:"observed_ms"`
 }
 
 type MaintenanceInput struct {
@@ -212,11 +182,6 @@ func (s *Store) SaveMaintenance(v protocol.Viewer, in MaintenanceInput) error {
 	now := time.Now().UnixMilli()
 	if _, err := tx.Exec(`INSERT INTO maintenance_windows(id,component_id,starts_at,ends_at,safe_summary,created_by,created_at) VALUES(?,?,?,?,?,?,?)`, id, in.ComponentID, start.UnixMilli(), end.UnixMilli(), in.Summary, v.Subject, now); err != nil {
 		return ErrInvalid
-	}
-	// Previously healthy evidence cannot survive a newly scheduled maintenance
-	// boundary as a fresh post-maintenance result.
-	if _, err := tx.Exec(`UPDATE monitor_states SET current_state='unknown',success_streak=0,failure_streak=0 WHERE monitor_id IN(SELECT id FROM monitors WHERE component_id=?)`, in.ComponentID); err != nil {
-		return err
 	}
 	if err := audit(tx, v, "maintenance.create", id, now); err != nil {
 		return err

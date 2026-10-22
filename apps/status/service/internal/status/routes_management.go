@@ -51,6 +51,18 @@ func (s *Server) moreRoutes(w http.ResponseWriter, r *http.Request, raw []byte, 
 			return true
 		}
 		write(w, 200, map[string]any{"ok": true, "item": out})
+	case r.Method == "GET" && path == "/v1/history/hourly":
+		from, to, err := parseRange(r.URL.Query().Get("from"), r.URL.Query().Get("to"))
+		if err != nil {
+			apiError(w, err)
+			return true
+		}
+		out, err := s.store.HourlyHistory(v, r.URL.Query().Get("component_id"), from, to)
+		if err != nil {
+			apiError(w, err)
+			return true
+		}
+		write(w, 200, map[string]any{"ok": true, "items": out, "semantics": "worst_observed_state_with_unknown_coverage"})
 	case r.Method == "GET" && path == "/v1/history":
 		from, to, err := parseRange(r.URL.Query().Get("from"), r.URL.Query().Get("to"))
 		if err != nil {
@@ -62,7 +74,7 @@ func (s *Server) moreRoutes(w http.ResponseWriter, r *http.Request, raw []byte, 
 			apiError(w, err)
 			return true
 		}
-		write(w, 200, map[string]any{"ok": true, "items": out, "from": utc(from.UnixMilli()), "to": utc(to.UnixMilli()), "buckets": "whole_utc_hours"})
+		write(w, 200, map[string]any{"ok": true, "items": out, "from": utc(from.UnixMilli()), "to": utc(to.UnixMilli()), "buckets": "clipped_utc_intervals"})
 	case r.Method == "GET" && path == "/v1/manage/operations":
 		fingerprint, err := s.store.QueueFingerprint()
 		if err != nil {

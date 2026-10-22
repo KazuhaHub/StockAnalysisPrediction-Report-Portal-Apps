@@ -64,7 +64,7 @@ No billable provider call or real external notification is needed.
 - [Full implementation plan and exit gates](../../docs/implementation-plan.md)
 
 The implementation is not yet a released or fully accepted Status product. The
-remaining acceptance audit must cover partial-hour/unobserved uptime accounting,
+remaining acceptance audit must cover historical maintenance-edit/retention boundaries,
 maintenance-exit evidence, retention/recovery edge cases, operator test controls,
 public history/freshness, full browser workflows, container/gateway runtime and
 immutable release/catalogue migration. Provider fixtures and official signing

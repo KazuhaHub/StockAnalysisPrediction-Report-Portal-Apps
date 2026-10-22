@@ -24,6 +24,21 @@ func (s *Server) publicRoute(w http.ResponseWriter, r *http.Request) bool {
 		}
 		return true
 	}
+	if path == "/public/v1/history" {
+		from, to, err := parseRange(r.URL.Query().Get("from"), r.URL.Query().Get("to"))
+		if err != nil {
+			apiError(w, err)
+			return true
+		}
+		items, err := s.store.PublicHistory(r.URL.Query().Get("component_id"), from, to)
+		if err != nil {
+			apiError(w, err)
+			return true
+		}
+		w.Header().Set("Cache-Control", "public, max-age=10")
+		write(w, 200, map[string]any{"ok": true, "items": items, "semantics": "worst_observed_state_with_unknown_coverage"})
+		return true
+	}
 	if path == "/public/v1/incidents" {
 		offset, limit, err := pageParams(r)
 		if err != nil {

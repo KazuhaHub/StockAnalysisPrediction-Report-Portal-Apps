@@ -236,6 +236,28 @@ func (s *Store) SaveComponent(v protocol.Viewer, in ComponentInput) (ComponentIn
 			return ComponentInput{}, err
 		}
 	}
+	if err := closeEvidence(tx, "m.component_id=?", []any{in.ID}, now); err != nil {
+		return ComponentInput{}, err
+	}
+	oldEnabled := map[string]bool{}
+	oldRows, err := tx.Query(`SELECT id,enabled FROM monitors WHERE component_id=?`, in.ID)
+	if err != nil {
+		return ComponentInput{}, err
+	}
+	for oldRows.Next() {
+		var id string
+		var enabled bool
+		if oldRows.Scan(&id, &enabled) != nil {
+			oldRows.Close()
+			return ComponentInput{}, ErrInvalid
+		}
+		oldEnabled[id] = enabled
+	}
+	err = oldRows.Err()
+	oldRows.Close()
+	if err != nil {
+		return ComponentInput{}, err
+	}
 	// Omitted monitors are archived; retained observations and incident evidence stay.
 	if _, err := tx.Exec(`UPDATE monitors SET enabled=0,revision=revision+1,lease_token='',lease_until=0 WHERE component_id=?`, in.ID); err != nil {
 		return ComponentInput{}, err
@@ -281,6 +303,47 @@ func (s *Store) SaveComponent(v protocol.Viewer, in ComponentInput) (ComponentIn
 		if _, err := tx.Exec(`INSERT INTO monitor_states(monitor_id,revision,current_state,success_streak,failure_streak,updated_at) VALUES(?,1,'unknown',0,0,?) ON CONFLICT(monitor_id) DO UPDATE SET current_state='unknown',success_streak=0,failure_streak=0,last_observation_id=NULL,last_success_at=0,revision=revision+1,updated_at=excluded.updated_at`, m.ID, now); err != nil {
 			return ComponentInput{}, err
 		}
+	}
+	finalRows, err := tx.Query(`SELECT id,enabled FROM monitors WHERE component_id=?`, in.ID)
+	if err != nil {
+		return ComponentInput{}, err
+	}
+	type change struct {
+		id      string
+		enabled bool
+	}
+	changes := []change{}
+	for finalRows.Next() {
+		var c change
+		if finalRows.Scan(&c.id, &c.enabled) != nil {
+			finalRows.Close()
+			return ComponentInput{}, ErrInvalid
+		}
+		old, exists := oldEnabled[c.id]
+		if !exists || old != c.enabled {
+			changes = append(changes, c)
+		}
+	}
+	err = finalRows.Err()
+	finalRows.Close()
+	if err != nil {
+		return ComponentInput{}, err
+	}
+	for _, c := range changes {
+		action := "monitor.pause"
+		if c.enabled {
+			action = "monitor.resume"
+		}
+		if err := audit(tx, v, action, c.id, now); err != nil {
+			return ComponentInput{}, err
+		}
+	}
+	componentAction := "component.pause"
+	if in.Enabled {
+		componentAction = "component.resume"
+	}
+	if err := audit(tx, v, componentAction, in.ID, now); err != nil {
+		return ComponentInput{}, err
 	}
 	if err := audit(tx, v, "component.save", in.ID, now); err != nil {
 		return ComponentInput{}, err
@@ -390,6 +453,32 @@ func (s *Store) SaveCredential(v protocol.Viewer, in CredentialInput) (Credentia
 		return empty, ErrConflict
 	}
 	if len(in.Secret) > 0 {
+		if err := closeEvidence(tx, "m.credential_id=?", []any{in.ID}, now); err != nil {
+			return empty, err
+		}
+		rows, err := tx.Query(`SELECT id FROM monitors WHERE credential_id=?`, in.ID)
+		if err != nil {
+			return empty, err
+		}
+		ids := []string{}
+		for rows.Next() {
+			var id string
+			if rows.Scan(&id) != nil {
+				rows.Close()
+				return empty, ErrInvalid
+			}
+			ids = append(ids, id)
+		}
+		err = rows.Err()
+		rows.Close()
+		if err != nil {
+			return empty, err
+		}
+		for _, id := range ids {
+			if err := audit(tx, v, "monitor.reset", id, now); err != nil {
+				return empty, err
+			}
+		}
 		for _, q := range []string{`UPDATE monitors SET revision=revision+1,lease_token='',lease_until=0 WHERE credential_id=?`, `UPDATE monitor_states SET current_state='unknown',success_streak=0,failure_streak=0,last_observation_id=NULL,last_success_at=0 WHERE monitor_id IN(SELECT id FROM monitors WHERE credential_id=?)`, `UPDATE notification_publishers SET enabled=0,revision=revision+1 WHERE credential_id=?`} {
 			if _, err := tx.Exec(q, in.ID); err != nil {
 				return empty, err
@@ -428,11 +517,13 @@ func (s *Store) DeleteCredential(v protocol.Viewer, id string, revision int64) e
 }
 
 type ComponentView struct {
-	ID        string        `json:"id"`
-	Label     string        `json:"label"`
-	State     string        `json:"state"`
-	UpdatedAt string        `json:"updated_at"`
-	Monitors  []MonitorView `json:"monitors,omitempty"`
+	ID         string        `json:"id"`
+	Label      string        `json:"label"`
+	State      string        `json:"state"`
+	UpdatedAt  string        `json:"updated_at"`
+	Monitors   []MonitorView `json:"monitors,omitempty"`
+	ObservedAt string        `json:"observed_at"`
+	Stale      bool          `json:"stale"`
 }
 type MonitorView struct {
 	ID              string          `json:"id"`
@@ -492,6 +583,27 @@ func (s *Store) Components(v protocol.Viewer, public bool, now time.Time) ([]Com
 		if err != nil {
 			return nil, err
 		}
+		component.Stale = len(monitors) == 0 || paused
+		oldest := int64(0)
+		missing := false
+		for _, monitor := range monitors {
+			component.Stale = component.Stale || monitor.Stale
+			if monitor.ObservedAt == "" {
+				missing = true
+				continue
+			}
+			instant, err := time.Parse(time.RFC3339Nano, monitor.ObservedAt)
+			if err != nil {
+				missing = true
+				continue
+			}
+			if oldest == 0 || instant.UnixMilli() < oldest {
+				oldest = instant.UnixMilli()
+			}
+		}
+		if !missing {
+			component.ObservedAt = utc(oldest)
+		}
 		component.State = reduceComponent(monitors)
 		var maintenance int
 		s.db.QueryRow(`SELECT COUNT(*) FROM maintenance_windows WHERE component_id=? AND starts_at<=? AND ends_at>?`, c.id, now.UnixMilli(), now.UnixMilli()).Scan(&maintenance)
@@ -536,7 +648,9 @@ func (s *Store) monitorViews(component string, finance bool, now time.Time) ([]M
 		m.LastSuccessAt, m.NextCheckAt = utc(lastSuccess), utc(next)
 		m.ObservedAt = utc(updated)
 		if finance {
-			m.Measurements = json.RawMessage(metrics)
+			var safe Measurements
+			json.Unmarshal([]byte(metrics), &safe)
+			m.Measurements, _ = json.Marshal(safe)
 		} else {
 			var safe struct {
 				LatencyMS  int64  `json:"latency_ms,omitempty"`

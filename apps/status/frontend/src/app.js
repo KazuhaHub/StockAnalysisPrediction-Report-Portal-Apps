@@ -110,10 +110,14 @@
     content.append(h('div', { class: 'grid' }, response.items.map(component => h('article', { class: 'card' }, h('h2', {}, component.label), badge(component.state), (component.monitors || []).map(monitor => h('div', { class: 'compact' }, h('h3', {}, monitor.label), badge(monitor.state), h('small', {}, t('observed') + ': ' + date(monitor.observed_at)), monitor.measurements?.balances ? balanceTable(monitor.measurements) : null)), button('history', () => { selectedComponent = component.id; render() })))))
     if (selectedComponent) {
       const from = new Date(Date.now() - 7 * 86400000).toISOString(), to = new Date().toISOString()
-      const history = await api('GET', '/v1/history?component_id=' + encodeURIComponent(selectedComponent) + '&from=' + encodeURIComponent(from) + '&to=' + encodeURIComponent(to)); if (current !== generation) return
+      const query = '?component_id=' + encodeURIComponent(selectedComponent) + '&from=' + encodeURIComponent(from) + '&to=' + encodeURIComponent(to)
+      const [history, hourly] = await Promise.all([api('GET', '/v1/history' + query), api('GET', '/v1/history/hourly' + query)]); if (current !== generation) return
       const rows = (history.items || []).map(item => [item.monitor_id.slice(0, 8), percentage(item.operational_ms, item.eligible_ms) || t('noCoverage'), Math.round(item.coverage_ms / 1000) + ' ' + t('seconds'), Math.round(item.unknown_ms / 1000) + ' ' + t('seconds'), Math.round(item.excluded_ms / 1000) + ' ' + t('seconds')])
-      content.append(h('section', { class: 'card' }, h('h2', {}, t('history')), text('wholeHours', 'muted'), table(['monitor', 'history', 'coverage', 'unknownTime', 'excluded'], rows)))
+      content.append(h('section', { class: 'card' }, h('h2', {}, t('history')), text('wholeHours', 'muted'), historyStrip(hourly.items || []), table(['monitor', 'history', 'coverage', 'unknownTime', 'excluded'], rows)))
     }
+  }
+  function historyStrip(items) {
+    return h('div', { class: 'history-strip', 'aria-label': t('history') }, items.map(item => { const state = safeState(item.state), label = date(item.from) + ' – ' + date(item.to) + ': ' + t(state); return h('span', { class: 'hour ' + state, title: label, 'aria-label': label, role: 'img', tabIndex: 0 }) }))
   }
   function balanceTable(metrics) { return h('section', {}, text('accountBalanceHint', 'muted'), table(['currency', 'total', 'cash', 'credit', 'granted', 'toppedUp'], metrics.balances.map(b => [b.currency, b.total ?? '—', b.cash ?? '—', b.credit ?? '—', b.granted ?? '—', b.topped_up ?? '—']))) }
   async function incidents(content, current) {

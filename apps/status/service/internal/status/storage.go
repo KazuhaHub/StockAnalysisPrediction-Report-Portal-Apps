@@ -15,6 +15,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 
 	_ "modernc.org/sqlite"
 )
@@ -203,6 +204,12 @@ func (s *Store) Restore(source string) error {
 		validated.Close()
 		return err
 	}
+	restoreNow := time.Now().UnixMilli()
+	if err := closeEvidence(tx, "1=1", nil, restoreNow); err != nil {
+		tx.Rollback()
+		validated.Close()
+		return err
+	}
 	for _, key := range []string{"probes_paused", "outbox_paused"} {
 		if err := setSetting(tx, key, "1"); err != nil {
 			tx.Rollback()
@@ -213,7 +220,6 @@ func (s *Store) Restore(source string) error {
 	statements := []string{
 		`INSERT INTO settings(key,value) VALUES('public_enabled','0') ON CONFLICT(key) DO UPDATE SET value='0'`,
 		`UPDATE monitors SET lease_token='',lease_until=0,revision=revision+1`,
-		`UPDATE monitor_states SET current_state='unknown',success_streak=0,failure_streak=0`,
 		`UPDATE notification_outbox SET state=CASE WHEN attempts>0 OR state='leased' THEN 'review_required' ELSE state END,lease_token='',lease_until=0 WHERE state<>'delivered'`,
 		`UPDATE notification_publishers SET enabled=0,revision=revision+1`,
 	}
@@ -223,6 +229,16 @@ func (s *Store) Restore(source string) error {
 			validated.Close()
 			return err
 		}
+	}
+	if _, err := tx.Exec(`UPDATE monitor_states SET current_state='unknown',success_streak=0,failure_streak=0,updated_at=?`, restoreNow); err != nil {
+		tx.Rollback()
+		validated.Close()
+		return err
+	}
+	if _, err := tx.Exec(`INSERT INTO audit_events(id,actor,action,target_id,safe_detail,created_at) VALUES(?,'restore','probes.pause','service','{}',?)`, newID(), restoreNow); err != nil {
+		tx.Rollback()
+		validated.Close()
+		return err
 	}
 	if err := tx.Commit(); err != nil {
 		validated.Close()

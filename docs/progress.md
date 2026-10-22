@@ -146,3 +146,22 @@ snapshot now require two fresh post-maintenance observations; interval accountin
 also refuses to extend old healthy evidence past the maintenance boundary. The
 service race suite passes after this fix. Partial-hour/unknown/paused-time history
 and the other explicit acceptance gaps remain open.
+
+
+## History precision and public timeline (2026-10-22)
+
+Added versioned observation evidence within the approved JSON field; no schema
+change. Partial UTC buckets now clip actual intervals and distinguish observed,
+unknown and excluded milliseconds. Pauses and overlapping maintenance use a
+single union; missing evidence and expired samples cannot become healthy time.
+Private history includes a coverage summary and coarse hourly strip. Explicitly
+published public history has its own visibility gate and only coarse intervals.
+Both pages display actual observation freshness separately from page generation.
+
+Failing regressions exposed same-millisecond control ordering, restore rewriting
+prior evidence and future maintenance prematurely resetting current state. The
+fixes preserve commit order, finalize evidence before restore invalidation and
+leave future maintenance to its actual boundary. Targeted and full race tests
+pass. The real browser suite covers private/public history interaction; final
+post-fix verification is recorded with the development commit. Historical
+maintenance-edit/retention edge cases and all other ledger gates remain open.

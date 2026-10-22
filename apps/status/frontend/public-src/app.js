@@ -17,11 +17,26 @@
     try {
       const [status, incidents] = await Promise.all(['public/v1/status', 'public/v1/incidents?limit=50'].map(path => fetch(path, { credentials: 'omit', cache: 'no-store' }).then(async response => { if (!response.ok) throw new Error(); return response.json() })))
       if (!status.items?.length) content.append(h('p', t('empty'), 'notice'))
-      for (const component of status.items || []) { const card = h('article', '', 'card'), state = safeState(component.state); card.append(h('h2', component.label), h('span', t(state), 'badge ' + state)); content.append(card) }
+      for (const component of status.items || []) {
+        const card = h('article', '', 'card'), state = safeState(component.state), history = h('button', t('history')), chart = h('div')
+        history.type = 'button'
+        history.addEventListener('click', async () => {
+          history.disabled = true
+          try {
+            const response = await fetch('public/v1/history?component_id=' + encodeURIComponent(component.id), { credentials: 'omit', cache: 'no-store' })
+            if (!response.ok) throw new Error()
+            const data = await response.json(), strip = h('div', '', 'history-strip')
+            strip.setAttribute('aria-label', t('history'))
+            for (const item of data.items || []) { const value = safeState(item.state), label = new Date(item.from).toLocaleString(language) + ' – ' + new Date(item.to).toLocaleString(language) + ': ' + t(value), bar = h('span', '', 'hour ' + value); bar.title = label; bar.setAttribute('role', 'img'); bar.setAttribute('aria-label', label); bar.tabIndex = 0; strip.append(bar) }
+            chart.replaceChildren(h('p', t('wholeHours'), 'muted'), data.items?.length ? strip : h('p', t('noCoverage')))
+          } catch { chart.replaceChildren(h('p', t('unavailable'), 'notice error')) } finally { history.disabled = false }
+        })
+        card.append(h('h2', component.label), h('span', t(state), 'badge ' + state), h('p', t('observed') + ': ' + (component.observed_at ? new Date(component.observed_at).toLocaleString(language) : '—'), 'muted'), history, chart); content.append(card)
+      }
       root.append(h('h2', t('incidents')))
       if (!incidents.items?.length) root.append(h('p', t('noIncidents'), 'muted'))
       for (const incident of incidents.items || []) { const card = h('article', '', 'card'); card.append(h('h3', incident.summary), h('p', new Date(incident.opened_at).toLocaleString(language))); root.append(card) }
-      root.append(h('small', t('observed') + ': ' + new Date(status.generated_at).toLocaleString(language)))
+      root.append(h('small', t('pageUpdated') + ': ' + new Date(status.generated_at).toLocaleString(language)))
     } catch { content.replaceChildren(h('p', t('unavailable'), 'notice error')) } finally { busy = false }
   }
   if (matchMedia('(prefers-color-scheme: dark)').matches) { for (const [k,v] of Object.entries({'--bg':'#111827','--surface':'#182334','--text':'#eef3fa','--muted':'#b2bed0','--border':'#3d4b60'})) document.documentElement.style.setProperty(k,v) }

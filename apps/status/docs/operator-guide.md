@@ -138,6 +138,34 @@ before enabling billing probes. References:
 [balance operation](https://help.aliyun.com/en/user-center/developer-reference/api-bssopenapi-2017-12-14-queryaccountbalance),
 [ACS3 signature](https://help.aliyun.com/zh/sdk/product-overview/v3-request-structure-and-signature).
 
+## Read history and coverage
+
+The component overview includes a private hourly history strip and a version 2
+uptime summary. Range boundaries are clipped to the actual requested interval,
+monitor creation and the current time. Unobserved intervals and expired samples
+are unknown. Paused periods and maintenance are excluded, with overlapping
+windows counted once. Unknown and excluded time never increase healthy time.
+
+`span_ms` covers the clipped range. `observed_ms` (also `coverage_ms`) equals
+operational + degraded + outage time. `eligible_ms` is the same observed
+denominator for availability; unknown and excluded time are separate. Always
+show coverage beside availability: a short healthy sample does not establish
+availability across a long unobserved range. Older observation records without
+the versioned evidence metadata remain unknown at partial boundaries.
+
+Hourly bars show the worst observed state in the clipped bucket, not an average:
+outage, degraded, unknown, then operational. Public history requires both global
+publication and component publication. Its DTO contains only interval boundaries
+and a coarse state; no monitor identifiers, balances or private diagnostics.
+The public page's observation timestamp is the actual oldest monitor observation,
+while the page update timestamp only identifies when the response was generated.
+
+Backups preserve evidence. Restore closes prior evidence at the restore instant,
+then pauses probes and invalidates current state without rewriting earlier
+intervals. Scheduling future maintenance does not reset existing observations.
+Historical maintenance edits and the oldest retention boundaries remain under
+acceptance review; do not treat this development build as an audited SLA source.
+
 ## Configure notification publication
 
 Status does not send Email, Slack or Webhooks itself. Portal's notification system

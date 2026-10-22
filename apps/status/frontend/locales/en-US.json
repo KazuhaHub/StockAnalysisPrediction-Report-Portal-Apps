@@ -20,7 +20,7 @@
   "eligible": "Eligible time",
   "unknownTime": "Unknown time",
   "excluded": "Excluded maintenance",
-  "wholeHours": "History uses complete UTC hours; unobserved time is not counted as healthy.",
+  "wholeHours": "History clips requested intervals and excludes maintenance and pauses. Unknown coverage never counts as healthy; each bar shows the worst observed state for that interval.",
   "noCoverage": "No eligible observed time",
   "components": "Components",
   "credentials": "Credentials",
@@ -130,5 +130,6 @@
   "ms": "ms",
   "seconds": "seconds",
   "languageName": "English",
-  "language": "Language"
+  "language": "Language",
+  "pageUpdated": "Page updated"
 }

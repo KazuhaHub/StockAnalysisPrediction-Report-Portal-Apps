@@ -293,6 +293,17 @@ func (s *Store) Resume(v protocol.Viewer, fingerprint string, probes, outbox boo
 		return ErrConflict
 	}
 	if probes {
+		var paused string
+		tx.QueryRow(`SELECT value FROM settings WHERE key='probes_paused'`).Scan(&paused)
+		if paused == "1" {
+			now := time.Now().UnixMilli()
+			if err := closeEvidence(tx, "1=1", nil, now); err != nil {
+				return err
+			}
+			if err := audit(tx, v, "probes.resume", "service", now); err != nil {
+				return err
+			}
+		}
 		if err := setSetting(tx, "probes_paused", "0"); err != nil {
 			return err
 		}

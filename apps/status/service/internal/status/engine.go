@@ -126,6 +126,10 @@ func (s *Store) Record(m Monitor, result Result, now time.Time) error {
 	case "hold":
 		success, failure = 0, 0
 	}
+	metrics, err = json.Marshal(recordedMeasurements{Measurements: result.Measurements, State: observationState{Version: 1, State: state, FreshUntil: now.UnixMilli() + int64(max(3*m.IntervalSeconds, 2*m.TimeoutSeconds))*1000}})
+	if err != nil || len(metrics) > 8192 {
+		return ErrInvalid
+	}
 	observation := newID()
 	if _, err := tx.Exec(`INSERT INTO observations(id,monitor_id,monitor_revision,outcome,reason_code,measurements,observed_at,duration_ms) VALUES(?,?,?,?,?,?,?,?)`, observation, m.ID, m.Revision, result.Outcome, result.ReasonCode, string(metrics), now.UnixMilli(), result.DurationMS); err != nil {
 		return err
@@ -150,73 +154,83 @@ func aggregateInterval(tx *sql.Tx, m Monitor, previous, now int64, state string)
 	if previous <= 0 || previous >= now {
 		return nil
 	}
-	from := max(previous, now-30*86400000)
+	from := max(previous, now-90*86400000)
 	freshUntil := previous + int64(max(3*m.IntervalSeconds, 2*m.TimeoutSeconds))*1000
-	type window struct{ start, end int64 }
-	windows := []window{}
-	rows, err := tx.Query(`SELECT starts_at,ends_at FROM maintenance_windows WHERE component_id=? AND starts_at<? AND ends_at>? ORDER BY starts_at`, m.ComponentID, now, from)
+	maintenance := []timeWindow{}
+	rows, err := tx.Query(`SELECT starts_at,ends_at FROM maintenance_windows WHERE component_id=? AND starts_at<? AND ends_at>? ORDER BY starts_at LIMIT 1001`, m.ComponentID, now, from)
 	if err != nil {
 		return err
 	}
 	for rows.Next() {
-		var w window
+		var w timeWindow
 		if rows.Scan(&w.start, &w.end) != nil {
 			rows.Close()
 			return ErrInvalid
 		}
-		windows = append(windows, w)
+		maintenance = append(maintenance, w)
+		if len(maintenance) > 1000 {
+			rows.Close()
+			return ErrInvalid
+		}
 	}
 	err = rows.Err()
 	rows.Close()
 	if err != nil {
 		return err
 	}
+	controls, err := readHistoryControls(tx, m.ComponentID, []historyMonitor{{id: m.ID}}, now)
+	if err != nil {
+		return err
+	}
+	windows, resets := windowsAndResets(controls, maintenance, m.ID, now)
 	for from < now {
 		hour := time.UnixMilli(from).UTC().Truncate(time.Hour).UnixMilli()
 		end := min(now, hour+3600000)
-		if from < freshUntil && freshUntil < end {
-			end = freshUntil
-		}
-		maintained := false
-		for _, w := range windows {
-			if w.start > from && w.start < end {
-				end = w.start
-			}
-			if w.start <= from && w.end > from {
-				maintained = true
-				if w.end < end {
-					end = w.end
-				}
-			}
-		}
-		effectiveState := state
-		for _, window := range windows {
-			if window.end > previous && window.end <= from {
-				effectiveState = "unknown"
-			}
-		}
-		duration := end - from
-		operational, outage, degraded, unknown, excluded := int64(0), int64(0), int64(0), duration, int64(0)
-		if maintained {
-			unknown = 0
-			excluded = duration
-		} else if end <= freshUntil {
-			switch effectiveState {
-			case "operational":
-				operational = duration
-				unknown = 0
-			case "outage":
-				outage = duration
-				unknown = 0
-			case "degraded":
-				degraded = duration
-				unknown = 0
-			}
-		}
-		if _, err := tx.Exec(`INSERT INTO hourly_aggregates(monitor_id,hour_at,operational_ms,outage_ms,degraded_ms,unknown_ms,excluded_ms) VALUES(?,?,?,?,?,?,?) ON CONFLICT(monitor_id,hour_at) DO UPDATE SET operational_ms=operational_ms+excluded.operational_ms,outage_ms=outage_ms+excluded.outage_ms,degraded_ms=degraded_ms+excluded.degraded_ms,unknown_ms=unknown_ms+excluded.unknown_ms,excluded_ms=excluded_ms+excluded.excluded_ms`, m.ID, hour, operational, outage, degraded, unknown, excluded); err != nil {
+		totals := countTimeline(from, end, []stateEvidence{{previous, freshUntil, state}}, windows, resets)
+		if _, err := tx.Exec(`INSERT INTO hourly_aggregates(monitor_id,hour_at,operational_ms,outage_ms,degraded_ms,unknown_ms,excluded_ms) VALUES(?,?,?,?,?,?,?) ON CONFLICT(monitor_id,hour_at) DO UPDATE SET operational_ms=operational_ms+excluded.operational_ms,outage_ms=outage_ms+excluded.outage_ms,degraded_ms=degraded_ms+excluded.degraded_ms,unknown_ms=unknown_ms+excluded.unknown_ms,excluded_ms=excluded_ms+excluded.excluded_ms`, m.ID, hour, totals.OperationalMS, totals.OutageMS, totals.DegradedMS, totals.UnknownMS, totals.ExcludedMS); err != nil {
 			return err
 		}
 		from = end
+	}
+	return nil
+}
+
+// closeEvidence advances each affected cursor after recording its elapsed
+// interval. Configuration changes cannot erase or count that interval twice.
+func closeEvidence(tx *sql.Tx, where string, args []any, now int64) error {
+	rows, err := tx.Query(`SELECT m.id,m.component_id,m.interval_seconds,m.timeout_seconds,s.current_state,s.updated_at FROM monitors m JOIN monitor_states s ON s.monitor_id=m.id WHERE `+where, args...)
+	if err != nil {
+		return err
+	}
+	type pending struct {
+		monitor Monitor
+		state   string
+		updated int64
+	}
+	all := []pending{}
+	for rows.Next() {
+		var p pending
+		if rows.Scan(&p.monitor.ID, &p.monitor.ComponentID, &p.monitor.IntervalSeconds, &p.monitor.TimeoutSeconds, &p.state, &p.updated) != nil {
+			rows.Close()
+			return ErrInvalid
+		}
+		all = append(all, p)
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return err
+	}
+	for _, p := range all {
+		if now < p.updated {
+			return ErrConflict
+		}
+		if err := aggregateInterval(tx, p.monitor, p.updated, now, p.state); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(`UPDATE monitor_states SET updated_at=? WHERE monitor_id=?`, now, p.monitor.ID); err != nil {
+			return err
+		}
 	}
 	return nil
 }

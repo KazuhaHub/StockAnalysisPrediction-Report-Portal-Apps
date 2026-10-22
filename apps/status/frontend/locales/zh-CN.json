@@ -20,7 +20,7 @@
   "eligible": "有效统计时长",
   "unknownTime": "未知时长",
   "excluded": "排除的维护时长",
-  "wholeHours": "历史按完整 UTC 小时统计；未观测的时间不算作正常。",
+  "wholeHours": "历史按实际时间边界裁剪，并排除维护和暂停时段。未知时长不算作正常；每个色块表示对应时段的最差观测状态。",
   "noCoverage": "暂无有效观测时长",
   "components": "组件",
   "credentials": "凭证",
@@ -130,5 +130,6 @@
   "ms": "毫秒",
   "seconds": "秒",
   "languageName": "简体中文",
-  "language": "语言"
+  "language": "语言",
+  "pageUpdated": "页面更新时间"
 }
