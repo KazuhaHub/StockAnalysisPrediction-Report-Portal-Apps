@@ -151,5 +151,14 @@
   "itemUnavailable": "This item is unavailable. Review your current access and refresh the list.",
   "expectedStatus": "Expected HTTP status (optional)",
   "bodyContains": "Required response text (optional)",
-  "httpConditionHint": "Leave status empty to require any 2xx response. Text matching is literal and limited to 256 characters; redirects and rate limits never count as success. Response bodies are not saved."
+  "httpConditionHint": "Leave status empty to require any 2xx response. Text matching is literal and limited to 256 characters; redirects and rate limits never count as success. Response bodies are not saved.",
+  "componentSearch": "Search visible components",
+  "search": "Search",
+  "componentDetail": "Current authorized monitor observations",
+  "lastSuccess": "Last successful observation",
+  "nextCheck": "Next scheduled check",
+  "latency": "Observation latency",
+  "exportJSON": "Export component JSON",
+  "exportReady": "Authorized snapshot prepared. Select the text to copy it.",
+  "exportCopyHint": "The sandbox keeps the export as selectable text. Copy it to a local file. Financial values are included only with current finance permission."
 }

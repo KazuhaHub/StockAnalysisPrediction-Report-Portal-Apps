@@ -154,12 +154,17 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case r.Method == "GET" && r.URL.Path == "/v1/me":
 		write(w, 200, map[string]any{"ok": true, "admin": isAdmin(v)})
 	case r.Method == "GET" && r.URL.Path == "/v1/components":
-		out, err := s.store.Components(v, false, time.Now())
+		offset, limit, err := pageParams(r)
 		if err != nil {
 			apiError(w, err)
 			return
 		}
-		write(w, 200, map[string]any{"ok": true, "items": out})
+		out, err := s.store.ComponentPage(v, time.Now(), offset, limit, r.URL.Query().Get("q"))
+		if err != nil {
+			apiError(w, err)
+			return
+		}
+		write(w, 200, out)
 	case r.Method == "PUT" && r.URL.Path == "/v1/manage/components":
 		var in ComponentInput
 		if decode(raw, &in) != nil {

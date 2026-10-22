@@ -2,6 +2,7 @@
   'use strict'
   const { proxyRequest, safeState, selectLocale, percentage, monitorHint, requestErrorKey } = StatusContracts
   let language = selectLocale(navigator.language), tab = 'overview', adminTab = 'components', admin = false, initialized = false
+  let componentOffset = 0, componentSearch = '', exportedComponent = null
   let error = '', notice = '', generation = 0, sequence = 0, incidentOffset = 0, selectedComponent = '', selectedIncident = ''
   let editingComponent = null, editingCredential = null, directory = [], directoryOffset = 0, rendering = false, rerender = false, busy = false
   const pending = new Map(), root = document.getElementById('app')
@@ -88,6 +89,7 @@
     if (data.ok) request.resolve(data.data)
     else request.reject(new Error(t(requestErrorKey(data.status))))
   })
+  setInterval(() => { if (initialized && !document.hidden && !busy && !rendering && tab !== 'manage' && !exportedComponent && document.activeElement?.tagName !== 'INPUT' && document.activeElement?.tagName !== 'TEXTAREA' && document.activeElement?.tagName !== 'SELECT') render() }, 30000)
   async function start() {
     try { const viewer = await api('GET', '/v1/me'); admin = viewer.admin === true; error = '' } catch (e) { error = errorText(e) }
     await render()
@@ -121,16 +123,23 @@
     }
   }
   async function overview(content, current) {
-    const response = await api('GET', '/v1/components'); if (current !== generation) return
+    const response = await api('GET', '/v1/components?limit=50&offset=' + componentOffset + '&q=' + encodeURIComponent(componentSearch)); if (current !== generation) return
     content.replaceChildren()
-    if (!response.items?.length) { content.append(text('empty')); return }
+    const search = input(componentSearch), searchForm = h('form', {}, field('componentSearch', search), h('button', { type: 'submit' }, t('search')))
+    searchForm.addEventListener('submit', event => { event.preventDefault(); componentSearch = search.value; componentOffset = 0; selectedComponent = ''; exportedComponent = null; render() }); content.append(searchForm)
+    if (!response.items?.length) content.append(text('empty'))
+
     content.append(h('div', { class: 'grid' }, response.items.map(component => h('article', { class: 'card' }, h('h2', {}, component.label), badge(component.state), (component.monitors || []).map(monitor => h('div', { class: 'compact' }, h('h3', {}, monitor.label), badge(monitor.state), monitor.outcome === 'unsupported' ? text('unsupported', 'muted') : null, monitorHint(monitor) ? text(monitorHint(monitor), 'muted') : null, h('small', {}, t('observed') + ': ' + date(monitor.observed_at)), monitor.measurements?.balances ? balanceTable(monitor.measurements) : null)), button('history', () => { selectedComponent = component.id; render() })))))
+    content.append(h('div', { class: 'toolbar' }, button('pagePrevious', () => { componentOffset = Math.max(0, componentOffset - 50); render() }), h('span', {}, componentOffset + ' / ' + response.total), button('pageNext', () => { if (componentOffset + 50 < response.total) { componentOffset += 50; render() } })))
     if (selectedComponent) {
+      const detail = await api('GET', '/v1/components/' + encodeURIComponent(selectedComponent)); if (current !== generation) return
+      content.append(h('section', { class: 'card' }, h('h2', {}, detail.item.label), text('componentDetail', 'muted'), table(['monitor', 'lastSuccess', 'nextCheck', 'latency'], (detail.item.monitors || []).map(m => [m.label, date(m.last_success_at), date(m.next_check_at), m.measurements?.latency_ms != null ? m.measurements.latency_ms + ' ms' : '—']))))
       const from = new Date(Date.now() - 7 * 86400000).toISOString(), to = new Date().toISOString()
       const query = '?component_id=' + encodeURIComponent(selectedComponent) + '&from=' + encodeURIComponent(from) + '&to=' + encodeURIComponent(to)
       const [history, hourly] = await Promise.all([api('GET', '/v1/history' + query), api('GET', '/v1/history/hourly' + query)]); if (current !== generation) return
       const rows = (history.items || []).map(item => [item.monitor_id.slice(0, 8), percentage(item.operational_ms, item.eligible_ms) || t('noCoverage'), Math.round(item.coverage_ms / 1000) + ' ' + t('seconds'), Math.round(item.unknown_ms / 1000) + ' ' + t('seconds'), Math.round(item.excluded_ms / 1000) + ' ' + t('seconds')])
-      content.append(h('section', { class: 'card' }, h('h2', {}, t('history')), text('wholeHours', 'muted'), historyStrip(hourly.items || []), table(['monitor', 'history', 'coverage', 'unknownTime', 'excluded'], rows)))
+      content.append(h('section', { class: 'card' }, h('h2', {}, t('history')), text('wholeHours', 'muted'), historyStrip(hourly.items || []), table(['monitor', 'history', 'coverage', 'unknownTime', 'excluded'], rows), button('exportJSON', run(async () => { const response = await api('GET', '/v1/components/export' + query); exportedComponent = response.item }, 'exportReady'))))
+      if (exportedComponent?.component?.id === selectedComponent) content.append(field('exportJSON', h('textarea', { value: JSON.stringify(exportedComponent, null, 2), readOnly: true, rows: 12 })), text('exportCopyHint', 'muted'))
     }
   }
   function historyStrip(items) {

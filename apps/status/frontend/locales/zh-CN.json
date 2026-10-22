@@ -151,5 +151,14 @@
   "itemUnavailable": "此项目暂不可访问。请检查当前权限并刷新列表。",
   "expectedStatus": "预期 HTTP 状态码（可选）",
   "bodyContains": "响应必须包含的文本（可选）",
-  "httpConditionHint": "状态码留空表示任意 2xx。文本按字面匹配，最多 256 字符；重定向和限流不计为成功。不会保存响应正文。"
+  "httpConditionHint": "状态码留空表示任意 2xx。文本按字面匹配，最多 256 字符；重定向和限流不计为成功。不会保存响应正文。",
+  "componentSearch": "搜索可见组件",
+  "search": "搜索",
+  "componentDetail": "当前有权查看的探测结果",
+  "lastSuccess": "最近成功观测",
+  "nextCheck": "下次计划探测",
+  "latency": "观测耗时",
+  "exportJSON": "导出组件 JSON",
+  "exportReady": "已准备授权快照，请选择文本后复制。",
+  "exportCopyHint": "插件沙箱将导出内容显示为可选文本，请复制到本地文件。仅在当前拥有余额权限时包含财务数值。"
 }

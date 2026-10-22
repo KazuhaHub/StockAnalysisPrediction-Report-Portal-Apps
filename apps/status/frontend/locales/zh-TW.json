@@ -151,5 +151,14 @@
   "itemUnavailable": "此項目暫時無法存取。請檢查目前權限並重新整理清單。",
   "expectedStatus": "預期 HTTP 狀態碼（選填）",
   "bodyContains": "回應必須包含的文字（選填）",
-  "httpConditionHint": "狀態碼留空表示任意 2xx。文字按字面比對，最多 256 字元；重新導向和限流不計為成功。不會儲存回應本文。"
+  "httpConditionHint": "狀態碼留空表示任意 2xx。文字按字面比對，最多 256 字元；重新導向和限流不計為成功。不會儲存回應本文。",
+  "componentSearch": "搜尋可見元件",
+  "search": "搜尋",
+  "componentDetail": "目前有權查看的探測結果",
+  "lastSuccess": "最近成功觀測",
+  "nextCheck": "下次排定探測",
+  "latency": "觀測耗時",
+  "exportJSON": "匯出元件 JSON",
+  "exportReady": "已準備授權快照，請選取文字後複製。",
+  "exportCopyHint": "外掛沙箱將匯出內容顯示為可選文字，請複製至本機檔案。僅在目前擁有餘額權限時包含財務數值。"
 }

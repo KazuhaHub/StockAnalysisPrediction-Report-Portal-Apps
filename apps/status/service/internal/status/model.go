@@ -547,13 +547,25 @@ type MonitorView struct {
 }
 
 func (s *Store) Components(v protocol.Viewer, public bool, now time.Time) ([]ComponentView, error) {
+	return s.componentRange(v, public, now, "", "", 0, 100)
+}
+func (s *Store) componentRange(v protocol.Viewer, public bool, now time.Time, id, search string, offset, limit int) ([]ComponentView, error) {
 	out := []ComponentView{}
 	if public && s.setting("public_enabled") != "1" {
 		return out, nil
 	}
 	filter, args := componentFilter(v, "c", public)
+	if id != "" {
+		filter += " AND c.id=?"
+		args = append(args, id)
+	}
+	if search != "" {
+		filter += " AND instr(lower(c.label),lower(?))>0"
+		args = append(args, search)
+	}
 	paused := s.setting("probes_paused") == "1"
-	query := `SELECT c.id,c.label,c.public_label,c.updated_at FROM components c WHERE c.enabled=1 AND ` + filter + ` ORDER BY c.created_at,c.id LIMIT 100`
+	query := `SELECT c.id,c.label,c.public_label,c.updated_at FROM components c WHERE c.enabled=1 AND ` + filter + ` ORDER BY c.created_at,c.id LIMIT ? OFFSET ?`
+	args = append(args, limit, offset)
 	rows, err := s.db.Query(query, args...)
 	if err != nil {
 		return nil, err

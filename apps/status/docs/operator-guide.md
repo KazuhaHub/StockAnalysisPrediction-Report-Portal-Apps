@@ -169,6 +169,27 @@ After process interruption, an abandoned lease produces a persisted
 a target outage or a successful check. The scheduler postpones the retry by its
 normal interval and jitter, and fresh confirmation is required for recovery.
 
+## Read, search and export components
+
+The private overview searches only currently visible component labels. Pages use
+50 items by default and a maximum of 100; totals and search results are filtered
+before pagination. A component detail request rechecks current OU/user authority,
+including an old ID kept from an earlier page. Its monitor table shows last
+successful observation, next scheduled check and latency without exposing target
+addresses or stored credential references.
+
+Open **Uptime history**, then **Export component JSON** to prepare one authorized
+component snapshot plus its selected interval summary and coarse timeline. The
+JSON has a version and generation time, uses the same current finance grant as
+the UI, excludes configuration/credentials/internal evidence metadata, and is
+bounded to 512 KiB. It appears in a read-only selectable text area for copying to
+a local file, preserving the sandbox's existing download restrictions. An export
+already copied outside the app is a local snapshot, not a live authorization view.
+
+Private read views refresh every 30 seconds only while visible and idle. Admin
+editors, active text fields and a prepared export do not get overwritten by a
+background refresh. Backend scheduling continues with no browser open.
+
 ## Read history and coverage
 
 The component overview includes a private hourly history strip and a version 2

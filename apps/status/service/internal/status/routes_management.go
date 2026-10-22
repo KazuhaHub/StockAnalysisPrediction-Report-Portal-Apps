@@ -32,6 +32,25 @@ func pageParams(r *http.Request) (int, int, error) {
 func (s *Server) moreRoutes(w http.ResponseWriter, r *http.Request, raw []byte, v protocol.Viewer) bool {
 	path := r.URL.Path
 	switch {
+	case r.Method == "GET" && path == "/v1/components/export":
+		from, to, err := parseRange(r.URL.Query().Get("from"), r.URL.Query().Get("to"))
+		if err != nil {
+			apiError(w, err)
+			return true
+		}
+		out, err := s.store.ExportComponent(v, r.URL.Query().Get("component_id"), from, to)
+		if err != nil {
+			apiError(w, err)
+			return true
+		}
+		write(w, 200, map[string]any{"ok": true, "item": out})
+	case r.Method == "GET" && strings.HasPrefix(path, "/v1/components/"):
+		out, err := s.store.Component(v, strings.TrimPrefix(path, "/v1/components/"), time.Now())
+		if err != nil {
+			apiError(w, err)
+			return true
+		}
+		write(w, 200, map[string]any{"ok": true, "item": out})
 	case r.Method == "GET" && path == "/v1/incidents":
 		offset, limit, err := pageParams(r)
 		if err != nil {

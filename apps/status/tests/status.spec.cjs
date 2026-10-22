@@ -117,6 +117,11 @@ test('administrator can create a component and multiple monitors through the ins
   await serviceCard.getByRole('button', { name: 'Uptime history', exact: true }).click()
   await expect(frame.locator('.history-strip [role="img"]').first()).toBeVisible()
   await expect(frame.getByText('No eligible observed time', { exact: true }).first()).toBeVisible()
+  await frame.getByRole('button', { name: 'Export component JSON', exact: true }).click()
+  const snapshot = JSON.parse(await frame.getByLabel('Export component JSON', { exact: true }).inputValue())
+  expect(snapshot.component.label).toBe('UI configured service')
+  expect(JSON.stringify(snapshot)).not.toContain('second.invalid')
+  expect(snapshot.version).toBe(1)
   await context.close()
 })
 

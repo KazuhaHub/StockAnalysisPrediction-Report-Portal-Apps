@@ -323,3 +323,21 @@ released Portal dependencies, a real minimum version, clean reviewed commits,
 immutable app-qualified tags/assets, image digest verification and catalogue
 migration. No public release/tag/image or market change has been made. Cross-build
 CI evidence is pending; local native success alone does not prove every target.
+
+
+## Authorized component detail, paging and export (2026-10-22)
+
+Added private component pagination/search with SQL authorization before counts and
+limits, exact-ID detail lookup and a bounded 512-KiB JSON snapshot/history export.
+Current finance grants control exact balance projection; target configuration,
+credential references and internal observation metadata never enter the export.
+Tests cover 64 mixed-OU components, second-page totals, hidden search/detail,
+revoked OU exports, limit validation and finance grant changes.
+
+The overview includes search/page controls, observation detail and selectable
+export text without widening iframe sandbox downloads. Visible idle read views
+poll every 30 seconds; admin forms, active text entry and prepared exports are
+preserved. Full service race/vet/build and all five real browser scenarios pass,
+including exported JSON parsed from the installed sandbox and private target
+redaction. All six artifact target CI jobs passed at 8d580d9; complete run status
+remains tracked separately from individual job completion.
