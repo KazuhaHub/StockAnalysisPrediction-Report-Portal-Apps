@@ -87,3 +87,44 @@ also gains the same govulncheck CI gate. Local scans with that exact compiler
 report no reachable vulnerabilities; shared-module race tests and vet pass.
 This does not approve or implement new storage. Owner schema approval remains
 required before the dependent connection/persistence packages can proceed.
+
+
+## Approved storage implementation (2026-10-22)
+
+The owner explicitly approved Option A, including the exact table layout and
+restore/deletion principles. This supersedes the pending-approval statements in
+historical entries above. No additional storage decision is inferred.
+
+Portal PR #142 now implements migration 0008, paired generic connection CRUD/UI,
+app-bound capability/identity checks, pinned-transport boot handshake and a
+paginated administrator principal directory. Commit 55db11f5 has passing GitHub
+Actions Go/PostgreSQL, focused race, web and image checks. The platform also gains
+a read-only notification publisher-identity endpoint and safe backend-conflict
+handling; final verification of those additions is tracked separately.
+
+The Status development package now has the approved independent SQLite schema,
+single-owner volume lock, credential sealing, verified offline backup/restore,
+private/public API boundaries, component and finance grants, monitor configuration,
+four-worker leased scheduling, provider adapters, incident/outbox transactions,
+maintenance, retention and reviewed resume. Its three-locale sandbox frontend is
+packaged locally and the separate public page uses explicit DTOs. Gateway and
+container templates plus the operator runbook are in apps/status.
+
+Tests were added before the corresponding implementation. Service race tests,
+CLI backup/restore checks, exact-decimal balance fixtures, official ACS3 fixed-input
+signature vector, heartbeat replay and publisher destination fences pass locally.
+A reachable x/text advisory found by govulncheck was fixed by pinning v0.42.0;
+the follow-up scan reports no vulnerabilities. Browser acceptance uses real local
+Portal and Status binaries, fresh temporary databases/accounts/random keys and an
+explicit private interface. Three scenarios pass: disjoint OUs/current membership,
+multiple-monitor admin save with directory refresh, and a signed-out public prefix
+page without private labels (including narrow mobile layout). Tests found and
+fixed duplicate refreshes and native form submission blocked by the unchanged
+iframe sandbox. No real provider request or recipient notification was used.
+
+The full objective remains incomplete. Outstanding gates include accurate partial
+boundary/unobserved uptime accounting, public history/freshness, maintenance-exit
+and restart evidence, explicit test controls, full failure/recovery drills,
+container/gateway runtime validation and independently versioned immutable release
+and catalogue rollout. Status stays at 0.1.0-dev and out of the production index.
+Production credentials, deployment and marketplace settings remain untouched.

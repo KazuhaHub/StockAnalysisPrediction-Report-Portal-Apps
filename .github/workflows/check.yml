@@ -29,3 +29,71 @@ jobs:
       - run: go vet ./...
       - run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
       - run: go test -race ./...
+  status:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: apps/status/service/go.mod
+          cache: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: node --test apps/status/frontend/tests/*.test.cjs
+      - run: python3 scripts/build-status-frontend.py
+      - run: git diff --exit-code -- apps/status/service/internal/status/public
+      - run: python3 scripts/catalogue.py package status
+      - run: go build ./...
+        working-directory: apps/status/service
+      - run: go vet ./...
+        working-directory: apps/status/service
+      - run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
+        working-directory: apps/status/service
+      - run: go test -race ./...
+        working-directory: apps/status/service
+  status-browser:
+    runs-on: ubuntu-latest
+    env:
+      GOWORK: 'off'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: KazuhaHub/StockAnalysisPrediction-Report-Portal
+          ref: b4eabb4fca7af2cfce9e8eaebfb9a15158d86044
+          path: .acceptance/portal
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: apps/status/service/go.mod
+          cache: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: npm ci && npm run build
+        working-directory: .acceptance/portal/web
+      - run: go build -o "$RUNNER_TEMP/status-portal-acceptance" ./cmd/report-portal
+        working-directory: .acceptance/portal
+      - run: go build -o "$RUNNER_TEMP/status-service-acceptance" ./cmd/status
+        working-directory: apps/status/service
+      - run: python3 scripts/build-status-frontend.py && python3 scripts/catalogue.py package status
+      - run: npm ci && npx playwright install --with-deps chromium
+        working-directory: apps/status/tests
+      - run: npm test
+        working-directory: apps/status/tests
+        env:
+          PORTAL_BINARY: ${{ runner.temp }}/status-portal-acceptance
+          STATUS_BINARY: ${{ runner.temp }}/status-service-acceptance
+  status-container:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -f apps/status/Dockerfile -t status-development .
+      - run: docker run --rm status-development version
+      - run: python3 scripts/status-container-smoke.py

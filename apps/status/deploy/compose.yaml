@@ -1,0 +1,23 @@
+services:
+  status:
+    build:
+      context: ../../..
+      dockerfile: apps/status/Dockerfile
+    restart: unless-stopped
+    user: "${STATUS_UID:-1000}:${STATUS_GID:-1000}"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 64
+    mem_limit: 256m
+    cpus: 1
+    stop_grace_period: 35s
+    # Bind only to the existing gateway's private network/interface. The Portal
+    # connection must use an approved private address or a verified HTTPS name.
+    ports:
+      - "${STATUS_BIND_IP:-127.0.0.1}:8791:8791"
+    volumes:
+      - ./data:/data
+      - ./secrets:/run/secrets:ro
+    tmpfs:
+      - /tmp:size=16m,mode=1777

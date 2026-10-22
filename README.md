@@ -39,3 +39,12 @@ by a ZIP. Secrets and private component data never belong in a public archive.
 
 Source and copied reference app are provided under AGPL-3.0; see LICENSE. Independent
 third-party additions must preserve applicable license notices.
+
+## Status development application
+
+[Status](apps/status/README.md) is the first independently deployed application
+under active development. Its sandbox ZIP, separate service/storage, provider
+checks, OU grants, incident/outbox lifecycle and operator templates live together
+under `apps/status`. It remains excluded from the production catalogue until the
+[acceptance ledger](apps/status/docs/acceptance.md) and immutable release gates
+are completed. The Portal platform dependency is tracked in PR #142.

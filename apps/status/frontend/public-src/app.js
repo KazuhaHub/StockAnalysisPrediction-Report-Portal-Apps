@@ -1,0 +1,31 @@
+(function () {
+  const root = document.getElementById('app'), { safeState, selectLocale } = StatusContracts
+  let language = selectLocale(navigator.language), busy = false
+  const t = key => STATUS_LOCALES[language][key] || key
+  function h(tag, text, className) { const node = document.createElement(tag); if (text) node.textContent = text; if (className) node.className = className; return node }
+  async function render() {
+    if (busy) return
+    busy = true
+    document.documentElement.lang = language
+    root.replaceChildren()
+    const header = h('header'), title = h('div'), languages = document.createElement('select')
+    languages.setAttribute('aria-label', t('language'))
+    for (const locale of Object.keys(STATUS_LOCALES)) { const option = h('option', STATUS_LOCALES[locale].languageName); option.value = locale; option.selected = locale === language; languages.append(option) }
+    languages.addEventListener('change', () => { language = languages.value; render() })
+    title.append(h('h1', t('title')), h('p', t('subtitle'))); header.append(title, languages); root.append(header)
+    const content = h('section', '', 'grid'); root.append(content)
+    try {
+      const [status, incidents] = await Promise.all(['public/v1/status', 'public/v1/incidents?limit=50'].map(path => fetch(path, { credentials: 'omit', cache: 'no-store' }).then(async response => { if (!response.ok) throw new Error(); return response.json() })))
+      if (!status.items?.length) content.append(h('p', t('empty'), 'notice'))
+      for (const component of status.items || []) { const card = h('article', '', 'card'), state = safeState(component.state); card.append(h('h2', component.label), h('span', t(state), 'badge ' + state)); content.append(card) }
+      root.append(h('h2', t('incidents')))
+      if (!incidents.items?.length) root.append(h('p', t('noIncidents'), 'muted'))
+      for (const incident of incidents.items || []) { const card = h('article', '', 'card'); card.append(h('h3', incident.summary), h('p', new Date(incident.opened_at).toLocaleString(language))); root.append(card) }
+      root.append(h('small', t('observed') + ': ' + new Date(status.generated_at).toLocaleString(language)))
+    } catch { content.replaceChildren(h('p', t('unavailable'), 'notice error')) } finally { busy = false }
+  }
+  if (matchMedia('(prefers-color-scheme: dark)').matches) { for (const [k,v] of Object.entries({'--bg':'#111827','--surface':'#182334','--text':'#eef3fa','--muted':'#b2bed0','--border':'#3d4b60'})) document.documentElement.style.setProperty(k,v) }
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) render() })
+  setInterval(() => { if (!document.hidden) render() }, 30000)
+  render()
+})()
