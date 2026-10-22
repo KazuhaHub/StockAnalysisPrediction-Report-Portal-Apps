@@ -97,3 +97,37 @@ jobs:
       - run: docker build -f apps/status/Dockerfile -t status-development .
       - run: docker run --rm status-development version
       - run: python3 scripts/status-container-smoke.py
+  status-artifacts:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [linux-amd64, linux-arm64, linux-armv7, darwin-amd64, darwin-arm64, windows-amd64]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: apps/status/service/go.mod
+          cache: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: python3 scripts/build-status-release.py --target "${{ matrix.target }}"
+      - name: Verify every artifact checksum
+        shell: bash
+        run: |
+          version=$(python3 -c 'import json; print(json.load(open("apps/status/app.json"))["version"])')
+          cd "dist/artifacts/status/$version"
+          sha256sum -c SHA256SUMS
+      - name: Execute the native service artifact
+        if: matrix.target == 'linux-amd64'
+        shell: bash
+        run: |
+          version=$(python3 -c 'import json; print(json.load(open("apps/status/app.json"))["version"])')
+          tar -xzf "dist/artifacts/status/$version/status-v$version-linux-amd64.tar.gz" -C "$RUNNER_TEMP"
+          test "$("$RUNNER_TEMP/status" version)" = "$version"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: status-development-${{ matrix.target }}
+          path: dist/artifacts/status/
+          retention-days: 7

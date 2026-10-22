@@ -69,3 +69,6 @@ maintenance-exit evidence, retention/recovery edge cases, operator test controls
 public history/freshness, full browser workflows, container/gateway runtime and
 immutable release/catalogue migration. Provider fixtures and official signing
 vectors do not replace deployment-specific Qwen billing authorization checks.
+
+Independent binary/ZIP candidate commands and publication prerequisites are in
+[the artifact build guide](docs/artifact-build.md).

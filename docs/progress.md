@@ -305,3 +305,21 @@ be made healthy by a custom condition; response bodies are not persisted.
 Tests cover match/mismatch, empty 204, oversized responses and invalid/provider
 configuration. Full race/vet/build and the real multi-monitor editor workflow
 verify the new saved condition. No schema change is involved.
+
+
+## Independently versioned service artifact candidates (2026-10-22)
+
+Added a builder producing one app-qualified directory with the sandbox ZIP,
+selected pure-Go service archives, exact version/source metadata and complete
+SHA-256 list. Output replacement is refused. Archive timestamps/ownership and
+compiler host paths/build IDs are normalized. A native macOS arm64 candidate
+executes with the expected manifest version; hashes validate and a repeated
+build produces byte-identical service archive bytes. Nine Python tooling tests
+pass, including archive contents/metadata and target validation.
+
+Six-target CI now builds/checks candidates and executes the native Linux version.
+It uploads temporary CI artifacts only. The publication guide preserves gates for
+released Portal dependencies, a real minimum version, clean reviewed commits,
+immutable app-qualified tags/assets, image digest verification and catalogue
+migration. No public release/tag/image or market change has been made. Cross-build
+CI evidence is pending; local native success alone does not prove every target.
