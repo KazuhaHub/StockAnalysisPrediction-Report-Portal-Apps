@@ -294,6 +294,28 @@ func (p *Prober) Check(ctx context.Context, m Monitor) (result Result) {
 		return Result{Outcome: "failure", ReasonCode: "network_unavailable"}
 	}
 	defer response.Body.Close()
+	if m.Kind == "http" && (m.Config.ExpectedStatus != 0 || m.Config.BodyContains != "") {
+		// Redirect and rate-limit handling remain transport policy, even when
+		// an operator requests a custom response condition.
+		if response.StatusCode == 429 {
+			return Result{Outcome: "unknown", ReasonCode: "rate_limited", RetryAfter: retryAfter(response.Header.Get("Retry-After"), time.Now())}
+		}
+		if response.StatusCode >= 300 && response.StatusCode < 400 {
+			return unknown("redirect_refused")
+		}
+		raw, err := io.ReadAll(io.LimitReader(response.Body, 65537))
+		if err != nil || len(raw) > 65536 {
+			return unknown("invalid_response")
+		}
+		matches := response.StatusCode >= 200 && response.StatusCode < 300
+		if m.Config.ExpectedStatus != 0 {
+			matches = response.StatusCode == m.Config.ExpectedStatus
+		}
+		if !matches || !strings.Contains(string(raw), m.Config.BodyContains) {
+			return Result{Outcome: "failure", ReasonCode: "condition_mismatch"}
+		}
+		return Result{Outcome: "success", ReasonCode: "reachable", Measurements: Measurements{Capability: "configured_http_condition"}}
+	}
 	if m.Kind == "qwen" && (response.StatusCode == 401 || response.StatusCode == 403) {
 		return unknown("billing_permission_required")
 	}

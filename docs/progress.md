@@ -293,3 +293,15 @@ scenario covers an invalid target, retained multi-monitor fields, correction and
 successful save. Six frontend contract tests pass. Historical boundary commit
 b390adf passed CI. These checks are specific workflow evidence, not a blanket
 accessibility certification or final production acceptance.
+
+
+## Generic HTTP response conditions (2026-10-22)
+
+Requirement audit identified missing first-release HTTP status/body conditions.
+Added optional exact status and bounded literal text matching in the existing
+monitor config JSON and sandbox editor. Defaults remain 2xx, with the same bounded
+read-only GET transport. Oversized bodies, redirects and quota responses cannot
+be made healthy by a custom condition; response bodies are not persisted.
+Tests cover match/mismatch, empty 204, oversized responses and invalid/provider
+configuration. Full race/vet/build and the real multi-monitor editor workflow
+verify the new saved condition. No schema change is involved.

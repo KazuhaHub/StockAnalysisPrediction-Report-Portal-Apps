@@ -148,5 +148,8 @@
   "configurationConflict": "The configuration changed or this action is currently blocked. Check the current revision, pause and lease state before retrying. Your edits are preserved.",
   "requestBusy": "Too many requests. Wait briefly and retry. Your edits are preserved.",
   "accessDenied": "Access is unavailable or your permissions changed. Sign in again or ask an administrator to review access.",
-  "itemUnavailable": "This item is unavailable. Review your current access and refresh the list."
+  "itemUnavailable": "This item is unavailable. Review your current access and refresh the list.",
+  "expectedStatus": "Expected HTTP status (optional)",
+  "bodyContains": "Required response text (optional)",
+  "httpConditionHint": "Leave status empty to require any 2xx response. Text matching is literal and limited to 256 characters; redirects and rate limits never count as success. Response bodies are not saved."
 }

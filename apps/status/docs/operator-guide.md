@@ -116,12 +116,19 @@ Probe configuration:
 
 | Kind | Credential fields | Configuration and meaning |
 | --- | --- | --- |
-| HTTP | Optional API key | Fixed URL, interval/timeout and explicit private CIDRs if necessary. Uses GET; no redirect following. |
+| HTTP | Optional API key | Fixed URL, optional exact status/literal body condition, interval/timeout and explicit private CIDRs if necessary. Uses GET; no redirect following. |
 | Dify | Application API key | Dify API root; authenticated GET `/v1/info`, no workflow execution or report generation. |
 | PostgreSQL | Dedicated username/password | Host, port, database, explicit private CIDRs. Verified TLS and `SELECT 1`; mount a trusted CA through the normal system trust configuration if needed. |
 | DeepSeek | API key | Account balance capability, selected currency and exact decimal low/recovery thresholds. Different currencies are never summed. |
 | Qwen | Minimal RAM AccessKey ID/secret; optional STS token | Correct China/international billing site and currency. This reports cloud account credit/cash, not a model key's quota. |
 | Heartbeat | At least 32 characters of signing secret | Interval defines the expected job cadence; see the signed ingress format below. |
+
+HTTP checks optionally require one HTTP status (100–599) and/or a literal response
+substring of at most 256 characters. Empty status requires any 2xx. The response is
+bounded to 64 KiB; oversize/unreadable bodies are unknown, condition mismatches
+are failures. Redirects and 429 responses remain unknown even if entered as an
+expected status. Bodies are never stored or shown. These optional conditions
+apply only to generic HTTP, preserving typed provider/Dify semantics.
 
 Use **Billing account reference** for a stable local alias of the actual funding
 account, such as `research-main`. It is required for saved DeepSeek/Qwen monitors;

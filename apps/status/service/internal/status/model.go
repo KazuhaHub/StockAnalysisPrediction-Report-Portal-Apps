@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	protocol "github.com/KazuhaHub/StockAnalysisPrediction-Report-Portal-Apps/packages/extensionprotocol"
 )
@@ -66,6 +67,8 @@ type MonitorInput struct {
 	TimeoutSeconds  int             `json:"timeout_seconds"`
 }
 type ProbeConfig struct {
+	ExpectedStatus  int            `json:"expected_status,omitempty"`
+	BodyContains    string         `json:"body_contains,omitempty"`
 	AccountRef      string         `json:"account_ref,omitempty"`
 	Version         int            `json:"version"`
 	URL             string         `json:"url,omitempty"`
@@ -114,6 +117,9 @@ func validateMonitor(m *MonitorInput) error {
 		if !prefix.IsValid() {
 			return ErrInvalid
 		}
+	}
+	if (c.ExpectedStatus != 0 && (c.ExpectedStatus < 100 || c.ExpectedStatus > 599)) || utf8.RuneCountInString(c.BodyContains) > 256 || (m.Kind != "http" && (c.ExpectedStatus != 0 || c.BodyContains != "")) {
+		return ErrInvalid
 	}
 	switch m.Kind {
 	case "http", "dify":

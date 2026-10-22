@@ -148,5 +148,8 @@
   "configurationConflict": "配置已变更，或当前状态不允许此操作。请检查配置版本、暂停状态和运行中的探测后重试。已保留你的输入。",
   "requestBusy": "请求过多，请稍后重试。已保留你的输入。",
   "accessDenied": "无法访问，或你的权限已变更。请重新登录或联系管理员检查权限。",
-  "itemUnavailable": "此项目暂不可访问。请检查当前权限并刷新列表。"
+  "itemUnavailable": "此项目暂不可访问。请检查当前权限并刷新列表。",
+  "expectedStatus": "预期 HTTP 状态码（可选）",
+  "bodyContains": "响应必须包含的文本（可选）",
+  "httpConditionHint": "状态码留空表示任意 2xx。文本按字面匹配，最多 256 字符；重定向和限流不计为成功。不会保存响应正文。"
 }
