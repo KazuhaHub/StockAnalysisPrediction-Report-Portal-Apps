@@ -61,7 +61,7 @@ with tempfile.TemporaryDirectory(prefix="status-image-") as folder:
             database.execute("INSERT INTO components(id,label,public_label,public_enabled,enabled,revision,created_at,updated_at) VALUES(?,?,?,1,1,1,?,?)", ("a" * 32, "Private fixture label", "Public fixture", int(time.time() * 1000), int(time.time() * 1000)))
         config = root / "nginx.conf"
         template = Path("apps/status/deploy/nginx-public.conf").read_text()
-        config.write_text("pid /tmp/nginx.pid; error_log /dev/stderr warn; events {} http { access_log off; proxy_temp_path /tmp/proxy; server { listen 8080; " + template + "} }")
+        config.write_text("pid /tmp/nginx.pid; error_log /dev/stderr warn; events {} http { access_log off; client_body_temp_path /tmp/clientbody; proxy_temp_path /tmp/proxy; fastcgi_temp_path /tmp/fastcgi; uwsgi_temp_path /tmp/uwsgi; scgi_temp_path /tmp/scgi; server { listen 8080; " + template + "} }")
         config.chmod(0o644)
         run("docker", "start", name)
         run("docker", "run", "-d", "--name", gateway, "--network", network,
