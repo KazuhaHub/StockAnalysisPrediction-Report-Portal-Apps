@@ -59,3 +59,20 @@ library foundations; the Portal proxy is not wired or deployed yet.
 Pending owner input: exact Portal/Status schema proposal. No schema code has been
 written and no Status database was initialized. Complete S01/S02 implementation
 continues after that decision. The full objective remains incomplete.
+
+
+## Current viewer snapshot (2026-10-22)
+
+The Portal branch now has an internal read-only account/OU projection primitive,
+without routes or new tables. New tests first failed for the missing projection;
+an invalid-expiry regression failed before fail-closed validation was added.
+SQLite, focused race and real PostgreSQL cases prove current OU/role resolution,
+account activation/expiry/password/session/deletion fencing, registration-bound
+opaque identities and invalid ancestry/default refusal. Panel civil-date expiry
+and cancelled context are covered. Full Go suite/build/vet/staticcheck passed.
+
+This does not complete S01: token issuance still needs the current account cursor,
+installation-generation checks and backend registry/proxy wiring. Exact storage
+approval is still pending and no migration is written. The app-repository protocol
+PR #1 head 28ee089 has passing GitHub Actions catalogue/protocol jobs. Production
+market configuration, provider credentials and runtime have not been touched.
