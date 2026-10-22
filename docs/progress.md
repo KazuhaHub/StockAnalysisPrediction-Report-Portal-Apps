@@ -264,3 +264,15 @@ remain unknown observations instead of accumulating exhausted-credit outages.
 These paths never produce an inferred financial value. Service race and vet
 checks pass after the fix. External real-recipient delivery remains unexercised;
 all publication/probe fixtures are isolated and non-billable.
+
+
+## Retrospective maintenance and retention boundaries (2026-10-22)
+
+Failing tests found that whole-hour aggregates ignored maintenance recorded after
+an interval and cleanup dropped an hour still overlapping the 90-day boundary.
+Corrected hours now rebuild from retained raw evidence; expired evidence yields
+exact maintenance exclusions and unknown remaining coverage, never a proportional
+allocation of aggregate health. The reconstruction fetches bounded evidence once
+per monitor and clips it per bucket, avoiding one database scan per corrected
+hour. A 2,000-observation regression covers ranges beyond a single bucket limit.
+The overlap hour survives cleanup. Full service race/vet/build checks pass.

@@ -174,6 +174,9 @@ func readHistoryControls(query timelineQuerier, component string, monitors []his
 	return out, rows.Err()
 }
 func (s *Store) historyEvidence(m historyMonitor, from, to int64) ([]stateEvidence, error) {
+	return s.historyEvidenceLimit(m, from, to, 1000)
+}
+func (s *Store) historyEvidenceLimit(m historyMonitor, from, to int64, limit int) ([]stateEvidence, error) {
 	out := []stateEvidence{}
 	appendRaw := func(at int64, raw string) {
 		var saved recordedMeasurements
@@ -194,7 +197,7 @@ func (s *Store) historyEvidence(m historyMonitor, from, to int64) ([]stateEviden
 	if err == nil {
 		appendRaw(priorAt, priorRaw)
 	}
-	rows, err := s.db.Query(`SELECT observed_at,measurements FROM observations WHERE monitor_id=? AND outcome<>'heartbeat' AND observed_at>=? AND observed_at<? ORDER BY observed_at,rowid LIMIT 1001`, m.id, from, to)
+	rows, err := s.db.Query(`SELECT observed_at,measurements FROM observations WHERE monitor_id=? AND outcome<>'heartbeat' AND observed_at>=? AND observed_at<? ORDER BY observed_at,rowid LIMIT ?`, m.id, from, to, limit+1)
 	if err != nil {
 		return nil, err
 	}
@@ -208,7 +211,7 @@ func (s *Store) historyEvidence(m historyMonitor, from, to int64) ([]stateEviden
 		}
 		appendRaw(at, raw)
 		count++
-		if count > 1000 {
+		if count > limit {
 			rows.Close()
 			return nil, ErrInvalid
 		}
@@ -221,5 +224,12 @@ func (s *Store) historyEvidence(m historyMonitor, from, to int64) ([]stateEviden
 	if m.updated < to {
 		out = append(out, stateEvidence{m.updated, m.freshUntil, m.state})
 	}
+	sort.SliceStable(out, func(i, j int) bool { return out[i].at < out[j].at })
 	return out, nil
+}
+
+func clipEvidence(evidence []stateEvidence, from, to int64) []stateEvidence {
+	start := sort.Search(len(evidence), func(i int) bool { return evidence[i].at >= from })
+	end := sort.Search(len(evidence), func(i int) bool { return evidence[i].at >= to })
+	return evidence[max(0, start-1):end]
 }

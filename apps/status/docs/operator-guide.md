@@ -187,8 +187,12 @@ while the page update timestamp only identifies when the response was generated.
 Backups preserve evidence. Restore closes prior evidence at the restore instant,
 then pauses probes and invalidates current state without rewriting earlier
 intervals. Scheduling future maintenance does not reset existing observations.
-Historical maintenance edits and the oldest retention boundaries remain under
-acceptance review; do not treat this development build as an audited SLA source.
+Retrospective maintenance rebuilds affected intervals from retained raw evidence.
+When that evidence has expired, maintenance exclusions remain exact and the rest
+of a corrected bucket becomes unknown; the service never proportionally splits
+an old aggregate. Raw evidence is read once per monitor for a correction range
+and clipped per hour. Cleanup retains the hour overlapping the 90-day boundary.
+An audited SLA claim still requires deployment-specific operational acceptance.
 
 ## Configure notification publication
 

@@ -158,7 +158,7 @@ func (s *Store) Cleanup(now time.Time) error {
 		q    string
 		args []any
 	}{
-		{`DELETE FROM hourly_aggregates WHERE rowid IN(SELECT rowid FROM hourly_aggregates WHERE hour_at<? LIMIT 500)`, []any{cutoff}},
+		{`DELETE FROM hourly_aggregates WHERE rowid IN(SELECT rowid FROM hourly_aggregates WHERE hour_at<? LIMIT 500)`, []any{now.Add(-90 * 24 * time.Hour).UTC().Truncate(time.Hour).UnixMilli()}},
 		{`DELETE FROM audit_events WHERE id IN(SELECT a.id FROM audit_events a WHERE a.created_at<? AND (a.action NOT IN('probes.pause','probes.resume','component.pause','component.resume','monitor.pause','monitor.resume') OR EXISTS(SELECT 1 FROM audit_events b WHERE b.target_id=a.target_id AND b.action IN('probes.pause','probes.resume','component.pause','component.resume','monitor.pause','monitor.resume') AND b.created_at<? AND (b.created_at>a.created_at OR (b.created_at=a.created_at AND b.rowid>a.rowid)))) ORDER BY a.created_at LIMIT 500)`, []any{cutoff, cutoff}},
 		{`DELETE FROM notification_outbox WHERE id IN(SELECT o.id FROM notification_outbox o JOIN incidents i ON i.id=(SELECT incident_id FROM incident_transitions WHERE id=o.transition_id) WHERE i.resolved_at>0 AND i.resolved_at<? AND o.state IN('delivered','discarded') LIMIT 100)`, []any{cutoff}},
 		{`DELETE FROM incidents WHERE id IN(SELECT i.id FROM incidents i WHERE i.resolved_at>0 AND i.resolved_at<? AND NOT EXISTS(SELECT 1 FROM incident_transitions t JOIN notification_outbox o ON o.transition_id=t.id WHERE t.incident_id=i.id) LIMIT 100)`, []any{cutoff}},
