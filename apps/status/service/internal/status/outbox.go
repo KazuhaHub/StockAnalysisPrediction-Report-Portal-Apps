@@ -81,6 +81,7 @@ type Notice struct {
 	Attempts                                             int
 }
 type PublishResult struct {
+	RetryAfter         time.Duration
 	EventID, ErrorCode string
 	Conflict           bool
 }
@@ -149,7 +150,8 @@ func (s *Store) FinishNotice(n Notice, result PublishResult, now time.Time) erro
 		return ErrConflict
 	}
 	state, errorCode := "retry", result.ErrorCode
-	next := now.Add(time.Duration(min(3600, 15*(1<<min(n.Attempts, 8)))) * time.Second).UnixMilli()
+	delay := time.Duration(min(3600, 15*(1<<min(n.Attempts, 8)))) * time.Second
+	next := now.Add(max(delay, min(time.Hour, max(time.Duration(0), result.RetryAfter)))).UnixMilli()
 	if result.EventID != "" && len(result.EventID) <= 128 {
 		state = "delivered"
 		errorCode = ""
@@ -205,7 +207,16 @@ func (p *Publisher) Publish(ctx context.Context, n Notice) PublishResult {
 		OK        bool   `json:"ok"`
 		Publisher string `json:"publisher"`
 	}
-	if readErr != nil || len(identityRaw) > 4096 || identityResponse.StatusCode != 200 || json.Unmarshal(identityRaw, &identity) != nil || !identity.OK || identity.Publisher != "service.status-"+n.ComponentID {
+	if identityResponse.StatusCode == 429 || identityResponse.StatusCode >= 500 {
+		return PublishResult{ErrorCode: "unavailable", RetryAfter: retryAfter(identityResponse.Header.Get("Retry-After"), time.Now())}
+	}
+	if identityResponse.StatusCode == 401 || identityResponse.StatusCode == 403 {
+		return PublishResult{ErrorCode: "rejected", Conflict: true}
+	}
+	if readErr != nil || len(identityRaw) > 4096 || identityResponse.StatusCode != 200 || json.Unmarshal(identityRaw, &identity) != nil || !identity.OK {
+		return PublishResult{ErrorCode: "invalid_response"}
+	}
+	if identity.Publisher != "service.status-"+n.ComponentID {
 		return PublishResult{ErrorCode: "rejected", Conflict: true}
 	}
 	request, err := http.NewRequestWithContext(ctx, "POST", target, strings.NewReader(n.Payload))
@@ -229,7 +240,7 @@ func (p *Publisher) Publish(ctx context.Context, n Notice) PublishResult {
 		return PublishResult{ErrorCode: "rejected", Conflict: true}
 	}
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		return PublishResult{ErrorCode: "unavailable"}
+		return PublishResult{ErrorCode: "unavailable", RetryAfter: retryAfter(response.Header.Get("Retry-After"), time.Now())}
 	}
 	raw, err := io.ReadAll(io.LimitReader(response.Body, 4097))
 	if err != nil || len(raw) > 4096 {

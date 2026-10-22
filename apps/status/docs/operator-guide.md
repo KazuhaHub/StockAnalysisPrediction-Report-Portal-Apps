@@ -221,6 +221,13 @@ Status audit table. Portal's success response means durable capture, not that a
 person received an Email, Slack message or Webhook. The app shows **Captured by
 Portal** for this state.
 
+Temporary preflight failures and HTTP 429/5xx remain retryable; failed credentials
+or a mismatched publisher require review. Numeric/date `Retry-After` is honored,
+bounded to one hour, alongside exponential retry delay. Provider 429 responses
+also defer the next probe by the greater of its normal interval and the bounded
+retry hint. A failed billing read or billing authentication failure remains
+unknown, never a zero balance or a confirmed exhausted-credit result.
+
 A timeout can be retried idempotently. A 409, wrong publisher, changed destination
 or exhausted retry budget becomes **Review required**. Inspect the current queue,
 verify any possible earlier Portal capture, then explicitly discard a notice or

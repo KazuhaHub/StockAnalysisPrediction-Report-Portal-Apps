@@ -64,7 +64,7 @@ func (s *Store) ClaimDue(now time.Time) (Monitor, bool, error) {
 var safeReasons = map[string]bool{"reachable": true, "observer_unavailable": true, "heartbeat_not_received": true, "heartbeat_missed": true, "heartbeat_received": true, "network_unavailable": true, "invalid_destination": true, "unsupported_probe": true, "invalid_response": true, "authentication_failed": true, "rate_limited": true, "redirect_refused": true, "upstream_unavailable": true, "invalid_balance_response": true, "currency_unavailable": true, "balance_read": true, "low_balance": true, "low_credit": true, "insufficient_funds": true, "billing_unsupported": true, "billing_permission_required": true, "billing_site_mismatch": true, "billing_unavailable": true, "database_unavailable": true, "database_query_failed": true}
 
 func (s *Store) Record(m Monitor, result Result, now time.Time) error {
-	if !safeReasons[result.ReasonCode] || result.DurationMS < 0 || result.DurationMS > 60000 {
+	if !safeReasons[result.ReasonCode] || result.DurationMS < 0 || result.DurationMS > 60000 || result.RetryAfter < 0 || result.RetryAfter > time.Hour {
 		return ErrInvalid
 	}
 	if result.Outcome != "success" && result.Outcome != "failure" && result.Outcome != "degraded" && result.Outcome != "unknown" && result.Outcome != "unsupported" && result.Outcome != "hold" {
@@ -144,7 +144,7 @@ func (s *Store) Record(m Monitor, result Result, now time.Time) error {
 	}
 	// Stable per-monitor jitter avoids synchronized restarts without drifting civil time.
 	jitter := int64(m.ID[0]) % int64(max(1, m.IntervalSeconds/10))
-	if _, err := tx.Exec(`UPDATE monitors SET lease_token='',lease_until=0,next_at=? WHERE id=?`, now.Add(time.Duration(int64(m.IntervalSeconds)+jitter)*time.Second).UnixMilli(), m.ID); err != nil {
+	if _, err := tx.Exec(`UPDATE monitors SET lease_token='',lease_until=0,next_at=? WHERE id=?`, now.Add(max(time.Duration(int64(m.IntervalSeconds)+jitter)*time.Second, result.RetryAfter)).UnixMilli(), m.ID); err != nil {
 		return err
 	}
 	if err := aggregateInterval(tx, m, updated, now.UnixMilli(), intervalState); err != nil {

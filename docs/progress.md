@@ -247,3 +247,20 @@ hard origin registry cap and idle eviction. Spoofed forwarding headers do not
 allocate new budgets; 429 includes retry guidance, and private auth remains
 independent. Tests cover bursts, global work, registry bounds and expiry. The
 runbook explains trusted-gateway client limits and the shared proxy budget.
+
+
+## Transient quota and billing-observation failures (2026-10-22)
+
+New regressions exposed transient publication identity-preflight 429/5xx being
+misclassified as permanent audience conflicts. These responses now retry with the
+same event identity; failed credentials or an actual namespace mismatch still
+require review. Numeric/date Retry-After is bounded to one hour and persists via
+existing next-at fields for both probe and publication retries. Tests cover
+preflight quota, post-capture endpoint quota, unchanged event payload/occurrence,
+retry delays and malformed/oversized/date hints.
+
+DeepSeek/Qwen transport failures and DeepSeek authentication/server errors now
+remain unknown observations instead of accumulating exhausted-credit outages.
+These paths never produce an inferred financial value. Service race and vet
+checks pass after the fix. External real-recipient delivery remains unexercised;
+all publication/probe fixtures are isolated and non-billable.

@@ -37,6 +37,7 @@ type Measurements struct {
 	Balances   []Balance `json:"balances,omitempty"`
 }
 type Result struct {
+	RetryAfter   time.Duration
 	Outcome      string
 	ReasonCode   string
 	Measurements Measurements
@@ -287,6 +288,9 @@ func (p *Prober) Check(ctx context.Context, m Monitor) (result Result) {
 	}
 	response, err := client.Do(req)
 	if err != nil {
+		if m.Kind == "deepseek" || m.Kind == "qwen" {
+			return unknown("network_unavailable")
+		}
 		return Result{Outcome: "failure", ReasonCode: "network_unavailable"}
 	}
 	defer response.Body.Close()
@@ -294,10 +298,13 @@ func (p *Prober) Check(ctx context.Context, m Monitor) (result Result) {
 		return unknown("billing_permission_required")
 	}
 	if response.StatusCode == 401 || response.StatusCode == 403 {
+		if m.Kind == "deepseek" {
+			return unknown("authentication_failed")
+		}
 		return Result{Outcome: "failure", ReasonCode: "authentication_failed"}
 	}
 	if response.StatusCode == 429 {
-		return unknown("rate_limited")
+		return Result{Outcome: "unknown", ReasonCode: "rate_limited", RetryAfter: retryAfter(response.Header.Get("Retry-After"), time.Now())}
 	}
 	if response.StatusCode >= 300 && response.StatusCode < 400 {
 		return unknown("redirect_refused")
@@ -310,6 +317,9 @@ func (p *Prober) Check(ctx context.Context, m Monitor) (result Result) {
 		return qwenResult(raw, m.Config)
 	}
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		if m.Kind == "deepseek" {
+			return unknown("upstream_unavailable")
+		}
 		return Result{Outcome: "failure", ReasonCode: "upstream_unavailable"}
 	}
 	switch m.Kind {
