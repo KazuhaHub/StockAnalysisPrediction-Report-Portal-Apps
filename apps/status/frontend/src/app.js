@@ -1,6 +1,6 @@
 (function () {
   'use strict'
-  const { proxyRequest, safeState, selectLocale, percentage } = StatusContracts
+  const { proxyRequest, safeState, selectLocale, percentage, monitorHint } = StatusContracts
   let language = selectLocale(navigator.language), tab = 'overview', adminTab = 'components', admin = false, initialized = false
   let error = '', notice = '', generation = 0, sequence = 0, incidentOffset = 0, selectedComponent = '', selectedIncident = ''
   let editingComponent = null, editingCredential = null, directory = [], directoryOffset = 0, rendering = false, rerender = false
@@ -107,7 +107,7 @@
     const response = await api('GET', '/v1/components'); if (current !== generation) return
     content.replaceChildren()
     if (!response.items?.length) { content.append(text('empty')); return }
-    content.append(h('div', { class: 'grid' }, response.items.map(component => h('article', { class: 'card' }, h('h2', {}, component.label), badge(component.state), (component.monitors || []).map(monitor => h('div', { class: 'compact' }, h('h3', {}, monitor.label), badge(monitor.state), h('small', {}, t('observed') + ': ' + date(monitor.observed_at)), monitor.measurements?.balances ? balanceTable(monitor.measurements) : null)), button('history', () => { selectedComponent = component.id; render() })))))
+    content.append(h('div', { class: 'grid' }, response.items.map(component => h('article', { class: 'card' }, h('h2', {}, component.label), badge(component.state), (component.monitors || []).map(monitor => h('div', { class: 'compact' }, h('h3', {}, monitor.label), badge(monitor.state), monitor.outcome === 'unsupported' ? text('unsupported', 'muted') : null, monitorHint(monitor) ? text(monitorHint(monitor), 'muted') : null, h('small', {}, t('observed') + ': ' + date(monitor.observed_at)), monitor.measurements?.balances ? balanceTable(monitor.measurements) : null)), button('history', () => { selectedComponent = component.id; render() })))))
     if (selectedComponent) {
       const from = new Date(Date.now() - 7 * 86400000).toISOString(), to = new Date().toISOString()
       const query = '?component_id=' + encodeURIComponent(selectedComponent) + '&from=' + encodeURIComponent(from) + '&to=' + encodeURIComponent(to)

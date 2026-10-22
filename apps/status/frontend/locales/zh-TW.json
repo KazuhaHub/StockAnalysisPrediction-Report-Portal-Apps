@@ -118,7 +118,7 @@
   "discarded": "已丟棄",
   "leased": "釋出中",
   "reason": "原因",
-  "unsupported": "不支援",
+  "unsupported": "不支援此測量能力",
   "manual": "手動值",
   "capability": "檢查能力",
   "balances": "報告餘額",
@@ -134,5 +134,12 @@
   "pageUpdated": "頁面更新時間",
   "checkNow": "請求探測",
   "checkSavedHint": "探測使用已儲存的設定。請先儲存修改；暫停狀態下不能請求探測。",
-  "checkQueued": "探測已排隊。請等待新的觀測結果；這不代表服務已恢復。"
+  "checkQueued": "探測已排隊。請等待新的觀測結果；這不代表服務已恢復。",
+  "billingUnsupportedHint": "目前帳號或站點不支援此帳單能力。請檢查阿里雲帳單存取權限；未推斷餘額。模型額度屬於另一項能力。",
+  "billingPermissionHint": "帳單存取遭拒。請使用僅獲 QueryAccountBalance 所需權限的 RAM 身分；模型 API Key 不包含帳單權限。",
+  "billingSiteHint": "帳單站點與帳號不符。請檢查中國站或國際站設定。",
+  "currencyHint": "介面未回傳所選幣別。其他幣別的餘額不會換算或相加。",
+  "authenticationHint": "身分驗證失敗。請檢查儲存的憑證；未據此推斷餘額或服務可用性。",
+  "observerHint": "觀測器未能完成此探測。這不能證明目標服務發生故障。",
+  "staleHint": "此觀測結果已過期，請等待新的探測結果。"
 }

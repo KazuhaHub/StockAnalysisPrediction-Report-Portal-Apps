@@ -215,3 +215,18 @@ seeded offline after the restore drill; no production data/configuration is used
 Both containers run without capabilities, with read-only filesystems. Local Docker
 is unavailable, so runtime evidence is pending the container CI job; syntax
 compilation alone is not considered acceptance.
+
+
+## Explicit capability results and verified gateway (2026-10-22)
+
+All five CI jobs passed at 05787ac, including a real nginx gateway using the
+public deployment template. The read-only non-root gateway scratch paths were
+made explicit after the first runtime drill exposed startup failure.
+
+Alibaba NotApplicable now persists an explicit unsupported observation outcome,
+while the display state remains unknown. It cannot close an existing outage.
+The private DTO exposes the bounded outcome and strips internal evidence metadata
+and absent financial values. All three UI locales explain unsupported billing,
+missing permission, wrong site, missing currency, authentication failure, observer
+failure and stale evidence. Five frontend contract tests, full service race tests
+and four real browser scenarios pass locally. No real provider call was needed.

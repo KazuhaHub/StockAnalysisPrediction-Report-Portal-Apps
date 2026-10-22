@@ -527,6 +527,7 @@ type ComponentView struct {
 	Stale      bool          `json:"stale"`
 }
 type MonitorView struct {
+	Outcome         string          `json:"outcome"`
 	ID              string          `json:"id"`
 	Label           string          `json:"label"`
 	Kind            string          `json:"kind"`
@@ -626,7 +627,7 @@ func (s *Store) monitorViews(component string, finance bool, now time.Time) ([]M
 	if err := s.db.QueryRow(`SELECT COALESCE(MAX(ends_at),0) FROM maintenance_windows WHERE component_id=? AND ends_at<=?`, component, now.UnixMilli()).Scan(&maintenanceEnd); err != nil {
 		return nil, err
 	}
-	rows, err := s.db.Query(`SELECT m.id,m.label,m.kind,m.interval_seconds,m.timeout_seconds,COALESCE(s.current_state,'unknown'),COALESCE(o.observed_at,0),COALESCE(o.measurements,'{}'),COALESCE(s.last_success_at,0),m.next_at,COALESCE(o.reason_code,'') FROM monitors m LEFT JOIN monitor_states s ON s.monitor_id=m.id LEFT JOIN observations o ON o.id=s.last_observation_id WHERE m.component_id=? AND m.enabled=1 ORDER BY m.id LIMIT 32`, component)
+	rows, err := s.db.Query(`SELECT m.id,m.label,m.kind,m.interval_seconds,m.timeout_seconds,COALESCE(s.current_state,'unknown'),COALESCE(o.observed_at,0),COALESCE(o.measurements,'{}'),COALESCE(s.last_success_at,0),m.next_at,COALESCE(o.reason_code,''),COALESCE(o.outcome,'unknown') FROM monitors m LEFT JOIN monitor_states s ON s.monitor_id=m.id LEFT JOIN observations o ON o.id=s.last_observation_id WHERE m.component_id=? AND m.enabled=1 ORDER BY m.id LIMIT 32`, component)
 	if err != nil {
 		return nil, err
 	}
@@ -637,7 +638,7 @@ func (s *Store) monitorViews(component string, finance bool, now time.Time) ([]M
 		var interval, timeout int
 		var updated, lastSuccess, next int64
 		var metrics string
-		if err := rows.Scan(&m.ID, &m.Label, &m.Kind, &interval, &timeout, &m.State, &updated, &metrics, &lastSuccess, &next, &m.ReasonCode); err != nil {
+		if err := rows.Scan(&m.ID, &m.Label, &m.Kind, &interval, &timeout, &m.State, &updated, &metrics, &lastSuccess, &next, &m.ReasonCode, &m.Outcome); err != nil {
 			return nil, err
 		}
 		ttl := max(3*interval, 2*timeout)

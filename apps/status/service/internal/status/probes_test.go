@@ -41,7 +41,11 @@ func TestQwenDistinguishesCreditAndCash(t *testing.T) {
 	}
 	for _, code := range []string{"NotApplicable", "NotAuthorized", "NoPermission", "AuthSiteFail"} {
 		body, _ := json.Marshal(map[string]any{"Success": false, "Code": code})
-		if r := qwenResult(body, ProbeConfig{}); r.Outcome != "unknown" {
+		expected := "unknown"
+		if code == "NotApplicable" {
+			expected = "unsupported"
+		}
+		if r := qwenResult(body, ProbeConfig{}); r.Outcome != expected || len(r.Measurements.Balances) != 0 {
 			t.Fatal("billing permission failure reported zero funds")
 		}
 	}

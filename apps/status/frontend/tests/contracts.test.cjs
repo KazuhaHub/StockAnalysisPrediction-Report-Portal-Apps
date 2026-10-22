@@ -1,6 +1,6 @@
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
-const { proxyRequest, safeState, selectLocale, percentage } = require('../src/contracts.cjs')
+const { proxyRequest, safeState, selectLocale, percentage, monitorHint } = require('../src/contracts.cjs')
 test('private requests use the exact installed-app bridge without caller authority', () => {
   assert.deepEqual(proxyRequest('GET', '/v1/components'), { method: 'POST', path: '/api/v1/extensions/status/request', body: { method: 'GET', path: '/v1/components' } })
   for (const path of ['https://other/v1/x', '/api/admin/users', '/v1/../x', '/v1/%252e%252e/x', '//other/v1/x']) assert.throws(() => proxyRequest('GET', path))
@@ -20,4 +20,12 @@ test('all supported user languages have deterministic fallback', () => {
   assert.equal(selectLocale('zh-HK'), 'zh-TW')
   assert.equal(selectLocale('zh-SG'), 'zh-CN')
   assert.equal(selectLocale('fr-FR'), 'en-US')
+})
+
+test('unsupported billing has a setup explanation and never implies zero credit', () => {
+  assert.equal(monitorHint({ outcome: 'unsupported', reason_code: 'billing_unsupported' }), 'billingUnsupportedHint')
+  assert.equal(monitorHint({ outcome: 'unknown', reason_code: 'billing_permission_required' }), 'billingPermissionHint')
+  assert.equal(monitorHint({ outcome: 'unknown', reason_code: 'billing_site_mismatch' }), 'billingSiteHint')
+  assert.equal(monitorHint({ outcome: 'success', reason_code: 'balance_read', stale: true }), 'staleHint')
+  assert.equal(monitorHint({ reason_code: 'unexpected-upstream-text' }), '')
 })

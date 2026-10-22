@@ -118,7 +118,7 @@
   "discarded": "Discarded",
   "leased": "Publishing",
   "reason": "Reason",
-  "unsupported": "Unsupported",
+  "unsupported": "Measurement unsupported",
   "manual": "Manual",
   "capability": "Capability",
   "balances": "Reported balances",
@@ -134,5 +134,12 @@
   "pageUpdated": "Page updated",
   "checkNow": "Request a check",
   "checkSavedHint": "Checks use the saved configuration. Save edits first. Paused probes remain paused.",
-  "checkQueued": "Check queued. Wait for a new observation; this does not confirm availability."
+  "checkQueued": "Check queued. Wait for a new observation; this does not confirm availability.",
+  "billingUnsupportedHint": "This billing capability is unavailable for the configured account/site. Review Alibaba billing access; no balance has been inferred. Model quota is a separate capability.",
+  "billingPermissionHint": "Billing access was refused. Use a minimal RAM identity authorized for QueryAccountBalance; a model API key does not grant billing access.",
+  "billingSiteHint": "Billing site does not match this account. Check China/international configuration.",
+  "currencyHint": "The selected currency was not reported. Balances in other currencies are not converted or summed.",
+  "authenticationHint": "Authentication failed. Review the saved credential; no balance or availability was inferred.",
+  "observerHint": "The observer could not finish this check. This does not establish a target outage.",
+  "staleHint": "This observation is stale. Wait for a fresh check before relying on it."
 }

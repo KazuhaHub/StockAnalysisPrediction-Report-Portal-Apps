@@ -150,7 +150,7 @@ func qwenResult(raw []byte, c ProbeConfig) Result {
 	if !in.Success {
 		switch in.Code {
 		case "NotApplicable":
-			return unknown("billing_unsupported")
+			return Result{Outcome: "unsupported", ReasonCode: "billing_unsupported", Measurements: Measurements{Capability: "account_billing_only"}}
 		case "NotAuthorized", "NoPermission":
 			return unknown("billing_permission_required")
 		case "AuthSiteFail":
@@ -267,7 +267,7 @@ func (p *Prober) Check(ctx context.Context, m Monitor) (result Result) {
 		}
 	case "http":
 	default:
-		return unknown("unsupported_probe")
+		return Result{Outcome: "unsupported", ReasonCode: "unsupported_probe"}
 	}
 	client, err := p.client(c)
 	if err != nil {

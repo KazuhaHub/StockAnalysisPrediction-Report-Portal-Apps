@@ -118,7 +118,7 @@
   "discarded": "已丢弃",
   "leased": "发布中",
   "reason": "原因",
-  "unsupported": "不支持",
+  "unsupported": "不支持此测量能力",
   "manual": "手动值",
   "capability": "检查能力",
   "balances": "报告余额",
@@ -134,5 +134,12 @@
   "pageUpdated": "页面更新时间",
   "checkNow": "请求探测",
   "checkSavedHint": "探测使用已保存的配置。请先保存修改；暂停状态下不能请求探测。",
-  "checkQueued": "探测已排队。请等待新的观测结果；这不代表服务已恢复。"
+  "checkQueued": "探测已排队。请等待新的观测结果；这不代表服务已恢复。",
+  "billingUnsupportedHint": "当前账号或站点不支持此账单能力。请检查阿里云账单访问权限；未推断余额。模型额度属于另一项能力。",
+  "billingPermissionHint": "账单访问被拒绝。请使用仅获 QueryAccountBalance 所需权限的 RAM 身份；模型 API Key 不包含账单权限。",
+  "billingSiteHint": "账单站点与账号不匹配。请检查中国站或国际站配置。",
+  "currencyHint": "接口未返回所选币种。其他币种的余额不会换算或相加。",
+  "authenticationHint": "身份验证失败。请检查保存的凭据；未据此推断余额或服务可用性。",
+  "observerHint": "观测器未能完成此探测。这不能证明目标服务发生故障。",
+  "staleHint": "此观测结果已过期，请等待新的探测结果。"
 }

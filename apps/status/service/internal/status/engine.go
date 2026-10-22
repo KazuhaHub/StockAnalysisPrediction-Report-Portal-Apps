@@ -67,7 +67,7 @@ func (s *Store) Record(m Monitor, result Result, now time.Time) error {
 	if !safeReasons[result.ReasonCode] || result.DurationMS < 0 || result.DurationMS > 60000 {
 		return ErrInvalid
 	}
-	if result.Outcome != "success" && result.Outcome != "failure" && result.Outcome != "degraded" && result.Outcome != "unknown" && result.Outcome != "hold" {
+	if result.Outcome != "success" && result.Outcome != "failure" && result.Outcome != "degraded" && result.Outcome != "unknown" && result.Outcome != "unsupported" && result.Outcome != "hold" {
 		return ErrInvalid
 	}
 	metrics, err := json.Marshal(result.Measurements)
@@ -125,7 +125,7 @@ func (s *Store) Record(m Monitor, result Result, now time.Time) error {
 		if failure >= 2 {
 			state = "degraded"
 		}
-	case "unknown":
+	case "unknown", "unsupported":
 		state = "unknown"
 		success, failure = 0, 0
 	case "hold":

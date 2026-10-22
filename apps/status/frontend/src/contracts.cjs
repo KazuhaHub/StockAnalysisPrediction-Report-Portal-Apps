@@ -11,7 +11,11 @@
   function safeState(state, stale) { return !stale && ['operational', 'degraded', 'outage', 'maintenance', 'paused'].includes(state) ? state : 'unknown' }
   function selectLocale(language) { return /^zh-(TW|HK|Hant)/i.test(language) ? 'zh-TW' : /^zh/i.test(language) ? 'zh-CN' : 'en-US' }
   function percentage(value, total) { return total > 0 && value >= 0 && value <= total ? (value / total * 100).toFixed(2) + '%' : null }
-  const contracts = Object.freeze({ proxyRequest, safeState, selectLocale, percentage })
+  function monitorHint(monitor) {
+    if (monitor.stale) return 'staleHint'
+    return ({ billing_unsupported: 'billingUnsupportedHint', billing_permission_required: 'billingPermissionHint', billing_site_mismatch: 'billingSiteHint', currency_unavailable: 'currencyHint', authentication_failed: 'authenticationHint', observer_unavailable: 'observerHint' })[monitor.reason_code] || ''
+  }
+  const contracts = Object.freeze({ proxyRequest, safeState, selectLocale, percentage, monitorHint })
   globalThis.StatusContracts = contracts
   if (typeof module !== 'undefined') module.exports = contracts
 })()
