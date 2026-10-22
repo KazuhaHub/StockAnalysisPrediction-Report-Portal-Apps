@@ -55,6 +55,7 @@ type ComponentInput struct {
 	Monitors      []MonitorInput `json:"monitors"`
 }
 type MonitorInput struct {
+	Revision        int64           `json:"revision,omitempty"`
 	ID              string          `json:"id,omitempty"`
 	Kind            string          `json:"kind"`
 	Label           string          `json:"label"`

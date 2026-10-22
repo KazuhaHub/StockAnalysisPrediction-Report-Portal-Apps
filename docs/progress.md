@@ -184,3 +184,22 @@ sees only its event; a retry returns the original ID, changed content returns 40
 and removing an account from its OU revokes access to the old notification.
 Only isolated fixture accounts and internal inboxes are involved. Full external
 channel timeout/quota drills and the other acceptance gates remain open.
+
+
+## Scheduler interruption and explicit check controls (2026-10-22)
+
+A failing restart regression exposed silent relaunch of expired probe leases.
+Recovery now records one unknown observer-unavailable observation at the expired
+lease boundary, resets confirmation streaks, preserves elapsed history and delays
+the next due time by the configured interval/jitter. Recovery is bounded to one
+abandoned check per scheduler tick. Late results cannot apply to the new lease.
+
+Added an administrator-only request for a check of saved monitor configuration.
+It uses current revision/lease/enabled checks, refuses global pause and throttles
+repeated requests to 30 seconds using the existing audit ledger. It queues through
+the existing worker/credential limits and never returns synthetic success.
+The sandbox editor includes the control and all three locales explain queued
+semantics. Full race tests, vet/build and four real browser scenarios pass;
+the browser check verifies a manual request cannot bypass global pause.
+Notification acceptance commit d14d557 passed all five CI jobs. No new schema or
+production configuration changes are involved.

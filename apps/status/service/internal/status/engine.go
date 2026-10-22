@@ -20,6 +20,11 @@ func (s *Store) ClaimDue(now time.Time) (Monitor, bool, error) {
 		return m, false, err
 	}
 	defer tx.Rollback()
+	if recovered, err := recoverExpiredProbe(tx, now); err != nil {
+		return m, false, err
+	} else if recovered {
+		return m, false, tx.Commit()
+	}
 	var config, sealed, credentialKind string
 	err = tx.QueryRow(`SELECT m.id,m.component_id,m.kind,m.label,COALESCE(m.credential_id,''),m.revision,m.interval_seconds,m.timeout_seconds,m.config,COALESCE(c.revision,0),COALESCE(c.sealed_value,''),COALESCE(c.kind,'') FROM monitors m JOIN components p ON p.id=m.component_id LEFT JOIN credentials c ON c.id=m.credential_id WHERE m.enabled=1 AND p.enabled=1 AND m.next_at<=? AND m.lease_until<=? AND (m.credential_id IS NULL OR NOT EXISTS(SELECT 1 FROM monitors busy WHERE busy.credential_id=m.credential_id AND busy.lease_until>?)) ORDER BY m.next_at,m.id LIMIT 1`, now.UnixMilli(), now.UnixMilli(), now.UnixMilli()).Scan(&m.ID, &m.ComponentID, &m.Kind, &m.Label, &m.CredentialID, &m.Revision, &m.IntervalSeconds, &m.TimeoutSeconds, &config, &m.CredentialRevision, &sealed, &credentialKind)
 	if errors.Is(err, sql.ErrNoRows) {

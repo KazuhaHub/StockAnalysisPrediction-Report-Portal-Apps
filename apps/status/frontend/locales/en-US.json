@@ -131,5 +131,8 @@
   "seconds": "seconds",
   "languageName": "English",
   "language": "Language",
-  "pageUpdated": "Page updated"
+  "pageUpdated": "Page updated",
+  "checkNow": "Request a check",
+  "checkSavedHint": "Checks use the saved configuration. Save edits first. Paused probes remain paused.",
+  "checkQueued": "Check queued. Wait for a new observation; this does not confirm availability."
 }

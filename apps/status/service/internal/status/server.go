@@ -266,14 +266,14 @@ func (s *Store) ComponentConfigurations() ([]ComponentInput, error) {
 		if err != nil {
 			return nil, err
 		}
-		rows, err = s.db.Query(`SELECT id,kind,label,COALESCE(credential_id,''),config,enabled,interval_seconds,timeout_seconds FROM monitors WHERE component_id=? ORDER BY created_at,id LIMIT 32`, c.ID)
+		rows, err = s.db.Query(`SELECT id,kind,label,COALESCE(credential_id,''),config,enabled,interval_seconds,timeout_seconds,revision FROM monitors WHERE component_id=? ORDER BY created_at,id LIMIT 32`, c.ID)
 		if err != nil {
 			return nil, err
 		}
 		for rows.Next() {
 			var m MonitorInput
 			var config string
-			if rows.Scan(&m.ID, &m.Kind, &m.Label, &m.CredentialID, &config, &m.Enabled, &m.IntervalSeconds, &m.TimeoutSeconds) != nil {
+			if rows.Scan(&m.ID, &m.Kind, &m.Label, &m.CredentialID, &config, &m.Enabled, &m.IntervalSeconds, &m.TimeoutSeconds, &m.Revision) != nil {
 				rows.Close()
 				return nil, ErrInvalid
 			}

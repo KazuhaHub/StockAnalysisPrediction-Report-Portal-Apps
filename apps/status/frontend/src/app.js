@@ -40,7 +40,7 @@
     return node
   }
   function errorText(e) { return e instanceof Error ? e.message : t('failed') }
-  function run(action) { return async () => { try { error = ''; await action(); notice = t('saved'); await render() } catch (e) { error = errorText(e); await render() } } }
+  function run(action, successKey = 'saved') { return async () => { try { error = ''; await action(); notice = t(successKey); await render() } catch (e) { error = errorText(e); await render() } } }
   function host(request) {
     if (window.parent === window) return Promise.reject(new Error(t('privateOnly')))
     return new Promise((resolve, reject) => {
@@ -179,6 +179,7 @@
     }
     kind.addEventListener('change', renderTarget); renderTarget()
     const element = h('fieldset', {}, h('legend', {}, t('monitor')), field('name', name), field('kind', kind), field('credential', credential), target, h('div', { class: 'row' }, field('interval', interval), field('timeout', timeout)), enabled.label)
+    if (value.id) element.append(text('checkSavedHint', 'muted'), button('checkNow', run(() => api('POST', '/v1/manage/probes/request', { id: value.id, revision: value.revision }), 'checkQueued')))
     return { element, read() {
       const config = { version: 1 }
       if (['http', 'dify'].includes(kind.value)) { config.url = url.value; config.networks = networks.value.split(/\s+/).filter(Boolean); config.plain_http = plain.node.checked }

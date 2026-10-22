@@ -131,5 +131,8 @@
   "seconds": "秒",
   "languageName": "繁體中文",
   "language": "語言",
-  "pageUpdated": "頁面更新時間"
+  "pageUpdated": "頁面更新時間",
+  "checkNow": "請求探測",
+  "checkSavedHint": "探測使用已儲存的設定。請先儲存修改；暫停狀態下不能請求探測。",
+  "checkQueued": "探測已排隊。請等待新的觀測結果；這不代表服務已恢復。"
 }

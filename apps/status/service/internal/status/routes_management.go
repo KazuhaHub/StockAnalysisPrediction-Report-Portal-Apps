@@ -103,6 +103,20 @@ func (s *Server) moreRoutes(w http.ResponseWriter, r *http.Request, raw []byte, 
 			return true
 		}
 		write(w, 200, map[string]bool{"ok": true})
+	case r.Method == "POST" && path == "/v1/manage/probes/request":
+		var in struct {
+			ID       string `json:"id"`
+			Revision int64  `json:"revision"`
+		}
+		if decode(raw, &in) != nil {
+			apiError(w, ErrInvalid)
+			return true
+		}
+		if err := s.store.RequestProbe(v, in.ID, in.Revision); err != nil {
+			apiError(w, err)
+			return true
+		}
+		write(w, 202, map[string]any{"ok": true, "state": "queued"})
 	case r.Method == "POST" && path == "/v1/manage/resume":
 		var in struct {
 			Fingerprint string `json:"queue_fingerprint"`

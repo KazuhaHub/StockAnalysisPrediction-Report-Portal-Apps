@@ -138,6 +138,18 @@ before enabling billing probes. References:
 [balance operation](https://help.aliyun.com/en/user-center/developer-reference/api-bssopenapi-2017-12-14-queryaccountbalance),
 [ACS3 signature](https://help.aliyun.com/zh/sdk/product-overview/v3-request-structure-and-signature).
 
+To test saved configuration, open its component editor and choose **Request a
+check** on the saved monitor. Unsaved edits are not sent. The action queues work;
+it does not run a request in the browser or confirm recovery. It refuses stale
+configuration revisions, disabled monitors/components, active leases, paused
+probes and repeat requests within 30 seconds. Four workers and the per-credential
+limit still apply. Refresh the overview for the actual observation.
+
+After process interruption, an abandoned lease produces a persisted
+`observer_unavailable` unknown observation at lease expiry. It does not count as
+a target outage or a successful check. The scheduler postpones the retry by its
+normal interval and jitter, and fresh confirmation is required for recovery.
+
 ## Read history and coverage
 
 The component overview includes a private hourly history strip and a version 2

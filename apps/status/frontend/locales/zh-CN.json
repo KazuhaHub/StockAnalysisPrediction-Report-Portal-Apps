@@ -131,5 +131,8 @@
   "seconds": "秒",
   "languageName": "简体中文",
   "language": "语言",
-  "pageUpdated": "页面更新时间"
+  "pageUpdated": "页面更新时间",
+  "checkNow": "请求探测",
+  "checkSavedHint": "探测使用已保存的配置。请先保存修改；暂停状态下不能请求探测。",
+  "checkQueued": "探测已排队。请等待新的观测结果；这不代表服务已恢复。"
 }
