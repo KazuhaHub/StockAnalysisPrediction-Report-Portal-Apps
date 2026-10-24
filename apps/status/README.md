@@ -6,7 +6,8 @@ Its frontend is an installable sandboxed ZIP. Its Go service owns a separate
 SQLite database and never opens the Portal database. The Portal supplies current
 viewer/OU identity through its generic paired backend connection.
 
-Status `0.1.0-beta.2` is the first installable Beta. Deploy and pair the application
+Status `0.1.0-beta.3` is the React/Ant Design UI release candidate.
+The currently published market version remains Beta.2 until publication is verified. Deploy and pair the application
 before configuring optional providers. New installations have no components or
 credentials; monitoring and notification delivery remain paused until configured.
 Provider configuration is not a requirement for downloading or installing the app.
@@ -35,6 +36,11 @@ The minimum verified Portal release is `v2026.43.2`.
 Run from the monorepo root:
 
 ```sh
+npm ci
+python3 scripts/plugin-standard.py
+npm run typecheck
+npm run test:sdk
+npm run test:status-ui
 node --test apps/status/frontend/tests/*.test.cjs
 python3 scripts/build-status-frontend.py
 python3 scripts/catalogue.py package status
@@ -45,7 +51,7 @@ GOWORK=off GOTOOLCHAIN=go1.26.10 go test -race ./...
 GOWORK=off GOTOOLCHAIN=go1.26.10 go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
 ```
 
-The ZIP is `dist/status/0.1.0-beta.2/status.zip` with a SHA-256 sidecar. It contains only
+The ZIP is `dist/status/0.1.0-beta.3/status.zip` with a SHA-256 sidecar. It contains only
 `app.json`, the root HTML and built static assets. Source tests and credentials do
 not enter the archive. Public service assets are embedded and deterministically
 rebuilt by the same script. A classic script is intentional: a null-origin iframe
@@ -61,11 +67,12 @@ No billable provider call or real external notification is needed.
 ## Operator documentation and remaining acceptance
 
 - [Install, configure, pair and operate](docs/operator-guide.md)
+- [Upgrade and rollback the React UI release](docs/upgrade-react-ui.md)
 - [Approved storage and recovery decision](../../docs/storage-proposal.md)
 - [Platform contract](../../docs/platform-contract.md)
 - [Full implementation plan and exit gates](../../docs/implementation-plan.md)
 
 The Beta's verified scope, optional configuration and remaining manual audits are
-recorded in [the readiness decision](../../docs/status-0.1.0-beta.2-readiness.md).
+recorded in [the readiness decision](../../docs/status-0.1.0-beta.3-readiness.md).
 The historical S00-S11 audit remains evidence of the wider plan; it is not a
 requirement to provision every third-party account before installing this release.

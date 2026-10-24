@@ -28,6 +28,38 @@ class CatalogueTests(unittest.TestCase):
     def save(self, entries):
         (self.root / "index.json").write_text(json.dumps({"apps": entries}))
 
+    def test_release_candidate_keeps_market_on_verified_previous_manifest(self):
+        archive = c.package("sample", self.root).read_bytes()
+        previous = dict(self.manifest)
+        self.manifest["version"] = "2.0.0-beta.1"
+        (self.root / "apps/sample/app.json").write_text(json.dumps(self.manifest))
+        with self.assertRaises(ValueError):
+            c.check(self.root)
+        folder = self.root / "apps/sample/releases"
+        folder.mkdir()
+        retained = folder / "1.0.0.manifest.json"
+        retained.write_text(json.dumps(previous))
+        self.assertEqual(c.check(self.root, True, lambda url, limit: archive), 1)
+        for changes in [{"id": "other"}, {"version": "1.0.1"}, {"scopes": ["query"]}]:
+            retained.write_text(json.dumps({**previous, **changes}))
+            with self.assertRaises(ValueError):
+                c.check(self.root)
+
+    def test_retained_market_manifest_cannot_be_a_symlink_or_escape(self):
+        previous = dict(self.manifest)
+        self.manifest["version"] = "2.0.0-beta.1"
+        (self.root / "apps/sample/app.json").write_text(json.dumps(self.manifest))
+        folder = self.root / "apps/sample/releases"
+        folder.mkdir()
+        external = self.root / "outside.json"
+        external.write_text(json.dumps(previous))
+        (folder / "1.0.0.manifest.json").symlink_to(external)
+        with self.assertRaises(ValueError):
+            c.check(self.root)
+        self.save([{**self.entry, "version": "../outside"}])
+        with self.assertRaises(ValueError):
+            c.check(self.root)
+
     def test_duplicate_or_drift_rejected(self):
         self.save([self.entry, self.entry])
         with self.assertRaises(ValueError): c.check(self.root)

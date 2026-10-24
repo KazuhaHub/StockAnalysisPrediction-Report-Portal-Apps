@@ -52,7 +52,8 @@ Status publication retains every gate in `apps/status/releases/README.md`.
 
 Run `python3 scripts/catalogue.py check --verify-downloads` before committing the
 catalogue change. CI runs this same check. It downloads the actual bounded ZIP,
-checks its manifest against source, and rejects duplicate entries, path traversal,
+checks its manifest against the current source or retained published manifest,
+and rejects duplicate entries, path traversal,
 symlinks and oversized expanded content. For extension apps it also verifies that
 the app and minimum Portal Releases are published, downloads `release.json` and
 `SHA256SUMS` from the same immutable release, and binds the acceptance record,
@@ -108,3 +109,20 @@ Start a new unlisted application with `python3 scripts/create-app.py my-app --na
 then run `npm install` at the repository root. Use `@portal-app/sdk`, React, TypeScript
 and Ant Design for theme, locale and sandbox bridge integration. CI validates the
 foundation and retains per-application security and browser acceptance gates.
+
+
+### Preparing a version while the market stays published
+
+Advancing an app's source manifest must not point the market at an unpublished
+release. Keep the old `index.json` entry and commit its exact verified ZIP manifest
+as `apps/<id>/releases/<old-version>.manifest.json`. The catalogue validator uses
+that retained manifest only when the source version differs. It checks identity,
+version, scopes, immutable URL, published bytes and (for extension apps) the
+matching historical acceptance record and checksums. Missing, mismatched or
+symlinked retained manifests fail validation. Source packaging still builds the
+current app manifest; it never silently packages a historical version.
+
+After the new release is published and downloaded successfully, update the market
+entry to it in a separate change. Keep historical manifests and public assets
+immutable. This supports independent app upgrades without removing an available
+app from the market during release preparation.

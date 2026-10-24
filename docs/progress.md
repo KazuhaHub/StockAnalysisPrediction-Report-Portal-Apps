@@ -5,9 +5,11 @@
 Status 0.1.0-beta.2 is published, installed from the canonical marketplace,
 privately paired and running with independent SQLite storage. The authenticated
 `/status` entry and native Chrome overview/operations reads passed. Status restart
-and isolated backup extraction/integrity checks passed. Probes and notification
-publishing remain paused, public projection is disabled, and no monitors or
-credentials are configured. See the [current rollout audit](../apps/status/docs/production-rollout.md)
+and isolated backup extraction/integrity checks passed. Four administrator-only
+components/monitors and three sealed credentials are configured. Probes run on
+schedule; notification publishing remains paused, public projection is disabled
+and no OU/direct grants are assigned. Qwen billing credentials and actual
+notification recipients remain pending. See the [current rollout audit](../apps/status/docs/production-rollout.md)
 for authoritative release/CI references, protected receipts and remaining scope.
 Earlier entries below are historical checkpoints, not the current deployment state.
 

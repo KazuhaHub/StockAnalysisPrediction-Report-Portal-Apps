@@ -1,0 +1,11 @@
+{
+  "id": "status",
+  "name": "Status",
+  "icon": "🟢",
+  "version": "0.1.0-beta.2",
+  "entry": "index.html",
+  "scopes": [
+    "extension.read",
+    "extension.manage"
+  ]
+}

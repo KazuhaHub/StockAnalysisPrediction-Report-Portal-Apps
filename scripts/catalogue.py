@@ -115,6 +115,10 @@ def manifest(root, app_id):
         raise ValueError("invalid application ID")
     folder = root / "apps" / app_id
     data = json.loads((folder / "app.json").read_text())
+    return validate_manifest(data, app_id)
+
+
+def validate_manifest(data, app_id):
     if data.get("id") != app_id or not VERSION.fullmatch(data.get("version", "")):
         raise ValueError("manifest identity/version mismatch")
     if not data.get("name") or data.get("entry") != "index.html":
@@ -122,6 +126,27 @@ def manifest(root, app_id):
     scopes = data.get("scopes")
     if not isinstance(scopes, list) or any(s not in SCOPES for s in scopes) or len(set(scopes)) != len(scopes):
         raise ValueError("invalid capability declaration")
+    return data
+
+
+def catalogue_manifest(root, entry):
+    """Bind a market entry to published bytes while newer source is prepared."""
+    app_id = entry.get("id", "")
+    current = manifest(root, app_id)
+    version = entry.get("version")
+    if not isinstance(version, str) or not VERSION.fullmatch(version):
+        raise ValueError("invalid catalogue version")
+    if current["version"] == version:
+        return current
+    relative = Path("apps") / app_id / "releases" / (version + ".manifest.json")
+    retained = root / relative
+    if any((root / Path(*relative.parts[:length])).is_symlink() for length in range(len(relative.parts) + 1)) or not retained.resolve().is_relative_to(root.resolve()):
+        raise ValueError("unsafe retained marketplace manifest")
+    if not retained.is_file():
+        raise ValueError("a retained published manifest is required when source advances")
+    data = validate_manifest(json.loads(retained.read_text()), app_id)
+    if data["version"] != version:
+        raise ValueError("retained marketplace manifest version mismatch")
     return data
 
 
@@ -135,7 +160,7 @@ def check(root=ROOT, verify_downloads=False, fetch=download):
         if app_id in ids:
             raise ValueError("duplicate application ID")
         ids.add(app_id)
-        m = manifest(root, app_id)
+        m = catalogue_manifest(root, entry)
         if entry.get("version") != m["version"] or entry.get("scopes") != m["scopes"]:
             raise ValueError("catalogue and package declarations disagree")
         u = urlsplit(entry.get("url", ""))
