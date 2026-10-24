@@ -13,6 +13,16 @@ func testStore(t *testing.T) *Store {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Most store fixtures exercise an explicitly running observer. First-start
+	// review is tested separately through Open without this fixture override.
+	if _, err := s.db.Exec(`DELETE FROM settings WHERE key IN('probes_paused','outbox_paused')`); err != nil {
+		s.Close()
+		t.Fatal(err)
+	}
+	if _, err := s.db.Exec(`DELETE FROM audit_events WHERE actor='bootstrap' AND action='probes.pause'`); err != nil {
+		s.Close()
+		t.Fatal(err)
+	}
 	t.Cleanup(func() { s.Close() })
 	return s
 }

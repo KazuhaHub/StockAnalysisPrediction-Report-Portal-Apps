@@ -157,6 +157,19 @@ before enabling billing probes. References:
 [balance operation](https://help.aliyun.com/en/user-center/developer-reference/api-bssopenapi-2017-12-14-queryaccountbalance),
 [ACS3 signature](https://help.aliyun.com/zh/sdk/product-overview/v3-request-structure-and-signature).
 
+A newly initialized database starts with probes and publication paused and public
+access disabled. Configure and review first, then use the queue fingerprint
+resume control. Probe-only resume does not enable publication. Existing configured
+databases retain their saved pause choices when upgrading. Bootstrap pause time
+is recorded as excluded history, not fabricated availability.
+
+The private app verifies `/v1/me` API/capability metadata before loading components
+or management pages. This build requires component v1, history v2, export v1 and
+retention v1 support. An older/mismatched service shows an upgrade message and
+loads no component data. Deploy the matching verified service and choose Refresh
+to retry compatibility verification. This is runtime capability checking, not an
+invented manifest minimum-version field or proof of a released Portal version.
+
 To test saved configuration, open its component editor and choose **Request a
 check** on the saved monitor. Unsaved edits are not sent. The action queues work;
 it does not run a request in the browser or confirm recovery. It refuses stale

@@ -18,7 +18,9 @@
   function requestErrorKey(status) {
     return ({ 400: 'invalidConfiguration', 401: 'accessDenied', 403: 'accessDenied', 404: 'itemUnavailable', 409: 'configurationConflict', 422: 'invalidConfiguration', 429: 'requestBusy' })[status] || 'unavailable'
   }
-  const contracts = Object.freeze({ proxyRequest, safeState, selectLocale, percentage, monitorHint, requestErrorKey })
+  const REQUIRED_CAPABILITIES = Object.freeze(['status.components.v1', 'status.history.v2', 'status.export.v1', 'status.retention.v1'])
+  function compatibleBackend(reply) { return reply?.api_version === 1 && Array.isArray(reply.capabilities) && REQUIRED_CAPABILITIES.every(capability => reply.capabilities.includes(capability)) }
+  const contracts = Object.freeze({ proxyRequest, safeState, selectLocale, percentage, monitorHint, requestErrorKey, compatibleBackend, REQUIRED_CAPABILITIES })
   globalThis.StatusContracts = contracts
   if (typeof module !== 'undefined') module.exports = contracts
 })()

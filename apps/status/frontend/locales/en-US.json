@@ -163,5 +163,7 @@
   "exportCopyHint": "The sandbox keeps the export as selectable text. Copy it to a local file. Financial values are included only with current finance permission.",
   "rawRetention": "Raw observation retention (days)",
   "historyRetention": "History retention (days)",
-  "retentionHint": "Raw observations: 1–30 days. Aggregates, resolved incidents and completed notices: up to 90 days, at least the raw retention. Active incidents and pending notices retain required evidence. Shorter periods are applied by background cleanup."
+  "retentionHint": "Raw observations: 1–30 days. Aggregates, resolved incidents and completed notices: up to 90 days, at least the raw retention. Active incidents and pending notices retain required evidence. Shorter periods are applied by background cleanup.",
+  "backendUpgradeRequired": "The paired Status backend does not support the capabilities required by this app. Deploy the matching verified service artifact and refresh.",
+  "backendNotReady": "Backend compatibility could not be verified. Status data is not displayed until the connection and service capabilities are verified."
 }

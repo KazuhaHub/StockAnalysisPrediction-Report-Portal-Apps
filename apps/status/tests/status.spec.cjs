@@ -210,3 +210,22 @@ test('operations load within bridge limits and theme and keyboard settings remai
   expect(errors).toEqual([])
   await context.close()
 })
+
+test('incompatible backend is refused before any component data and can be retried', async ({ browser }) => {
+  const context = await browser.newContext({ storageState: await adminAPI.storageState(), locale: 'en-US' }), page = await context.newPage()
+  const calls = []
+  await page.route('**/api/v1/extensions/status/request', async route => {
+    calls.push(route.request().postDataJSON().path)
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, admin: true }) })
+  })
+  await page.goto(base + '/apps/x/status')
+  const frame = page.frameLocator('iframe')
+  await expect(frame.getByText(/The paired Status backend does not support/)).toBeVisible()
+  await expect(frame.getByRole('heading', { name: 'Private operations A', exact: true })).toHaveCount(0)
+  await expect(frame.getByRole('button', { name: 'Manage', exact: true })).toHaveCount(0)
+  expect(calls).toEqual(['/v1/me'])
+  await page.unroute('**/api/v1/extensions/status/request')
+  await frame.getByRole('button', { name: 'Refresh', exact: true }).click()
+  await expect(frame.getByRole('heading', { name: 'Private operations A', exact: true })).toBeVisible()
+  await context.close()
+})

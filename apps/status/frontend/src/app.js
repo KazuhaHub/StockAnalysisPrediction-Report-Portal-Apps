@@ -1,7 +1,7 @@
 (function () {
   'use strict'
-  const { proxyRequest, safeState, selectLocale, percentage, monitorHint, requestErrorKey } = StatusContracts
-  let language = selectLocale(navigator.language), tab = 'overview', adminTab = 'components', admin = false, initialized = false
+  const { proxyRequest, safeState, selectLocale, percentage, monitorHint, requestErrorKey, compatibleBackend } = StatusContracts
+  let language = selectLocale(navigator.language), tab = 'overview', adminTab = 'components', admin = false, initialized = false, backendReady = false
   let componentOffset = 0, componentSearch = '', exportedComponent = null
   let error = '', notice = '', generation = 0, sequence = 0, incidentOffset = 0, selectedComponent = '', selectedIncident = ''
   let editingComponent = null, editingCredential = null, directory = [], directoryOffset = 0, rendering = false, rerender = false, busy = false
@@ -91,7 +91,8 @@
   })
   setInterval(() => { if (initialized && !document.hidden && !busy && !rendering && tab !== 'manage' && !exportedComponent && document.activeElement?.tagName !== 'INPUT' && document.activeElement?.tagName !== 'TEXTAREA' && document.activeElement?.tagName !== 'SELECT') render() }, 30000)
   async function start() {
-    try { const viewer = await api('GET', '/v1/me'); admin = viewer.admin === true; error = '' } catch (e) { error = errorText(e) }
+    backendReady = false
+    try { const viewer = await api('GET', '/v1/me'); if (!compatibleBackend(viewer)) throw new Error(t('backendUpgradeRequired')); admin = viewer.admin === true; backendReady = true; error = '' } catch (e) { admin = false; error = errorText(e) }
     await render()
   }
   function badge(state) { state = safeState(state); return h('span', { class: 'badge ' + state }, t(state)) }
@@ -106,12 +107,13 @@
     root.replaceChildren()
     const locale = select(Object.keys(STATUS_LOCALES).map(id => [id, STATUS_LOCALES[id].languageName]), language)
     locale.setAttribute('aria-label', t('language')); locale.addEventListener('change', () => { language = locale.value; render() })
-    root.append(h('header', {}, h('div', {}, h('h1', {}, t('title')), text('subtitle')), h('div', { class: 'row' }, locale, button('refresh', () => render()))))
+    root.append(h('header', {}, h('div', {}, h('h1', {}, t('title')), text('subtitle')), h('div', { class: 'row' }, locale, button('refresh', () => backendReady ? render() : start()))))
     const tabs = ['overview', 'incidents', ...(admin ? ['manage'] : [])]
     root.append(h('nav', { 'aria-label': t('title') }, tabs.map(key => h('button', { class: tab === key ? 'active' : '', onClick: () => { tab = key; render() } }, t(key)))))
     if (error) root.append(h('div', { class: 'notice error', role: 'alert', tabIndex: -1, 'data-app-error': '' }, error))
     if (notice) root.append(h('div', { class: 'notice', role: 'status' }, notice))
     if (!initialized) { root.append(text(window.parent === window ? 'privateOnly' : 'loading')); return }
+    if (!backendReady) { root.append(text('backendNotReady')); return }
     const content = h('section', {}, text('loading')); root.append(content)
     try {
       if (tab === 'overview') await overview(content, current)

@@ -60,6 +60,14 @@ func (s *Store) migrate() error {
 			return err
 		}
 	}
+	for _, key := range []string{"probes_paused", "outbox_paused"} {
+		if err := setSetting(tx, key, "1"); err != nil {
+			return err
+		}
+	}
+	if _, err := tx.Exec(`INSERT INTO audit_events(id,actor,action,target_id,safe_detail,created_at) VALUES(?,'bootstrap','probes.pause','service','{}',?)`, newID(), time.Now().UnixMilli()); err != nil {
+		return err
+	}
 	if _, err := tx.Exec(`INSERT INTO schema_migrations(version,applied_at) VALUES(1,?)`, time.Now().UnixMilli()); err != nil {
 		return err
 	}

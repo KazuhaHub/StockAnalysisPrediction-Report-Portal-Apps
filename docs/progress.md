@@ -358,3 +358,19 @@ candidate pause values do not leak into live state. Public component lists now
 have filtered totals/limits and independent component/incident pager controls.
 Service tests cover global-default closure, explicit publication filtering and
 page bounds. The prior 0ff87f6 head passed full CI including all six artifacts.
+
+
+## Runtime capability agreement and reviewed first start (2026-10-23)
+
+The private frontend now verifies versioned component/history/export/retention
+capabilities before requesting component data. A real-browser fixture returning
+an older identity-only response is refused with an upgrade message and no data
+request; deploying a matching response and refreshing recovers. Seven frontend
+contract tests and six real-browser workflows cover this boundary.
+
+New databases start with probes/outbox paused and public access closed. Bootstrap
+pause has an audit anchor so history excludes it. Reviewed probe-only resume does
+not start publication, and existing stores preserve their configured pause flags.
+Default-start behavior is tested separately from explicitly active store fixtures.
+Full service race/vet/build passes. No schema product/version was changed; these
+are bootstrap values in the approved settings/audit products.

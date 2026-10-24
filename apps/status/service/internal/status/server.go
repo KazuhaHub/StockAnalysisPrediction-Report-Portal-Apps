@@ -157,7 +157,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	switch {
 	case r.Method == "GET" && r.URL.Path == "/v1/me":
-		write(w, 200, map[string]any{"ok": true, "admin": isAdmin(v)})
+		write(w, 200, map[string]any{"ok": true, "admin": isAdmin(v), "api_version": 1, "capabilities": []string{"status.components.v1", "status.history.v2", "status.export.v1", "status.retention.v1"}})
 	case r.Method == "GET" && r.URL.Path == "/v1/components":
 		offset, limit, err := pageParams(r)
 		if err != nil {

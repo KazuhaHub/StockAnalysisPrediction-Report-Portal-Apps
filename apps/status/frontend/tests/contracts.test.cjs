@@ -1,6 +1,6 @@
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
-const { proxyRequest, safeState, selectLocale, percentage, monitorHint, requestErrorKey } = require('../src/contracts.cjs')
+const { proxyRequest, safeState, selectLocale, percentage, monitorHint, requestErrorKey, compatibleBackend, REQUIRED_CAPABILITIES } = require('../src/contracts.cjs')
 test('private requests use the exact installed-app bridge without caller authority', () => {
   assert.deepEqual(proxyRequest('GET', '/v1/components'), { method: 'POST', path: '/api/v1/extensions/status/request', body: { method: 'GET', path: '/v1/components' } })
   for (const path of ['https://other/v1/x', '/api/admin/users', '/v1/../x', '/v1/%252e%252e/x', '//other/v1/x']) assert.throws(() => proxyRequest('GET', path))
@@ -36,4 +36,11 @@ test('safe backend status selects actionable localized errors', () => {
   assert.equal(requestErrorKey(429), 'requestBusy')
   assert.equal(requestErrorKey(403), 'accessDenied')
   assert.equal(requestErrorKey(500), 'unavailable')
+})
+
+test('backend capability handshake refuses old or malformed service replies', () => {
+  assert.equal(compatibleBackend({ admin: true }), false)
+  assert.equal(compatibleBackend({ api_version: 2, capabilities: REQUIRED_CAPABILITIES }), false)
+  assert.equal(compatibleBackend({ api_version: 1, capabilities: [] }), false)
+  assert.equal(compatibleBackend({ api_version: 1, capabilities: REQUIRED_CAPABILITIES }), true)
 })
