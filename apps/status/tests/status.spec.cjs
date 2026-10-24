@@ -199,6 +199,10 @@ test('administrator configures an explicit local PostgreSQL socket without retai
     await monitor.getByLabel('Allowed private CIDRs (one per line)', { exact: true }).fill('10.0.0.0/8')
     await monitor.getByLabel('PostgreSQL connection', { exact: true }).selectOption('unix')
     await frame.getByRole('button', { name: 'Save', exact: true }).click()
+    // The existing card stays visible while saving. Wait for the completed save
+    // and refresh before an independent request uses the bounded proxy capacity.
+    await expect(frame.getByRole('button', { name: 'Save', exact: true })).toHaveCount(0)
+    await expect(frame.locator('#app')).not.toHaveAttribute('aria-busy', 'true')
     await expect(card).toBeVisible()
     const saved = (await proxy(adminAPI, 'GET', '/v1/manage/components')).items.find(c => c.label === 'Local database component').monitors[0]
     expect(saved.config.postgres_transport).toBe('unix')
