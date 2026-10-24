@@ -131,3 +131,28 @@ it complete. The following remain explicit follow-up work:
 Public activation and additional P1/P2 probes remain optional later work as scoped
 in the original plan. The initial Beta rollout is verified; the full S00-S11
 deployment acceptance is not declared complete while the listed checks remain.
+
+## Authorized initial monitor configuration
+
+After installation the owner explicitly authorized saving the existing Dify app key,
+DeepSeek account key and dedicated PostgreSQL probe credentials in Status encrypted
+storage for persistent read-only monitoring. No new provider credentials were created.
+The transient private transfer file was removed after the normal app management UI
+saved all three sealed credentials. No credential value appears in this repository.
+
+At 2026-10-24T12:14:43Z, the protected `monitor-setup-acceptance.json` receipt recorded
+Portal HTTPS readiness, authenticated Dify info, local Unix-socket PostgreSQL SELECT 1
+and DeepSeek account balance as operational, each with three confirmed successes.
+Portal/Dify/PostgreSQL intervals are 60 seconds with 5-second timeouts. DeepSeek
+uses the reported CNY currency, a 300-second interval and 10-second timeout; its
+zero-credit/recovery boundaries are 0/0.01 CNY. This does not establish model quota.
+
+All four components remain administrator-only: zero direct/OU grants and zero
+public components. Probes are enabled; notification publication remains paused,
+with no configured publisher/recipient. Qwen billing setup and chosen OU visibility
+are still pending. These observations supersede the earlier empty-store checkpoint
+without changing its historical installation evidence.
+
+The subsequent shared React/Ant Design UI migration remains development work until
+its own complete browser, packaging and release gates pass. Production continues
+to serve the immutable Beta.2 frontend during that migration.

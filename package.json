@@ -1,0 +1,20 @@
+{
+  "name": "report-portal-apps",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/app-sdk",
+    "apps/*/frontend"
+  ],
+  "engines": {
+    "node": "^24.15.0 || >=26.0.0"
+  },
+  "scripts": {
+    "test:sdk": "npm test --workspace=@portal-app/sdk",
+    "test:status-ui": "npm test --workspace=portal-status-ui",
+    "typecheck": "npm run typecheck --workspaces --if-present"
+  },
+  "devDependencies": {
+    "prettier": "3.8.1"
+  }
+}

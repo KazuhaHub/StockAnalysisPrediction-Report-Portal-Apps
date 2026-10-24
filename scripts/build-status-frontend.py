@@ -1,6 +1,7 @@
 """Build a self-contained classic-script app compatible with a null-origin iframe."""
 import json
 import shutil
+import subprocess
 from pathlib import Path
 
 root = Path(__file__).resolve().parents[1] / "apps" / "status" / "frontend"
@@ -9,16 +10,11 @@ keys = set(locales["en-US"])
 if any(set(value) != keys for value in locales.values()):
     raise ValueError("Status locale keys differ")
 output = root / "dist"
+subprocess.run(["npm", "run", "build", "--workspace=portal-status-ui"], cwd=root.parents[2], check=True)
 output.mkdir(parents=True, exist_ok=True)
-for name in ["index.html", "style.css"]:
-    shutil.copyfile(root / "src" / name, output / name)
-source = "const STATUS_LOCALES = " + json.dumps(locales, ensure_ascii=False) + ";\n"
-source += (root / "src" / "contracts.cjs").read_text() + ";\n"
-source += (root / "src" / "app.js").read_text()
-(output / "app.js").write_text(source)
+shutil.copyfile(root / "src" / "index.html", output / "index.html")
 
 public = root.parents[0] / "service" / "internal" / "status" / "public"
 public.mkdir(parents=True, exist_ok=True)
-for name in ["index.html", "style.css"]:
-    shutil.copyfile(root / "src" / name, public / name)
-(public / "app.js").write_text("const STATUS_LOCALES = " + json.dumps(locales, ensure_ascii=False) + ";\n" + (root / "src" / "contracts.cjs").read_text() + ";\n" + (root / "public-src" / "app.js").read_text())
+subprocess.run(["npm", "run", "build:public", "--workspace=portal-status-ui"], cwd=root.parents[2], check=True)
+shutil.copyfile(root / "public-src" / "index.html", public / "index.html")

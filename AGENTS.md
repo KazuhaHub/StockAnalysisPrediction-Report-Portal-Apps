@@ -15,3 +15,7 @@
 - Publish app-qualified immutable versions. Do not publish unfinished apps in the
   root catalogue, mutate an existing release or change the Portal default market
   until the new catalogue and artifacts are verified.
+
+- All maintained frontends use the shared React/TypeScript/Ant Design foundation
+  and `@portal-app/sdk`. Follow `docs/plugin-development-standard.md`; use the
+  application template and pass `scripts/plugin-standard.py` before publication.

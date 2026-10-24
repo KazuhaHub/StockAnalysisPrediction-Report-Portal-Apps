@@ -22,6 +22,8 @@ Use Python 3.11+ without additional packages for catalogue/packaging tools:
 python3 -m unittest discover -s scripts/tests -v
 python3 scripts/catalogue.py check
 python3 scripts/catalogue.py check --verify-downloads
+npm ci
+python3 scripts/build-app-frontend.py demo-symbols
 python3 scripts/catalogue.py package demo-symbols
 ```
 
@@ -98,3 +100,11 @@ checks, OU grants, incident/outbox lifecycle and operator templates live togethe
 under `apps/status`. It remains excluded from the production catalogue until the
 [acceptance ledger](apps/status/docs/acceptance.md) and immutable release gates
 are completed. The Portal platform dependency is tracked in PR #142.
+
+## Shared plugin development standard
+
+See [the common frontend and interaction standard](docs/plugin-development-standard.md).
+Start a new unlisted application with `python3 scripts/create-app.py my-app --name "My app"`,
+then run `npm install` at the repository root. Use `@portal-app/sdk`, React, TypeScript
+and Ant Design for theme, locale and sandbox bridge integration. CI validates the
+foundation and retains per-application security and browser acceptance gates.

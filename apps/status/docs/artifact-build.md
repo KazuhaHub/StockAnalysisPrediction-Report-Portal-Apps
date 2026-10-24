@@ -7,9 +7,14 @@ wide application version.
 
 ## Build verified candidates
 
-Use the Go version declared in the service module and Python 3.11 or newer:
+Use the Go version declared in the service module, Python 3.11 or newer and
+Node.js 24.15+ (or 26+). Install the shared frontend workspace from the committed
+lockfile before building:
 
 ```sh
+npm ci
+python3 scripts/plugin-standard.py
+npm run typecheck
 python3 scripts/build-status-release.py
 ```
 

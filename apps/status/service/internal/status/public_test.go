@@ -28,7 +28,7 @@ func TestPublicWebsiteRequiresExplicitPublication(t *testing.T) {
 	if w := request("/"); w.Code != 200 || !strings.Contains(w.Body.String(), `src="app.js"`) {
 		t.Fatalf("prefix-aware website=%d %s", w.Code, w.Body.String())
 	}
-	if w := request("/app.js"); w.Code != 200 || !strings.Contains(w.Body.String(), "public/v1/status") {
+	if w := request("/app.js"); w.Code != 200 || !strings.Contains(w.Body.String(), "public/v1/") {
 		t.Fatal("public assets unavailable")
 	}
 	if w := request("/public/v1/incidents"); w.Code != 200 || strings.Contains(w.Body.String(), "private_detail") {

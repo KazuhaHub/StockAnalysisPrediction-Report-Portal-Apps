@@ -223,7 +223,9 @@ def package(app_id, root=ROOT):
     folder = root / "apps" / app_id
     assets = folder / "frontend" / "dist"
     if not assets.is_dir():
-        # Static reference apps do not need a compiler.
+        if (folder / "frontend/package.json").is_file():
+            raise ValueError("Build the frontend workspace before packaging")
+        # Retained static archives do not need a compiler.
         assets = folder / "frontend"
     if folder.is_symlink() or (folder / "app.json").is_symlink() or (folder / "frontend").is_symlink() or assets.is_symlink():
         raise ValueError("symlinked package roots are forbidden")

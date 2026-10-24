@@ -639,3 +639,25 @@ socket and executable. Portal/Dify remained healthy and no gateway was recreated
 Production activation still needs matching new artifacts and pairing. Retained
 older candidate bytes do not contain this new capability.
 See [the local socket runbook](../apps/status/docs/postgresql-local-socket.md).
+
+
+## Shared frontend standard and React migration candidate
+
+The maintained demo and both private/public Status frontends now use React,
+TypeScript and Ant Design from one locked workspace. A shared SDK owns the trusted
+parent bridge, bounded requests, theme snapshots and localized error mapping.
+The unlisted app generator, strict template and CI standards checks establish the
+same starting point for subsequent apps. The private Status overview separates
+reader information from operator tables, progressive component setup and reviewed
+resume controls. Probe resumption does not resume notification delivery.
+
+Local validation includes shared SDK tests, Status private/public UI tests, demo
+search/error tests, a generated-app typecheck/test/build and Python tooling tests.
+The full fifteen browser scenarios passed against the published minimum Portal
+v2026.43.2 after the private/public migration, including accessibility, narrow
+layouts, current OU identity, lifecycle revocation and independent fault drills.
+These are development results, not evidence of a new public release or deployment.
+Production remains Beta.2 with four configured administrator-only probes and
+paused notifications; Qwen billing credentials and owner-selected recipients/grants
+remain separate follow-up work. Existing public versions and catalogue URLs are
+unchanged by this source migration.

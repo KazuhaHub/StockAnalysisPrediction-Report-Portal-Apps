@@ -1,0 +1,14 @@
+{
+  "title": "報告股票",
+  "description": "透過 Portal 橋接查看報告涵蓋情況。",
+  "search": "搜尋",
+  "filter": "依代碼或名稱搜尋",
+  "symbol": "代碼",
+  "name": "名稱",
+  "count": "報告數",
+  "latest": "最新報告",
+  "unavailable": "暫時無法讀取報告，請重試。",
+  "privateOnly": "請從 Portal 應用入口開啟。",
+  "languageName": "繁體中文",
+  "language": "語言"
+}

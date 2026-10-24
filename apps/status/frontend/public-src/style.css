@@ -1,0 +1,49 @@
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+}
+main {
+  max-width: 1200px;
+  margin: auto;
+  padding: 24px;
+}
+.public-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 270px), 1fr));
+  gap: 16px;
+  margin: 24px 0;
+}
+.ant-typography {
+  overflow-wrap: anywhere;
+}
+.history-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+}
+.hour {
+  width: 12px;
+  height: 36px;
+  background: #8c8c8c;
+  border-radius: 2px;
+}
+.hour.operational {
+  background: #389e0d;
+}
+.hour.degraded {
+  background: #d48806;
+}
+.hour.outage {
+  background: #cf1322;
+}
+.hour:focus-visible {
+  outline: 2px solid #1677ff;
+  outline-offset: 2px;
+}
+@media (max-width: 480px) {
+  main {
+    padding: 16px;
+  }
+}
