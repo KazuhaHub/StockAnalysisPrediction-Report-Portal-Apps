@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "app_id": "status",
+  "version": "0.1.0-beta.3",
+  "minimum_portal_release": "v2026.43.2",
+  "runtime_image": "gcr.io/distroless/static-debian12:nonroot@sha256:afa5c872c891853ca7fcf1f12c3edb23f7eeef36189728842dd51042ff57f7ab",
+  "evidence": {
+    "provider_capabilities": "docs/status-0.1.0-beta.3-readiness.md",
+    "authority": "docs/status-0.1.0-beta.3-readiness.md",
+    "storage_recovery": "docs/status-0.1.0-beta.3-readiness.md",
+    "fault_drills": "docs/status-0.1.0-beta.3-readiness.md",
+    "accessibility": "docs/status-0.1.0-beta.3-readiness.md",
+    "operator_review": "docs/status-0.1.0-beta.3-readiness.md"
+  }
+}
