@@ -374,3 +374,34 @@ not start publication, and existing stores preserve their configured pause flags
 Default-start behavior is tested separately from explicitly active store fixtures.
 Full service race/vet/build passes. No schema product/version was changed; these
 are bootstrap values in the approved settings/audit products.
+
+
+## Authorized target deployment preparation (2026-10-23)
+
+Read the existing operator notes and verified the actual target over SSH instead
+of applying the repository's generic Portal Compose template. The live Portal is
+v2026.43 in its existing deployment directory. The required notification/platform
+APIs are not deployed. Both dependency branches now integrate main `65c18abb`,
+preserving its released migration prefix and appending 0007/0008; their exact-head
+CI remains separate from local integrated validation. The integration passed full
+Go tests/vet/build, PostgreSQL tests, focused extension/migration race tests, 1212
+frontend tests/typecheck/build and all six real-browser workflows.
+
+Built the a4ffec6 Linux candidate and verified its archive/ZIP checksums on the
+target. Installed a dedicated non-root/read-only local image and a separate
+profile-gated private Compose candidate. Initialized the approved independent
+store with paused probes/outbox, protected the generated storage key, verified an
+initial backup by restoring into a separate database, and ran an isolated fixture
+container smoke. Health/readiness succeeded, private unauthenticated requests
+were refused, the default website remained closed, the public component projection
+was empty, and restart preserved pauses/database integrity. The temporary fixture
+container and keys were removed. The formal service remains unpaired and stopped;
+no fake production registration was generated and no gateway rule was changed.
+
+The environment's PostgreSQL SSLRequest returned N. Verified-TLS probe acceptance
+cannot pass against that listener as-is; do not disable TLS verification or alter
+the shared PostgreSQL/Dify service as an incidental fix. A reviewed trusted TLS
+path and read-only identity, plus real provider billing authorization, remain
+operational gates. The candidate preparation does not publish a release, change
+the market or claim S00–S11 completion. Complete CI passed at a4ffec6 before this
+documentation-only update.
