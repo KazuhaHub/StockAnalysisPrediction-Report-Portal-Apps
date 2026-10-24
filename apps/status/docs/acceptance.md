@@ -4,6 +4,50 @@ This ledger preserves the complete S00–S11 scope in
 [the implementation plan](../../../docs/implementation-plan.md). A passing unit
 or browser test is evidence for its own behavior, not a claim of full acceptance.
 
+## Target read-only provider checks, 2026-10-23 Pacific
+
+After the owner explicitly identified Dify as the credential source, inspected
+provider credential field names and matching workflow environment-variable names
+in the target's single workspace through a read-only transaction. DeepSeek uses
+the official `api.deepseek.com` endpoint. Tongyi has `dashscope_api_key` and
+`use_international_endpoint`; no RAM AccessKey pair was found in those sources.
+The model invocation key was not submitted to a billing endpoint.
+
+An isolated one-shot executable imported the actual `status.Prober.Check` from
+clean source `d0916654896ed8f8f839027322ae2ad9def139f7` and accepted its inputs only
+on stdin. The Dify process decrypted the existing DeepSeek key using its own key
+provider and passed it in memory. It selected a scoped token for the current
+CoD-V3.17 report workflow. Neither credential was printed, copied into Status
+storage, placed in process arguments or committed. No workflow/inference ran.
+
+At `2026-10-24T03:23:03Z`, the actual guarded adapters returned:
+
+| Check | Outcome | Reason | Capability | Duration |
+| --- | --- | --- | --- | --- |
+| DeepSeek account balance | success | balance_read | account_balance; one balance record | 196 ms |
+| Dify report workflow GET /v1/info | success | reachable | read_access_only | 62 ms |
+
+The receipt intentionally excludes amounts, currencies, account references and
+credentials. Source, executable, receipt and verified SHA256SUMS are retained in
+the protected target directory
+`/data/report-portal/status-candidate-f06279d/acceptance/`. The temporary executable
+was removed from the Dify container after the check. Formal Status remains stopped,
+unpaired and paused. This proves these two real read-only calls, not scheduled
+production observation, notification delivery, public activation or installed UI.
+
+Qwen account billing still requires an account owner's RAM identity; the reviewed
+minimal policy and exact operator steps are in the operator guide. PostgreSQL
+verified TLS/read-only identity, final manual/operator acceptance, immutable Status
+publication and marketplace installation remain incomplete.
+
+Marketplace preparation at `d091665` passed both full twelve-job CI runs
+`40057064497` and `40057068779`, including thirty Python tests, thirteen browser
+scenarios and the existing demo's real public download. Portal PR #171 separately
+binds reviewed market declarations to the downloaded manifest; exact-source test
+CI `40057523290` and CodeQL `40057521307` passed, and it merged as
+`493a5c3d3e6813043437de939f1370717f597628`. It is not yet deployed. The default
+catalogue and current installed apps were not changed by that merge.
+
 | Package | Current evidence | Remaining gate |
 | --- | --- | --- |
 | S00 | Repository/capability inventory and official adapter fixtures; authorized target inspection now verifies Portal v2026.43.2, Dify image 1.17.1, Docker Compose 5.3.0 and PostgreSQL without TLS | Verified PostgreSQL TLS path and read-only identity, provider account/site/authorization verification |

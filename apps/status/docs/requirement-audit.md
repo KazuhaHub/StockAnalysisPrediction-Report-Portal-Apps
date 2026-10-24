@@ -57,12 +57,12 @@ Email/Slack recipient, real billing authorization, or a production outage exerci
 | Gate | Authoritative current evidence | Remaining work |
 | --- | --- | --- |
 | Notification and generic platform prerequisites | Portal #141/#142 and protocol #1 merged; Portal v2026.43.2 published/deployed with migration and recovery evidence | Complete actual installed-app pairing/configuration review |
-| Dify, PostgreSQL and both provider families | Typed adapters, official API fixtures and read-only protocol checks | Actual Dify application access, separate verified-TLS PostgreSQL/read-only identity, and DeepSeek/Qwen account/site/authorization checks |
+| Dify, PostgreSQL and both provider families | Typed adapters and protocol fixtures; actual guarded Dify GET /v1/info and DeepSeek account balance succeeded on the authorized target, recorded in the acceptance ledger | Separate verified-TLS PostgreSQL/read-only identity and Qwen billing account/site/authorization checks; Dify holds a DashScope model key, not a RAM pair |
 | Six platforms and exact image executable bytes | Artifact builder and CI; non-root prebuilt image checks | Publish a non-development app-qualified version from clean reviewed main after acceptance |
 | Released minimum Portal compatibility | Browser and real notification checks use checksum-verified published v2026.43.2 binaries | Record the final version-specific acceptance and operator evidence |
 | Immutable tag/image/assets and public downloads | Guarded workflow, policy tests, metadata binding and draft/public download verification implementation | No actual Status release has run; do not treat workflow code as publication evidence |
-| Canonical catalogue and legacy-compatible migration | Existing legacy demo identity/URL preserved; root catalogue validation | Add Status only after immutable artifacts exist and are verified; separately review Portal default URL/override compatibility |
-| Production operator approval and activation | Current candidate is prepared, paused, stopped and unpaired; existing admin browser session is available | Operator upload/install confirmation; private pairing; target configuration; deliberate probe/audience/gateway review |
+| Canonical catalogue and legacy-compatible migration | Legacy demo preserved and public download verified; CI verifies published extension metadata/checksums; Portal #171 permission declaration binding merged | Add Status only after immutable artifacts exist and are verified; separately review Portal default URL/override compatibility |
+| Production operator approval and activation | Current candidate is prepared, paused, stopped and unpaired; existing admin browser session is available | Marketplace installation/permission confirmation after publication; private pairing; target configuration; deliberate probe/audience/gateway review; a manual ZIP is optional controlled acceptance |
 
 Overall completion is **not proven**. In particular, the production app, actual
 provider authorization, PostgreSQL TLS/read-only path, final operator/manual

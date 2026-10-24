@@ -173,6 +173,35 @@ Probe configuration:
 | Qwen | Minimal RAM AccessKey ID/secret; optional STS token | Correct China/international billing site and currency. This reports cloud account credit/cash, not a model key's quota. |
 | Heartbeat | At least 32 characters of signing secret | Interval defines the expected job cadence; see the signed ingress format below. |
 
+### Qwen billing credentials
+
+A Dify Tongyi credential named `dashscope_api_key` is a model invocation key. It
+does not supply the AccessKey ID/secret needed to sign the account billing request.
+Do not paste it into the billing credential fields, infer an empty balance from
+missing billing access, or issue a paid inference request as a balance test.
+
+Use a dedicated RAM identity with the custom policy in
+[`deploy/qwen-balance-policy.json`](../deploy/qwen-balance-policy.json). The official
+[QueryAccountBalance authorization table](https://help.aliyun.com/en/user-center/developer-reference/api-bssopenapi-2017-12-14-queryaccountbalance)
+lists `bss:DescribeAcccount` as the read action (including that exact spelling),
+with `Resource: "*"` and no dependent action. This grants one balance query, not
+the broader billing read/full-access policies. The provider also documents
+[API-specific billing permissions](https://help.aliyun.com/en/user-center/developer-reference/api-calling-authorization).
+
+Have the account owner create or select this identity in RAM and attach the custom
+policy to that identity. Avoid adding it to a broad group or changing the Dify model
+identity. Provision its AccessKey ID and secret through the installed Status admin
+credential form or the deployment's approved secret handoff; never put them in a
+catalogue, ZIP, repository, release note or chat. If short-lived STS credentials
+are used, include the session token and replace the credential before expiry.
+
+Choose China or international billing according to the account's billing site,
+not merely the model name. Run a read-only check and require the actual API result:
+authorization failure remains unknown/setup-required, a site mismatch is not a
+zero balance, and an unsupported account remains explicitly unsupported. Exact
+cash, credit and available amounts describe the cloud account, not the quota of
+each model key; multiple model keys sharing the account are not separate pools.
+
 HTTP checks optionally require one HTTP status (100–599) and/or a literal response
 substring of at most 256 characters. Empty status requires any 2xx. The response is
 bounded to 64 KiB; oversize/unreadable bodies are unknown, condition mismatches
