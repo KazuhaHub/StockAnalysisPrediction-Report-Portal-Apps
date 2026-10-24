@@ -91,7 +91,9 @@ was necessary.
 Status remains `0.1.0-dev`, unlisted, unpaired, stopped and operationally paused.
 No gateway, production component grant or notification recipient was enabled.
 Dify, DeepSeek and the scoped PostgreSQL target have the separately recorded
-read-only capability evidence. Qwen billing RAM credentials remain the owner's
+read-only capability evidence. The PostgreSQL gateway was subsequently removed
+at the owner's request; [its runbook](postgresql-target-deployment.md) records
+that monitoring now needs a replacement connection. Qwen billing RAM credentials remain the owner's
 or account administrator's provisioning responsibility. Actual Qwen validation,
 final version-specific acceptance, immutable Status publication, catalogue entry,
 market installation, pairing and deliberate activation remain unfinished.
