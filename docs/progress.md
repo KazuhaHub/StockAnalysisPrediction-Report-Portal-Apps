@@ -620,7 +620,11 @@ frontend from opening against an older service that lacks this transport.
 
 Go race/vet, frontend contracts and shared Python checks passed. Fifteen browser
 scenarios pass against published Portal v2026.43.4, including the local transport
-editor, save/reopen and removal of stale network fields. The target's dedicated
-local authentication rule and actual bounded query remain to be validated before
-activation. Retained older candidate bytes do not contain this new capability.
+editor, save/reopen and removal of stale network fields. Both exact-source CI runs
+at `bef2b1f` passed. Subsequent target acceptance verified the dedicated local
+SCRAM rule and actual SELECT 1 (2 ms), rejecting wrong passwords, other databases
+and an unmounted port. The one-shot process had no network and mounted only the
+socket and executable. Portal/Dify remained healthy and no gateway was recreated.
+Production activation still needs matching new artifacts and pairing. Retained
+older candidate bytes do not contain this new capability.
 See [the local socket runbook](../apps/status/docs/postgresql-local-socket.md).

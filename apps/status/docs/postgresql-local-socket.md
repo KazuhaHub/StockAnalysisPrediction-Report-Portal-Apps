@@ -94,6 +94,41 @@ fixtures continue to require trusted certificates and reject plaintext fallback.
 The browser fixture saves and reopens a local monitor, switches transport modes
 and verifies network destinations are omitted after returning to local mode.
 
-These fixtures do not prove the target host's socket authorization. The actual
-read-only target check and its protected receipt are still required before local
-monitor activation. No extra gateway should be recreated for that acceptance.
+## Authorized target acceptance
+
+On 2026-10-24 the actual adapter from source
+`bef2b1f6f0b68b64756ea7525d2424807675e197` passed a one-shot target check.
+Both exact-source CI runs (`40069194726`, `40069216454`) passed before the target
+authentication adjustment. The Linux harness SHA-256 is
+`4ef8f50d5ae435a347edf1158061c600a8cc4d1a3dd02837d690a3149ac42990`;
+its source SHA-256 is
+`296168c22baf224562e0933ade3fda4d4057b50a783ef6eac81449376ceb1bc5`.
+
+The initial check was refused by the previous local authentication rule. Only the
+dedicated `portal_status_probe` block was adjusted: allow SCRAM for that role and
+`report-portal` over local sockets, then reject its other local database and all
+network access. Other authentication rules were byte-preserved, parsing returned
+zero errors, and native SSL stayed off. The existing role was verified without
+elevated privileges, memberships, business-table privileges or schema creation.
+No database schema, application account or password was changed.
+
+At `2026-10-24T06:17:21Z`, the one-shot container ran as UID/GID 1001, with a
+read-only root and socket mount, dropped capabilities and `--network none`.
+It mounted only the PostgreSQL socket and the harness executable. Credentials
+were provided through stdin in memory and excluded from receipts. Results:
+
+| Case | Result |
+| --- | --- |
+| Dedicated role, target database | `success`, `read_query_only`, 2 ms |
+| Wrong password | `failure`, `database_unavailable` |
+| Different database | `failure`, `database_unavailable` |
+| Unmounted port | `unknown`, `local_socket_unavailable` |
+
+Portal database health and Dify health remained healthy. No gateway container,
+production Status process, component, schedule or notification was enabled.
+Protected evidence is under
+`/data/report-portal/status-postgres/local-socket-acceptance-bef2b1f`:
+`before-local-authorization.json`, `local-authentication-verification.json` and
+`local-query-verification.json`. The previous/current authentication hashes are
+recorded there, including protected recovery bytes. This is actual target query
+acceptance, not an installed/paired production monitor or a database-restart drill.

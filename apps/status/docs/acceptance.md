@@ -241,7 +241,8 @@ continues to pass. Complete Go race tests, vet, eight frontend contract tests an
 Fifteen browser scenarios pass against published Portal v2026.43.4. The new case
 saves/reopens a PostgreSQL local monitor and proves switching back from TLS does
 not retain host/CIDR destinations. It also exposed select labels polluted by
-option text; selects now have explicit localized accessible names. Actual target
-socket authorization and read-only query evidence remain pending, as described
-in [the local socket runbook](postgresql-local-socket.md). No gateway was recreated
+option text; selects now have explicit localized accessible names. Subsequent
+target acceptance verified the scoped local SCRAM rule, actual SELECT 1 and
+wrong-password/database/port controls, as described in
+[the local socket runbook](postgresql-local-socket.md). No gateway was recreated
 and no production Status process, monitor or notification was enabled.
