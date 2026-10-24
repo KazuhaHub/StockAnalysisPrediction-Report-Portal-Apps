@@ -10,7 +10,9 @@ directory. `machine('GET', '/api/v1/...')` supports reviewed query-scope apps.
 The host and backend remain authoritative for permissions and current identity.
 
 The client waits for `rp:init`, matches response IDs, rejects wrong-window messages,
-bounds pending requests/timeouts and discards listeners on `dispose()`. It never
+bounds pending requests/timeouts and discards listeners on `dispose()`.
+It disposes automatically on a real page exit, retaining the bridge during browser
+back/forward-cache suspension so returning to a cached page remains usable. It never
 reads a host session, token or browser store. Request errors have localized UI keys
 and bounded HTTP status metadata, rather than untrusted upstream error text.
 

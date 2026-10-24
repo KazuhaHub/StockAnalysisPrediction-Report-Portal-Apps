@@ -169,7 +169,11 @@ export class PortalClient implements AppClient {
     this.current = options?.current ?? window;
     this.parent = options?.parent ?? this.current.parent;
     this.current.addEventListener("message", this.onMessage);
+    this.current.addEventListener("pagehide", this.onPageHide);
   }
+  private onPageHide = (event: PageTransitionEvent) => {
+    if (!event.persisted) this.dispose();
+  };
   getTheme = () => this.snapshot;
   subscribeTheme = (callback: () => void) => {
     this.listeners.add(callback);
@@ -314,6 +318,7 @@ export class PortalClient implements AppClient {
   dispose() {
     this.disposed = true;
     this.current.removeEventListener("message", this.onMessage);
+    this.current.removeEventListener("pagehide", this.onPageHide);
     for (const p of this.pending.values()) {
       clearTimeout(p.timer);
       p.reject(new BridgeError("unavailable"));

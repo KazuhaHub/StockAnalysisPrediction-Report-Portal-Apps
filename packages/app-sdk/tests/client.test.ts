@@ -157,3 +157,40 @@ test("primary buttons retain AA text contrast in normal, hover and active states
     }
   }
 });
+
+test("browser back-forward cache suspension retains the bridge until a real exit", async () => {
+  const parent = { postMessage: vi.fn() } as unknown as Window;
+  const client = new PortalClient("fixture", { parent, current: window });
+  window.dispatchEvent(
+    new MessageEvent("message", { source: parent, data: { type: "rp:init" } }),
+  );
+  window.dispatchEvent(
+    new PageTransitionEvent("pagehide", { persisted: true }),
+  );
+  const result = client.request("GET", "/v1/me");
+  await Promise.resolve();
+  const sent = vi.mocked(parent.postMessage).mock.calls[0][0] as {
+    reqId: string;
+  };
+  window.dispatchEvent(
+    new MessageEvent("message", {
+      source: parent,
+      data: {
+        type: "rp:api:result",
+        reqId: sent.reqId,
+        ok: true,
+        data: { admin: false },
+      },
+    }),
+  );
+  await expect(result).resolves.toEqual({ admin: false });
+  const pending = client.request("GET", "/v1/me");
+  await Promise.resolve();
+  const rejected = expect(pending).rejects.toMatchObject({
+    key: "unavailable",
+  });
+  window.dispatchEvent(
+    new PageTransitionEvent("pagehide", { persisted: false }),
+  );
+  await rejected;
+});
