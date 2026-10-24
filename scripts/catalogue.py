@@ -42,11 +42,12 @@ def check(root=ROOT):
         m = manifest(root, app_id)
         if entry.get("version") != m["version"] or entry.get("scopes") != m["scopes"]:
             raise ValueError("catalogue and package declarations disagree")
-        from urllib.parse import urlsplit
+        from urllib.parse import urlsplit, unquote
         u = urlsplit(entry.get("url", ""))
         if u.scheme != "https" or u.username or u.password or u.query or u.fragment or not u.hostname:
             raise ValueError("invalid download URL")
-        immutable = (u.hostname == "github.com" and "/releases/download/" in u.path and "/latest/" not in u.path)
+        immutable = (u.hostname == "github.com" and unquote(u.path).endswith(
+            "/releases/download/" + app_id + "/v" + m["version"] + "/" + app_id + ".zip"))
         # The original demo archive has an explicitly pinned immutable source commit.
         legacy = u.hostname == "raw.githubusercontent.com" and re.search(r"/[a-f0-9]{40}/apps/demo-symbols\.zip$", u.path)
         if not (immutable or legacy) or not u.path.endswith(".zip"):
@@ -63,6 +64,8 @@ def package(app_id, root=ROOT):
     if not assets.is_dir():
         # Static reference apps do not need a compiler.
         assets = folder / "frontend"
+    if folder.is_symlink() or (folder / "app.json").is_symlink() or (folder / "frontend").is_symlink() or assets.is_symlink():
+        raise ValueError("symlinked package roots are forbidden")
     files = [("app.json", folder / "app.json")]
     for f in sorted(assets.rglob("*")):
         if f.is_symlink():

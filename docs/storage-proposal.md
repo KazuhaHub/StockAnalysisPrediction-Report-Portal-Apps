@@ -1,11 +1,11 @@
 # Status and generic extension storage proposal
 
-Status: awaiting owner approval. No DDL or migration is implemented by this file.
+Status: Option A accepted by the owner on 2026-10-22. Implementation is in progress.
 Prepared 2026-10-22 for the accepted shared application repository.
 
-## Decision requested
+## Accepted decision
 
-Approve Option A below: a single new generic Portal connection table using the
+The owner approved Option A: a single new generic Portal connection table using the
 next available migration after notification 0007, plus the independent Status
 SQLite tables listed here. Use DB-backed feature settings, purpose-bound sealed
 secrets, fail-closed identity checks, transactional transitions/outbox and paused
@@ -28,7 +28,7 @@ when scopes/version change. App-token identity stays ephemeral in memory.
 | label | TEXT NOT NULL | Administrator-facing label |
 | base_url | TEXT NOT NULL | Fixed trusted backend root, HTTPS except explicit private-network policy |
 | audience | TEXT NOT NULL | Backend assertion audience |
-| secret | TEXT NOT NULL | Sealed JSON key ID/shared signing key; never returned |
+| secret | TEXT NOT NULL | Sealed JSON key ID/shared signing key and independent stable identity seed; never returned |
 | policy | TEXT NOT NULL | Versioned JSON exact path-prefix/method rules and explicit network allowlists; bounded validated object |
 | enabled | INTEGER NOT NULL DEFAULT 0 | Review gate |
 | revision | BIGINT NOT NULL DEFAULT 1 | Compare-and-swap and request fencing |
@@ -48,8 +48,9 @@ revision. No network calls run in the transaction. Request dispatch verifies
 current enabled registration revision before sending, uses a bounded transport,
 strips client authorization/cookies and accepts no client host override.
 
-Use the existing keyring purpose `app-backend:<app_id>:<instance_id>`. A key rotation
-changes revision, key ID and secret together. The backend can accept a short,
+Use the existing keyring purpose `app-backend:<app_id>:<instance_id>`. A signing-key rotation
+changes revision, key ID and signing secret together; it preserves the independent
+identity seed so current account/OU grants do not break on ordinary key rotation. The backend can accept a short,
 explicitly configured old/new verification window; it does not accept arbitrary
 key IDs. No secret survives into a response, audit detail or ZIP.
 
@@ -139,5 +140,6 @@ Portal `meta` or its notification tables; rejected because it couples lifecycle,
 weakens relational constraints and bypasses the storage approval boundary. Option
 C puts monitoring in the Portal binary; rejected by the agreed plugin isolation.
 
-Approve A as described, or specify structural changes before any schema code is
-written. Minor implementation helpers do not expand the approved object set.
+The accepted decision authorizes the objects and lifecycle rules above. Minor
+implementation helpers do not expand the approved object set. Further schema
+changes require a separate decision.

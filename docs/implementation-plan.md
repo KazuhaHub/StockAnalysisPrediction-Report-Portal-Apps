@@ -1,7 +1,8 @@
 # Status application: implementation and execution plan
 
-Status: proposed implementation contract; no Status runtime, schema, external
-repository, monitor or deployment is created by this document.
+Status: implementation in progress. The shared public application repository and
+protocol/catalogue bootstrap exist; Status runtime, schemas, monitors and deployment
+are not yet implemented. See the execution log and storage approval gate.
 
 Prepared: 2026-10-21. Baseline: notification consolidation PR #141, commit
 `b4741355118c28d95dcf3c096115963ce5936f01`. Verify that PR's merge and deployed
@@ -32,7 +33,7 @@ accessible organization inventory. Do not claim an invented repository exists.
 
 Direction confirmed with the owner: one application-market monorepo contains all
 installable applications, rather than a dedicated source repository per plugin.
-Proposed name, not created: `KazuhaHub/StockAnalysisPrediction-Report-Portal-Apps`. Status is its first
+Created public repository: `KazuhaHub/StockAnalysisPrediction-Report-Portal-Apps`. Status is planned as its first
 production application, including its independently deployed service. The Portal
 repository continues to own only the generic host platform and built-in business
 applications; it must not vendor Status source into the host.
@@ -41,8 +42,8 @@ The new repository owns its root `index.json`, app source trees, shared develope
 tooling, package validation and per-app releases. Each app has its own version,
 ZIP and optional service image. A change to one app does not release every app.
 The Status service/database remains operationally independent even though its
-source shares a repository with other applications. Repository name/visibility
-and actual creation remain later administrative steps.
+source shares a repository with other applications. Repository name and public visibility were confirmed by the owner; the bootstrap
+repository was created on 2026-10-22. Production catalogue migration remains pending.
 
 ## 2. Product outcome and firm boundaries
 
@@ -566,8 +567,8 @@ storage decision:
 1. Approve the generic viewer-bound backend connection contract and its exact
    Portal persistence proposal; no Status-specific hook in Portal business pages.
 2. Approve the independent Status storage and backup/key contract before DDL.
-3. Confirm the shared `StockAnalysisPrediction-Report-Portal-Apps` repository name/visibility before creation;
-   the monorepo direction is accepted, and a separate Status source repo is not planned.
+3. Shared repository creation is complete: `StockAnalysisPrediction-Report-Portal-Apps`,
+   public as confirmed by the owner. A separate Status source repo is not planned.
 4. Select private `/status` redirect as default, or explicitly approve public mode
    and component projection before deployment.
 5. Identify the actual Qwen billing account/site and allowed read-only credentials;

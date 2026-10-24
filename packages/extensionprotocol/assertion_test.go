@@ -12,7 +12,7 @@ import (
 func fixture() (Signer, *Verifier, time.Time) {
 	key := bytes.Repeat([]byte{23}, 32)
 	now := time.Date(2026, 10, 22, 0, 0, 0, 0, time.UTC)
-	return Signer{Issuer: "portal-test", Audience: "status-test", AppID: "status", InstanceID: "registration-1", KeyID: "current", Key: key}, NewVerifier(VerifyConfig{Issuer: "portal-test", Audience: "status-test", AppID: "status", InstanceID: "registration-1", Keys: map[string][]byte{"current": key}, ReplayCapacity: 4}), now
+	return Signer{Issuer: "portal-test", Audience: "status-test", AppID: "status", InstanceID: "registration-1", BootID: "boot-1", KeyID: "current", Key: key}, NewVerifier(VerifyConfig{Issuer: "portal-test", Audience: "status-test", AppID: "status", InstanceID: "registration-1", BootID: "boot-1", Keys: map[string][]byte{"current": key}, ReplayCapacity: 4}), now
 }
 
 func TestRequestBoundIdentityAndOUClaims(t *testing.T) {
@@ -32,7 +32,7 @@ func TestRequestBoundIdentityAndOUClaims(t *testing.T) {
 }
 
 func TestAssertionRejectsWrongBoundary(t *testing.T) {
-	for _, mode := range []string{"method", "path", "body", "expired", "future", "audience", "app", "instance", "signature", "subject", "bad-key"} {
+	for _, mode := range []string{"method", "path", "body", "expired", "future", "issuer", "audience", "app", "instance", "signature", "subject", "bad-key", "boot"} {
 		t.Run(mode, func(t *testing.T) {
 			s, v, now := fixture()
 			viewer := Viewer{Subject: "account-1", Role: "admin"}
@@ -42,11 +42,17 @@ func TestAssertionRejectsWrongBoundary(t *testing.T) {
 			if mode == "bad-key" {
 				s.Key = []byte("short")
 			}
+			if mode == "issuer" {
+				s.Issuer = "other"
+			}
 			if mode == "audience" {
 				s.Audience = "other"
 			}
 			if mode == "app" {
 				s.AppID = "other"
+			}
+			if mode == "boot" {
+				s.BootID = "older-boot"
 			}
 			if mode == "instance" {
 				s.InstanceID = "other"
