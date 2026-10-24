@@ -137,6 +137,13 @@ jobs:
           RP_DB_DRIVER: postgres
           RP_DB_DSN: fixture-must-not-be-used
           RP_LISTEN: invalid-fixture-listen
+      - name: Retain browser failure evidence
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: status-browser-failure
+          path: apps/status/tests/test-results/
+          retention-days: 7
   status-container:
     runs-on: ubuntu-latest
     steps:

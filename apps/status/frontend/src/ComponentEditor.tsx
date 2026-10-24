@@ -182,6 +182,7 @@ export function ComponentEditor({
               <Button
                 type="primary"
                 onClick={save}
+                aria-label={t("save")}
                 loading={busy}
                 disabled={busy}
               >

@@ -314,6 +314,13 @@ export function PortalAppProvider({
     algorithm: snapshot.dark ? theme.darkAlgorithm : theme.defaultAlgorithm,
     components: {
       Tabs: { itemSelectedColor: snapshot.dark ? "#91caff" : "#0958d9" },
+      Steps: { colorTextDescription: snapshot.dark ? "#bfbfbf" : "#595959" },
+      Tag: {
+        colorInfo: snapshot.dark ? "#91caff" : "#0958d9",
+        colorSuccess: snapshot.dark ? "#b7eb8f" : "#237804",
+        colorError: snapshot.dark ? "#ffa39e" : "#a8071a",
+        colorWarning: snapshot.dark ? "#ffe58f" : "#874d00",
+      },
     },
     token: {
       colorPrimary: snapshot.colorPrimary,

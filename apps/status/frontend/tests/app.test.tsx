@@ -190,7 +190,9 @@ test("credential save errors stay inside the dialog and retain the secret draft"
     "Fixture account",
   );
   await user.type(
-    within(dialog).getByLabelText("API key / heartbeat signing secret", { exact: true }),
+    within(dialog).getByLabelText("API key / heartbeat signing secret", {
+      exact: true,
+    }),
     "fixture-only-value",
   );
   await user.click(
@@ -204,4 +206,56 @@ test("credential save errors stay inside the dialog and retain the secret draft"
       }) as HTMLInputElement
     ).value,
   ).toBe("fixture-only-value");
+});
+
+test("the save action keeps its accessible name while the directory is loading", async () => {
+  const f = fixture(),
+    user = userEvent.setup();
+  let finish!: (value: { items: [] }) => void;
+  const response = new Promise<{ items: [] }>((resolve) => {
+    finish = resolve;
+  });
+  f.client.directory = vi.fn(() => response) as Client["directory"];
+  render(<StatusApp client={f.client} />);
+  await user.click(
+    await screen.findByRole("button", { name: "Manage", exact: true }),
+  );
+  await user.click(
+    screen.getByRole("button", { name: "New component", exact: true }),
+  );
+  await user.type(
+    screen.getByLabelText("Internal label", { exact: true }),
+    "Fixture",
+  );
+  await user.click(screen.getByRole("button", { name: "Next", exact: true }));
+  await user.type(
+    screen.getByLabelText("Target URL", { exact: true }),
+    "https://fixture.invalid/health",
+  );
+  await user.click(screen.getByRole("button", { name: "Next", exact: true }));
+  await user.click(
+    screen.getByRole("button", {
+      name: "Load users and organizational units",
+      exact: true,
+    }),
+  );
+  expect(
+    (
+      screen.getByRole("button", {
+        name: "Save",
+        exact: true,
+      }) as HTMLButtonElement
+    ).disabled,
+  ).toBe(true);
+  finish({ items: [] });
+  await waitFor(() =>
+    expect(
+      (
+        screen.getByRole("button", {
+          name: "Save",
+          exact: true,
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(false),
+  );
 });

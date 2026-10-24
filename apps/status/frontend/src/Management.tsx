@@ -285,6 +285,7 @@ function CredentialEditor({
               loading={busy}
               disabled={busy}
               onClick={save}
+              aria-label={t("save")}
             >
               {t("save")}
             </Button>
