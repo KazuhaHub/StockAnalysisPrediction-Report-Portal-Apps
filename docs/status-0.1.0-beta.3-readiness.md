@@ -59,7 +59,7 @@ light/dark automated WCAG checks, keyboard controls, a 320-pixel view, enlarged
 text and long labels. Public history drawer reflow was corrected after a failing
 narrow-screen check. Dialog save errors retain the draft and remain visible inside
 the dialog. The shared template is generated, typechecked, tested and built in CI.
-Source preflight also passed 43 Python tooling tests, nine SDK tests, eight
+Source preflight also passed 43 Python tooling tests, ten SDK tests, eight
 Status React tests and two demo UI tests; exact-source CI remains a publication
 requirement rather than being inferred from these local results.
 Manual screen-reader and full native zoom certification remain explicit Beta
@@ -79,3 +79,26 @@ workflow requires the exact non-development manifest, all thirteen CI jobs
 Its write-capable job rechecks source, CI and artifact hashes. Existing tags,
 releases, images and catalogue URLs are never overwritten. The market remains on
 verified Beta.2 until Beta.3 public downloads and provenance are verified.
+
+
+## Isolated configured-data compatibility preflight
+
+A consistent copy of the running Beta.2 store passed SQLite integrity checks.
+It contained four components, four monitors, three sealed credentials, zero grants
+and 2,135 observations. A locally cross-compiled Beta.3 candidate from
+`ae29a51372e9d6d03dda08ea2edda33bfa47ca9c` was exercised alongside the deployed
+immutable Beta.2 image in disposable containers with `--network none`, a read-only
+root filesystem, no capabilities and bounded resources. Only isolated copies were
+writable; no server or provider worker was started.
+
+Both versions backed up the copy. The candidate restored the old-version backup;
+Beta.2 then reopened and backed up that restored store. Schema, configuration and
+sealed-credential fingerprints, counts and all 2,135 observations matched. Restore
+paused probes/outbox and disabled public projection as required. The production
+Status process start time did not change. The protected checkpoint and verification
+receipt are under `backups/react-compat-ae29a51/` in the existing Beta.2 deployment.
+No credential or financial value is included here.
+
+This is candidate CLI/storage compatibility evidence. It does not replace exact
+released-byte verification, a real market upgrade, deliberate new pairing or a
+post-publication rollback drill.
