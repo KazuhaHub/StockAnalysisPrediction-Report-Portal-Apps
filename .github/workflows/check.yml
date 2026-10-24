@@ -126,6 +126,23 @@ jobs:
       - uses: actions/checkout@v4
       - run: docker build -f apps/status/Dockerfile -t status-development .
       - run: docker run --rm status-development version
+      - name: Verify the prebuilt release image path without publishing
+        run: |
+          set -euo pipefail
+          context="$RUNNER_TEMP/prebuilt-image"
+          mkdir -p "$context/linux-amd64"
+          id=$(docker create status-development)
+          docker cp "$id:/status" "$context/linux-amd64/status"
+          docker rm "$id"
+          docker pull gcr.io/distroless/static-debian12:nonroot
+          runtime=$(docker image inspect gcr.io/distroless/static-debian12:nonroot --format '{{index .RepoDigests 0}}')
+          docker build --platform linux/amd64 -f apps/status/deploy/Dockerfile.release --build-arg "RUNTIME_IMAGE=$runtime" --build-arg TARGETARCH=amd64 -t status-prebuilt-smoke "$context"
+          test "$(docker run --rm status-prebuilt-smoke version)" = "$(docker run --rm status-development version)"
+          test "$(docker image inspect status-prebuilt-smoke --format '{{.Config.User}}')" = '65532:65532'
+          id=$(docker create status-prebuilt-smoke)
+          docker cp "$id:/status" "$RUNNER_TEMP/prebuilt-status"
+          docker rm "$id"
+          cmp "$context/linux-amd64/status" "$RUNNER_TEMP/prebuilt-status"
       - run: python3 scripts/status-container-smoke.py
   status-artifacts:
     runs-on: ubuntu-latest
