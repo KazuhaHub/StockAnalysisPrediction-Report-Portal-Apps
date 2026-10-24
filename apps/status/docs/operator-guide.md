@@ -3,9 +3,11 @@
 ## Scope and prerequisites
 
 This runbook applies to the unreleased `0.1.0-dev` development build. Do not publish
-it or change the default marketplace before the acceptance and immutable-artifact
-gates are complete. The application sources remain in the shared Apps monorepo;
-no separate Status repository is needed.
+it or add Status to the catalogue before its acceptance and immutable-artifact
+gates are complete. The Portal's separate default-catalogue migration requires
+verification of every currently listed asset and the real installation path;
+it does not depend on publishing Status. The application sources remain in the
+shared Apps monorepo; no separate Status repository is needed.
 
 An authorized operator may install a reviewed, checksum-verified CI candidate for
 controlled environment acceptance after the platform prerequisites are deployed.
