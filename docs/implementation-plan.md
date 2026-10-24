@@ -1,10 +1,13 @@
 # Status application: implementation and execution plan
 
-Status: implementation and acceptance in progress. The shared repository, paired
-platform, independent Status service/storage, monitors, sandbox/public UI and
-artifact candidates are implemented in review branches. Publication, deployment
-and the remaining acceptance gates are not complete. See `docs/progress.md` and
-`apps/status/docs/acceptance.md` for exact evidence.
+Status: the install-first Beta is published, listed in the canonical marketplace,
+installed, privately paired and running. See the
+[current rollout audit](../apps/status/docs/production-rollout.md) for verified
+release, runtime, browser and recovery evidence. Optional provider credentials,
+OU grants and notification recipients remain post-install configuration under
+the owner's decision. The larger acceptance scope below remains intact; manual
+assistive-technology review and deployment-specific integration checks are not
+claimed complete. Historical inventory statements describe the planning baseline.
 
 Prepared: 2026-10-21. Baseline: notification consolidation PR #141, commit
 `b4741355118c28d95dcf3c096115963ce5936f01`. Verify that PR's merge and deployed

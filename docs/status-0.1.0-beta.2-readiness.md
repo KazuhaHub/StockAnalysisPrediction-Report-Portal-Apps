@@ -144,3 +144,12 @@ under `/data/report-portal/status-release-0.1.0-beta.2/`.
 The canonical catalogue validator passed with both entries and verified downloads.
 Marketplace listing, installation and pairing are a separate rollout step; these
 publication receipts do not claim credentials or recipients have been configured.
+
+## Completed marketplace and private rollout
+
+The [production rollout audit](../apps/status/docs/production-rollout.md) records
+the subsequent actual marketplace install, private pairing, running pinned image,
+authenticated `/status` entry, native Chrome overview/operations acceptance,
+restart and isolated recovery verification. Components, credentials, monitors and
+outbox remain empty. Optional configuration remains deliberately separate from
+the completed install-first rollout.
