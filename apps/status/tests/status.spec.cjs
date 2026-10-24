@@ -65,6 +65,44 @@ test.afterAll(async () => {
   if (folder) rmSync(folder, { recursive: true, force: true })
 })
 
+test('canonical public market downloads an app only after permission confirmation', async ({ browser }) => {
+  const canonical = 'https://raw.githubusercontent.com/KazuhaHub/StockAnalysisPrediction-Report-Portal-Apps/main/index.json'
+  await body(await adminAPI.post('/api/admin/apps/market/index', { data: { index_url: canonical } }))
+  const context = await browser.newContext({ storageState: await adminAPI.storageState(), locale: 'en-US' })
+  try {
+    const page = await context.newPage(), installs = []
+    page.on('request', request => { if (new URL(request.url()).pathname === '/api/admin/apps/market/install') installs.push(request) })
+    await page.goto(base + '/manage/apps')
+    await page.getByRole('button', { name: /Fetch from GitHub/ }).click()
+    await expect(page.getByRole('textbox', { name: 'App market index URL', exact: true })).toHaveValue(canonical)
+    const row = page.getByRole('row').filter({ hasText: 'Symbols demo' })
+    await row.getByRole('button', { name: /Install$/ }).click()
+    let dialog = page.getByRole('dialog')
+    await expect(dialog.getByText('Read reports and stock data (read-only)', { exact: true })).toBeVisible()
+    expect(installs).toHaveLength(0)
+    expect((await body(await adminAPI.get('/api/apps'))).apps.some(item => item.id === 'demo-symbols')).toBe(false)
+    await dialog.getByRole('button', { name: 'Cancel', exact: true }).click()
+    await expect(dialog).toBeHidden()
+    expect(installs).toHaveLength(0)
+    await row.getByRole('button', { name: /Install$/ }).click()
+    dialog = page.getByRole('dialog')
+    await dialog.getByRole('button', { name: 'Grant & install', exact: true }).click()
+    await expect(dialog).toBeHidden()
+    await expect.poll(async () => (await body(await adminAPI.get('/api/apps'))).apps.some(item => item.id === 'demo-symbols')).toBe(true)
+    expect(installs).toHaveLength(1)
+    const installed = (await body(await adminAPI.get('/api/apps'))).apps.find(item => item.id === 'demo-symbols')
+    expect(installed.scopes).toEqual(['query'])
+    await page.goto(base + '/apps/x/demo-symbols')
+    const frame = page.frameLocator('iframe')
+    await expect(frame.getByRole('heading', { name: /Stocks with reports/ })).toBeVisible()
+    await expect(frame.getByText('No matching stocks.', { exact: true })).toBeVisible()
+  } finally {
+    await context.close()
+    await body(await adminAPI.delete('/api/admin/apps/demo-symbols'))
+    await body(await adminAPI.post('/api/admin/apps/market/index', { data: { index_url: '' } }))
+  }
+})
+
 test('real Portal bridge shows each current OU only its permitted component', async ({ browser }) => {
   for (const [username, visible, hidden] of [['viewer-a', 'Private operations A', 'Private operations B'], ['viewer-b', 'Private operations B', 'Private operations A']]) {
     const api = await login(username), context = await browser.newContext({ storageState: await api.storageState(), locale: 'en-US' }), page = await context.newPage()
