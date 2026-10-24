@@ -84,7 +84,8 @@ passed all twelve jobs. The runtime digest selected here was pulled and exercise
 by that run's prebuilt image path:
 `gcr.io/distroless/static-debian12:nonroot@sha256:afa5c872c891853ca7fcf1f12c3edb23f7eeef36189728842dd51042ff57f7ab`.
 The release preparation changes only version metadata, empty-state explanation and
-this installation/configuration boundary. No schema change or new privilege is
+this installation/configuration boundary. The release job also passes its existing
+scoped token to the authenticated source recheck. No schema change or new privilege is
 introduced. The owner's current deployment instruction is the operator decision;
 it is not represented as completed credential or recipient verification.
 
@@ -95,3 +96,14 @@ Only after successful publication and download verification may the catalogue
 include Status. Then verify the actual market install, private pairing, healthy
 service and authenticated `/status` route. Keep optional monitors and notification
 routes unconfigured until the operator chooses their targets and credentials.
+
+## Initial publication attempt
+
+Run `40081125508` passed the complete verification job, including six archives,
+notification integration and all fifteen browser scenarios. Its publish job
+stopped at the source recheck with HTTP 401 because that step omitted `GH_TOKEN`.
+It stopped before registry login, image push, tag creation or release creation.
+Remote release/tag/package absence was checked before correcting the workflow.
+The correction passes the existing job-scoped token; it adds no permission and
+retains every source, CI, artifact and immutable-publication check. The failed
+attempt's evidence is retained rather than represented as a published version.

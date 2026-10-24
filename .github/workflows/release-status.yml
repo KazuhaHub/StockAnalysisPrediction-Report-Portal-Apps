@@ -108,6 +108,7 @@ jobs:
           path: ${{ runner.temp }}/release-bundle
       - name: Recheck reviewed source before registry writes
         env:
+          GH_TOKEN: ${{ github.token }}
           VERSION: ${{ inputs.version }}
         run: |
           python3 scripts/status-publish.py verify-source --plan "$RUNNER_TEMP/release-bundle/plan.json"
