@@ -279,3 +279,84 @@ test('private and public status pages meet automated accessibility checks', asyn
     await proxy(adminAPI, 'PUT', '/v1/manage/settings', { public_enabled: false, probes_paused: true, outbox_paused: true, portal_url: '', portal_networks: [] })
   }
 })
+
+test('narrow layouts keep long labels, enlarged text and keyboard controls usable', async ({ browser }) => {
+  const longLabel = 'internal-monitor-'.repeat(8).slice(0, 120)
+  await proxy(adminAPI, 'PUT', '/v1/manage/components', { label: longLabel, enabled: true, public_enabled: true, public_label: longLabel, revision: 0, grants: [], monitors: [] })
+  const context = await browser.newContext({ storageState: await adminAPI.storageState(), locale: 'en-US', viewport: { width: 320, height: 800 } })
+  try {
+    const page = await context.newPage()
+    await page.goto(base + '/apps/x/status')
+    const controls = page.frameLocator('iframe')
+    await expect(controls.getByRole('heading', { name: longLabel, exact: true })).toBeVisible()
+    const frame = page.frames().find(f => /\/app-assets\//.test(f.url()))
+    const reflow = async label => {
+      const size = await frame.evaluate(() => ({ width: document.documentElement.clientWidth, scroll: document.documentElement.scrollWidth }))
+      expect(size.scroll, label).toBeLessThanOrEqual(size.width + 1)
+    }
+    await reflow('private overview at 320 CSS pixels')
+    // Enlarge the app's fixed text sizes separately from native browser zoom.
+    const enlargedText = 'body { font-size:30px!important } h1 { font-size:48px!important } h2 { font-size:40px!important } h3 { font-size:34px!important } small,pre { font-size:24px!important } textarea { font-size:26px!important }'
+    await frame.addStyleTag({ content: enlargedText })
+    await reflow('private overview with doubled body text')
+    await controls.getByRole('button', { name: 'Manage', exact: true }).focus()
+    await page.keyboard.press('Enter')
+    await expect(controls.getByRole('button', { name: 'New component', exact: true })).toBeVisible()
+    await reflow('component list with doubled body text')
+    await controls.getByRole('button', { name: 'New component', exact: true }).click()
+    await controls.getByRole('button', { name: 'Add monitor', exact: true }).click()
+    await controls.getByLabel('Internal label', { exact: true }).first().fill('Keyboard reflow fixture')
+    await page.keyboard.press('Tab')
+    await expect(controls.getByLabel('Public label', { exact: true })).toBeFocused()
+    await page.keyboard.press('Tab')
+    await expect(controls.getByLabel('Enabled', { exact: true }).first()).toBeFocused()
+    await page.keyboard.press('Space')
+    await expect(controls.getByLabel('Enabled', { exact: true }).first()).toBeChecked()
+    await reflow('component and monitor editor with doubled body text')
+    await controls.getByRole('button', { name: 'Operations', exact: true }).click()
+    await expect(controls.getByLabel('Enable reviewed public projection', { exact: true })).toBeVisible()
+    await reflow('operations with doubled body text')
+    await proxy(adminAPI, 'PUT', '/v1/manage/settings', { public_enabled: true, probes_paused: true, outbox_paused: true, portal_url: '', portal_networks: [] })
+    const publicPage = await context.newPage()
+    // Preserve the public CSP: apply text enlargement through its same-origin CSS.
+    await publicPage.route('**/style.css', async route => {
+      const response = await route.fetch()
+      await route.fulfill({ response, body: await response.text() + enlargedText })
+    })
+    await publicPage.goto(statusBase + '/')
+    await expect(publicPage.getByRole('heading', { name: longLabel, exact: true })).toBeVisible()
+    expect(await publicPage.evaluate(() => getComputedStyle(document.body).fontSize)).toBe('30px')
+    expect(await publicPage.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1), 'public overview with doubled body text').toBe(true)
+  } finally {
+    await context.close()
+    await proxy(adminAPI, 'PUT', '/v1/manage/settings', { public_enabled: false, probes_paused: true, outbox_paused: true, portal_url: '', portal_networks: [] })
+  }
+})
+
+test('recreated accounts cannot reuse a prior direct grant or application token', async () => {
+  const username = 'recreated-reader'
+  await body(await adminAPI.post('/api/admin/users', { data: { username, password, role: 'user', primary_group: groupA } }))
+  const directPrincipal = async () => {
+    const token = await body(await adminAPI.post('/api/apps/status/token'))
+    const directory = await body(await adminAPI.get('/api/v1/extensions/status/principals?kind=user', { headers: { Authorization: 'Bearer ' + token.token } }))
+    return directory.items.find(item => item.label === username).principal
+  }
+  const originalPrincipal = await directPrincipal()
+  const component = (await proxy(adminAPI, 'PUT', '/v1/manage/components', { label: 'Direct identity grant fixture', enabled: true, public_enabled: false, public_label: '', revision: 0, grants: [{ principal: originalPrincipal, permission: 'read' }], monitors: [] })).item
+  const originalAccount = await login(username)
+  const originalList = await proxy(originalAccount, 'GET', '/v1/components')
+  expect(originalList.items.some(item => item.id === component.id)).toBe(true)
+  const originalToken = await body(await originalAccount.post('/api/apps/status/token'))
+  await body(await adminAPI.delete('/api/admin/users/' + username))
+  await body(await adminAPI.post('/api/admin/users', { data: { username, password, role: 'user', primary_group: groupA } }))
+  expect(await directPrincipal()).not.toBe(originalPrincipal)
+  const reused = await adminAPI.post('/api/v1/extensions/status/request', { headers: { Authorization: 'Bearer ' + originalToken.token }, data: { method: 'GET', path: '/v1/components' } })
+  expect(reused.status()).toBe(403)
+  const recreated = await login(username)
+  const visible = await proxy(recreated, 'GET', '/v1/components')
+  expect(visible.items.some(item => item.id === component.id)).toBe(false)
+  const freshToken = await body(await recreated.post('/api/apps/status/token'))
+  const detail = await recreated.post('/api/v1/extensions/status/request', { headers: { Authorization: 'Bearer ' + freshToken.token }, data: { method: 'GET', path: '/v1/components/' + component.id } })
+  expect(detail.status()).toBe(404)
+  expect(await detail.text()).not.toContain('Direct identity grant fixture')
+})

@@ -526,3 +526,22 @@ the ZIP. Its permissions were not changed. The verified ZIP and app management
 page are ready for the actual operator upload/install confirmation. Remaining
 provider, PostgreSQL TLS/read-only identity, manual/operator, paired rollout and
 immutable distribution/catalogue gates are preserved in the acceptance ledger.
+
+
+## Narrow-layout and recreated-account acceptance (2026-10-23)
+
+The published-platform browser suite now has nine scenarios. New reflow coverage
+reproduced a 367-pixel document inside a 294-pixel frame after text enlargement.
+The app's shared stylesheet now permits intrinsic inputs, labels, fieldsets and
+grid/flex children to shrink and wraps long labels. Both the sandbox app and
+embedded public website use this fix. Tests cover 320 CSS pixels, doubled text,
+120-character labels, management forms, operations and keyboard Enter/Tab/Space;
+public CSS enlargement preserves the actual CSP. Full browser and automated
+accessibility acceptance passes with the verified v2026.43.2 Portal release.
+Native browser zoom and manual screen-reader review are not inferred.
+
+The second new scenario verifies direct grants across account deletion/recreation:
+opaque identities change, the old token is rejected, the new account cannot list
+the formerly granted component and detail returns nondisclosing 404. All operations
+use disposable local fixture accounts. Production still awaits installation
+confirmation, and its verified 720b1bc candidate predates the reflow update.
