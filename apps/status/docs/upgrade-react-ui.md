@@ -39,8 +39,17 @@ database and its storage key, never from reusing an invalid installation token.
    reviewed change. The catalogue must never point at an absent release.
 2. In Portal application management, fetch the market and review the Status
    version and unchanged `extension.read` / `extension.manage` permissions.
-   Install the selected immutable release. Do not upload an unverified development
-   ZIP or modify installed database assets directly.
+   Portal v2026.43.5 shows an installed badge rather than an upgrade action.
+   With the verified backup available, use the Installed apps control to uninstall
+   only the old Status frontend registration, fetch the market again and install
+   the selected immutable release through its permission review. This creates a
+   short frontend maintenance window; keep the independent service/data/keys.
+   Do not delete the Status deployment or database. Do not upload an unverified
+   development ZIP or modify installed database assets directly.
+
+   This compatibility path is verified against the released Portal source. A
+   future generic market-upgrade action can replace these frontend-only steps;
+   this plugin release does not require a Portal business-code change.
 3. Confirm the old app token/connection is denied. Register the backend for the
    new installation, explicitly preserving its narrow private network/port/route
    policy. Copy the new issuer/instance/audience/key ID and matching signing key
