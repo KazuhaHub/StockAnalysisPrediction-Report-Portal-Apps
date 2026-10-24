@@ -27,9 +27,11 @@ func TestBillingAuthenticationFailureRemainsUnknown(t *testing.T) {
 			return &http.Response{StatusCode: 401, Header: http.Header{}, Body: io.NopCloser(strings.NewReader("fixture"))}, nil
 		})}, nil
 	}}
-	result := prober.Check(context.Background(), Monitor{Kind: "deepseek"})
-	if result.Outcome != "unknown" || result.ReasonCode != "authentication_failed" {
-		t.Fatalf("authentication inferred exhaustion: %+v", result)
+	for kind, reason := range map[string]string{"deepseek": "authentication_failed", "qwen": "billing_permission_required"} {
+		result := prober.Check(context.Background(), Monitor{Kind: kind})
+		if result.Outcome != "unknown" || result.ReasonCode != reason || len(result.Measurements.Balances) != 0 {
+			t.Fatalf("%s authentication inferred exhaustion: %+v", kind, result)
+		}
 	}
 }
 func TestProviderRetryAfterDefersNextObservation(t *testing.T) {

@@ -545,3 +545,26 @@ opaque identities change, the old token is rejected, the new account cannot list
 the formerly granted component and detail returns nondisclosing 404. All operations
 use disposable local fixture accounts. Production still awaits installation
 confirmation, and its verified 720b1bc candidate predates the reflow update.
+
+
+## Process independence and lifecycle audit (2026-10-23)
+
+Thirteen released-platform browser scenarios pass locally, including actual
+Status and Portal process outages, restart recovery, continued scheduled checks
+with Portal stopped, browser closure mid-probe, and backend disable/reinstall/
+uninstall/fresh-unpaired behavior. Authentication, home/report reads and queue
+APIs stay available during Status outage and after app uninstall. A stopped Portal
+does not stop the independent observer or its explicitly approved public reads.
+No paid workflow is executed. All stopped processes, accounts, recipients and
+components belong to the isolated test fixture.
+
+New unit checks cover nonpositive exact-decimal amounts in both provider families,
+provider-specific authentication/permission errors, and exact TTL/private-public
+stale transitions retaining the original last-success time. The pre-release audit
+maps all named failure drills and records remaining environment, operator/manual,
+immutable release, installation and marketplace gates. It makes no full-completion
+claim. Production still awaits the operator installation confirmation.
+
+Full CI at e96cf69 passed on the PR run. Its push run initially failed only while
+Docker Hub returned HTTP 502 for the Go base-image manifest, before building app
+code; the failed job was rerun and passed. Both exact-source runs are successful.

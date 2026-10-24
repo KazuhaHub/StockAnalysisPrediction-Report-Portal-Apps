@@ -5,6 +5,7 @@ const { tmpdir, networkInterfaces } = require('node:os')
 const { join, resolve } = require('node:path')
 const { randomBytes } = require('node:crypto')
 const net = require('node:net')
+const http = require('node:http')
 const portalBinary = process.env.PORTAL_BINARY
 const statusBinary = process.env.STATUS_BINARY
 let folder, portal, service, base, statusBase, adminAPI, groupA, groupB, componentA, componentB
@@ -346,6 +347,7 @@ test('recreated accounts cannot reuse a prior direct grant or application token'
   const originalAccount = await login(username)
   const originalList = await proxy(originalAccount, 'GET', '/v1/components')
   expect(originalList.items.some(item => item.id === component.id)).toBe(true)
+  expect((await proxy(originalAccount, 'GET', '/v1/components/' + component.id)).item.label).toBe('Direct identity grant fixture')
   const originalToken = await body(await originalAccount.post('/api/apps/status/token'))
   await body(await adminAPI.delete('/api/admin/users/' + username))
   await body(await adminAPI.post('/api/admin/users', { data: { username, password, role: 'user', primary_group: groupA } }))
@@ -359,4 +361,170 @@ test('recreated accounts cannot reuse a prior direct grant or application token'
   const detail = await recreated.post('/api/v1/extensions/status/request', { headers: { Authorization: 'Bearer ' + freshToken.token }, data: { method: 'GET', path: '/v1/components/' + component.id } })
   expect(detail.status()).toBe(404)
   expect(await detail.text()).not.toContain('Direct identity grant fixture')
+})
+
+
+test('closing the browser does not cancel a probe or stop the background scheduler', async ({ browser }) => {
+  const address = Object.values(networkInterfaces()).flat().find(item => item.family === 'IPv4' && !item.internal && /^(10\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[01])\.)/.test(item.address))?.address
+  const held = [], requests = []
+  const receiver = http.createServer((request, response) => {
+    requests.push(request.url)
+    if (requests.length === 1) held.push(response)
+    else { response.writeHead(204); response.end() }
+  })
+  await new Promise((resolve, reject) => { receiver.once('error', reject); receiver.listen(0, '0.0.0.0', resolve) })
+  const port = receiver.address().port
+  const context = await browser.newContext({ storageState: await adminAPI.storageState(), locale: 'en-US' })
+  try {
+    const component = (await proxy(adminAPI, 'PUT', '/v1/manage/components', {
+      label: 'Process-owned scheduler fixture', enabled: true, public_enabled: false, public_label: '', revision: 0, grants: [],
+      monitors: [{ label: 'Local read-only fixture', kind: 'http', enabled: true, interval_seconds: 60, timeout_seconds: 15, config: { version: 1, url: 'http://' + address + ':' + port + '/health', plain_http: true, networks: [address + '/32'], expected_status: 204 } }]
+    })).item
+    const page = await context.newPage()
+    await page.goto(base + '/apps/x/status')
+    await expect(page.frameLocator('iframe').getByRole('heading', { name: 'Process-owned scheduler fixture', exact: true })).toBeVisible()
+    const operation = await proxy(adminAPI, 'GET', '/v1/manage/operations')
+    await proxy(adminAPI, 'POST', '/v1/manage/resume', { queue_fingerprint: operation.queue_fingerprint, probes: true, outbox: false })
+    await expect.poll(() => held.length, { timeout: 10000 }).toBe(1)
+    await context.close()
+    expect(service.exitCode).toBeNull()
+    held[0].writeHead(204); held[0].end()
+    const snapshot = async () => (await proxy(adminAPI, 'GET', '/v1/components/' + component.id)).item.monitors[0]
+    await expect.poll(async () => (await snapshot()).outcome, { timeout: 10000 }).toBe('success')
+    expect((await snapshot()).observed_at).not.toBe('')
+    const configured = (await proxy(adminAPI, 'GET', '/v1/manage/components')).items.find(item => item.id === component.id).monitors[0]
+    await proxy(adminAPI, 'POST', '/v1/manage/probes/request', { id: configured.id, revision: configured.revision })
+    await expect.poll(() => requests.length, { timeout: 10000 }).toBe(2)
+    await expect.poll(async () => (await snapshot()).state, { timeout: 10000 }).toBe('operational')
+    const final = await proxy(adminAPI, 'GET', '/v1/manage/operations')
+    expect(final.settings.outbox_paused).toBe(true)
+    expect(requests).toEqual(['/health', '/health'])
+  } finally {
+    await context.close()
+    await proxy(adminAPI, 'PUT', '/v1/manage/settings', { public_enabled: false, probes_paused: true, outbox_paused: true, portal_url: '', portal_networks: [] })
+    held.forEach(response => response.destroy())
+    receiver.closeAllConnections()
+    await new Promise(resolve => receiver.close(resolve))
+  }
+})
+
+test('Status outage leaves Portal authentication, reading and queue available and recovers after restart', async ({ browser }) => {
+  const context = await browser.newContext({ storageState: await adminAPI.storageState(), locale: 'en-US' })
+  const restartStatus = async () => {
+    service = launch(statusBinary, ['serve', '-listen', '0.0.0.0:' + new URL(statusBase).port, '-database', join(folder, 'status.db'), '-storage-key-file', join(folder, 'storage.key'), '-pairing-file', join(folder, 'pairing.json')])
+    await ready(statusBase + '/readyz', service)
+  }
+  try {
+    const page = await context.newPage()
+    await page.goto(base + '/apps/x/status')
+    const frame = page.frameLocator('iframe')
+    await expect(frame.getByRole('heading', { name: 'Private operations A', exact: true })).toBeVisible()
+    service.kill('SIGTERM')
+    await expect.poll(() => service.exitCode, { timeout: 10000 }).not.toBeNull()
+    await frame.getByRole('button', { name: 'Refresh', exact: true }).click()
+    await expect(frame.getByRole('alert')).toBeVisible()
+    await expect(frame.getByRole('heading', { name: 'Private operations A', exact: true })).toHaveCount(0)
+    for (const path of ['/healthz', '/api/me', '/api/home', '/api/admin/batch/queue']) {
+      const response = await adminAPI.get(path)
+      expect(response.status(), 'Portal remains available: ' + path).toBe(200)
+    }
+    await restartStatus()
+    await frame.getByRole('button', { name: 'Refresh', exact: true }).click()
+    await expect(frame.getByRole('heading', { name: 'Private operations A', exact: true })).toBeVisible()
+  } finally {
+    if (service.exitCode !== null) await restartStatus()
+    await context.close()
+  }
+})
+
+test('Portal outage does not stop scheduled Status observations or approved public reads', async () => {
+  const address = Object.values(networkInterfaces()).flat().find(item => item.family === 'IPv4' && !item.internal && /^(10\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[01])\.)/.test(item.address))?.address
+  const held = [], requests = []
+  const receiver = http.createServer((request, response) => {
+    requests.push(request.url)
+    if (requests.length === 1) held.push(response)
+    else { response.writeHead(204); response.end() }
+  })
+  await new Promise((resolve, reject) => { receiver.once('error', reject); receiver.listen(0, '0.0.0.0', resolve) })
+  const restartPortal = async () => {
+    portal = launch(portalBinary, [], { RP_CONFIG: join(folder, 'portal.yaml') })
+    await ready(base + '/healthz', portal)
+  }
+  try {
+    const component = (await proxy(adminAPI, 'PUT', '/v1/manage/components', {
+      label: 'Private Portal outage fixture', enabled: true, public_enabled: true, public_label: 'Approved independence fixture', revision: 0, grants: [],
+      monitors: [{ label: 'Independent local read', kind: 'http', enabled: true, interval_seconds: 30, timeout_seconds: 15, config: { version: 1, url: 'http://' + address + ':' + receiver.address().port + '/health', plain_http: true, networks: [address + '/32'], expected_status: 204 } }]
+    })).item
+    await proxy(adminAPI, 'PUT', '/v1/manage/settings', { public_enabled: true, probes_paused: true, outbox_paused: true, portal_url: '', portal_networks: [] })
+    const operation = await proxy(adminAPI, 'GET', '/v1/manage/operations')
+    await proxy(adminAPI, 'POST', '/v1/manage/resume', { queue_fingerprint: operation.queue_fingerprint, probes: true, outbox: false })
+    await expect.poll(() => held.length, { timeout: 10000 }).toBe(1)
+    portal.kill('SIGTERM')
+    await expect.poll(() => portal.exitCode, { timeout: 10000 }).not.toBeNull()
+    held[0].writeHead(204); held[0].end()
+    const publicSnapshot = async () => {
+      const response = await fetch(statusBase + '/public/v1/status')
+      expect(response.status).toBe(200)
+      const body = await response.json()
+      expect(JSON.stringify(body)).not.toContain('Private Portal outage fixture')
+      return body.items.find(item => item.id === component.id)
+    }
+    await expect.poll(async () => (await publicSnapshot()).observed_at, { timeout: 10000 }).not.toBe('')
+    // A second interval runs with Portal still stopped, without a browser or API trigger.
+    await expect.poll(async () => (await publicSnapshot()).state, { timeout: 40000, intervals: [250, 500, 1000] }).toBe('operational')
+    expect(requests.length).toBeGreaterThanOrEqual(2)
+    expect(portal.exitCode).not.toBeNull()
+    expect(service.exitCode).toBeNull()
+    expect((await fetch(statusBase + '/readyz')).status).toBe(200)
+  } finally {
+    if (portal.exitCode !== null) await restartPortal()
+    await proxy(adminAPI, 'PUT', '/v1/manage/settings', { public_enabled: false, probes_paused: true, outbox_paused: true, portal_url: '', portal_networks: [] })
+    held.forEach(response => response.destroy())
+    receiver.closeAllConnections()
+    await new Promise(resolve => receiver.close(resolve))
+  }
+})
+
+test('backend disable, reinstall and uninstall revoke access without changing Portal or the standalone service', async ({ browser }) => {
+  const endpoint = '/api/admin/apps/status/backend'
+  const original = await body(await adminAPI.get(endpoint))
+  const token = await body(await adminAPI.post('/api/apps/status/token'))
+  const save = (current, enabled) => adminAPI.put(endpoint, { data: { revision: current.revision, label: current.label, base_url: current.base_url, audience: current.audience, enabled, key_id: '', signing_key: '', policy: current.policy } })
+  const disabled = await body(await save(original, false))
+  const denied = await adminAPI.post('/api/v1/extensions/status/request', { headers: { Authorization: 'Bearer ' + token.token }, data: { method: 'GET', path: '/v1/components' } })
+  expect(denied.status()).toBe(403)
+  await body(await save(disabled, true))
+  expect((await proxy(adminAPI, 'GET', '/v1/components')).items.some(item => item.id === componentA.id)).toBe(true)
+  const bundle = readFileSync(resolve(__dirname, '../../../dist/status', JSON.parse(readFileSync(resolve(__dirname, '../app.json'), 'utf8')).version, 'status.zip'))
+  await body(await adminAPI.post('/api/admin/apps/install', { multipart: { bundle: { name: 'status.zip', mimeType: 'application/zip', buffer: bundle } } }))
+  const reinstalled = await body(await adminAPI.get(endpoint))
+  expect(reinstalled.enabled).toBe(false)
+  expect(reinstalled.has_key).toBe(false)
+  expect(reinstalled.instance_id).not.toBe(original.instance_id)
+  const stale = await adminAPI.post('/api/v1/extensions/status/request', { headers: { Authorization: 'Bearer ' + token.token }, data: { method: 'GET', path: '/v1/components' } })
+  expect(stale.status()).toBe(403)
+  await body(await adminAPI.delete('/api/admin/apps/status'))
+  expect((await adminAPI.get(endpoint)).status()).toBe(404)
+  expect((await adminAPI.get('/app-assets/status/index.html')).status()).toBe(404)
+  const installed = await body(await adminAPI.get('/api/apps'))
+  expect(installed.apps.some(item => item.id === 'status')).toBe(false)
+  // A fresh installation is safely usable only after a deliberate backend pairing.
+  await body(await adminAPI.post('/api/admin/apps/install', { multipart: { bundle: { name: 'status.zip', mimeType: 'application/zip', buffer: bundle } } }))
+  expect((await adminAPI.get(endpoint)).status()).toBe(404)
+  const context = await browser.newContext({ storageState: await adminAPI.storageState(), locale: 'en-US' })
+  try {
+    const page = await context.newPage()
+    await page.goto(base + '/apps/x/status')
+    const frame = page.frameLocator('iframe')
+    await expect(frame.getByRole('alert')).toBeVisible()
+    await expect(frame.getByText('Backend compatibility could not be verified. Status data is not displayed until the connection and service capabilities are verified.', { exact: true })).toBeVisible()
+    await expect(frame.getByRole('heading', { name: 'Private operations A', exact: true })).toHaveCount(0)
+    await expect(frame.getByRole('button', { name: 'Manage', exact: true })).toHaveCount(0)
+  } finally {
+    await context.close()
+    await body(await adminAPI.delete('/api/admin/apps/status'))
+  }
+  for (const path of ['/healthz', '/api/me', '/api/home', '/api/admin/batch/queue']) expect((await adminAPI.get(path)).status(), 'Portal unchanged after app uninstall: ' + path).toBe(200)
+  expect((await fetch(statusBase + '/readyz')).status).toBe(200)
+  expect(service.exitCode).toBeNull()
 })

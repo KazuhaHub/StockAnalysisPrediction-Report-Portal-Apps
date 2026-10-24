@@ -103,3 +103,62 @@ func TestSnapshotDoesNotInventAnObservationAndExposesPause(t *testing.T) {
 		t.Fatal("pause not visible")
 	}
 }
+
+func TestLastSuccessExpiresInPrivateAndPublicSnapshotsWithoutRewritingItsTime(t *testing.T) {
+	s := testStore(t)
+	admin := protocol.Viewer{Subject: "admin", Role: "admin"}
+	component := monitoredComponent(t, s)
+	component.PublicEnabled = true
+	component.PublicLabel = "Approved health"
+	component, err := s.SaveComponent(admin, component)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.db.Exec(`INSERT INTO settings(key,value) VALUES('public_enabled','1')`); err != nil {
+		t.Fatal(err)
+	}
+	first := time.Now().UTC().Truncate(time.Millisecond).Add(time.Second)
+	last := first.Add(2 * time.Minute)
+	for _, at := range []time.Time{first, last} {
+		monitor, ok, err := s.ClaimDue(at)
+		if err != nil || !ok {
+			t.Fatalf("claim=%v %v", ok, err)
+		}
+		if err := s.Record(monitor, Result{Outcome: "success", ReasonCode: "reachable"}, at); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, test := range []struct {
+		name  string
+		now   time.Time
+		stale bool
+	}{
+		{"fresh", last.Add(time.Minute), false},
+		{"exact-ttl", last.Add(3 * time.Minute), false},
+		{"expired", last.Add(3*time.Minute + time.Millisecond), true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			private, err := s.Component(admin, component.ID, test.now)
+			if err != nil {
+				t.Fatal(err)
+			}
+			expected := "operational"
+			if test.stale {
+				expected = "unknown"
+			}
+			if private.State != expected || private.Stale != test.stale || len(private.Monitors) != 1 || private.Monitors[0].Stale != test.stale {
+				t.Fatalf("private expiry=%+v", private)
+			}
+			if private.ObservedAt != last.Format(time.RFC3339Nano) || private.Monitors[0].LastSuccessAt != last.Format(time.RFC3339Nano) {
+				t.Fatal("reading stale evidence invented a new success time")
+			}
+			public, err := s.PublicComponentPage(test.now, 0, 50)
+			if err != nil || len(public.Items) != 1 {
+				t.Fatalf("public=%+v err=%v", public, err)
+			}
+			if public.Items[0].State != expected || public.Items[0].Stale != test.stale || public.Items[0].Label != "Approved health" || len(public.Items[0].Monitors) != 0 {
+				t.Fatalf("public expiry=%+v", public.Items[0])
+			}
+		})
+	}
+}

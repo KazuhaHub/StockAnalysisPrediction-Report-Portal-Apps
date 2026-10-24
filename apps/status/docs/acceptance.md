@@ -7,17 +7,17 @@ or browser test is evidence for its own behavior, not a claim of full acceptance
 | Package | Current evidence | Remaining gate |
 | --- | --- | --- |
 | S00 | Repository/capability inventory and official adapter fixtures; authorized target inspection now verifies Portal v2026.43.2, Dify image 1.17.1, Docker Compose 5.3.0 and PostgreSQL without TLS | Verified PostgreSQL TLS path and read-only identity, provider account/site/authorization verification |
-| S01 | Portal paired backend platform, migration 0008, identity/scopes/directory and negative tests; PR #142 CI passed at b23f43ce after main integration; local Go/PG/race/web/browser checks passed | Portal #141/#142 are merged; v2026.43.2 Beta is published and deployed; full main CI, isolated PG/released-binary upgrade, final backup, business-count and forecast-setting continuity, health and offline post-backup restore verified; remaining installed-app update acceptance |
+| S01 | Portal paired backend platform, migration 0008, identity/scopes/directory and negative tests; PR #142 CI passed at b23f43ce after main integration; local Go/PG/race/web/browser checks passed | Portal #141/#142 are merged; v2026.43.2 Beta is published and deployed; full main CI, isolated PG/released-binary upgrade, final backup, business-count and forecast-setting continuity, health and offline post-backup restore verified; installed-app disable/reinstall/uninstall and fresh-unpaired behavior now pass against the released Portal; production install/pairing and released-version rollout remain |
 | S02 | Public shared repo; approved independent schema; locking/key/backup/restore tests; CLI | Wrong-key/future-schema/missing-product/occupied-rollback rejection and live continuity now tested; released-version operator upgrade/rollback remains gated |
 | S03 | Signed private API, explicit public DTOs, read/finance grants, filtered incident counts/detail; two-OU browser check | Component paging/search/count/detail/export authority and separate finance projection now tested; real released-Portal account deletion/recreation now proves changed opaque principal, rejected old application token, no inherited direct grant and nondisclosing hidden detail; final release/production authority review remains |
 | S04 | Four workers, persisted leases, credential/target revision fences, read-only probes and signed heartbeat | Abandoned lease/restart evidence and manual saved-configuration controls now tested; Guarded PostgreSQL hostname/TLS negotiation, untrusted/mismatched certificate refusal, no plaintext fallback and TLS/auth/query/teardown timeout and wire-release drills now pass; HTTP header/body timeouts, same-target redirect refusal and subsequent DNS rebinding refusal now tested; actual target TLS/read-only identity acceptance remains |
 | S05 | DeepSeek exact-decimal/currency fixtures, Qwen cash/credit distinction, ACS3 official vector, pinned endpoints | Unsupported capability and setup hints tested; Shared-account references and cross-component/currency guards tested; remaining deployment-specific non-production billing authorization |
-| S06 | Confirmation/hysteresis reducer, incident transitions, maintenance and hourly aggregates | Partial-hour and missing/paused-time accounting plus both history charts tested; Retrospective full-hour corrections, expired-evidence fallback, multi-bucket evidence and retention boundary now tested; Configurable bounded retention and public paging tested; remaining broader failure-drill audit |
+| S06 | Confirmation/hysteresis reducer, incident transitions, maintenance and hourly aggregates | Partial-hour and missing/paused-time accounting plus both history charts tested; Retrospective full-hour corrections, expired-evidence fallback, multi-bucket evidence and retention boundary now tested; Configurable bounded retention and public paging tested; named offline failure drills are mapped in requirement-audit.md, including TTL boundary/private-public expiry; live target/operator acceptance remains |
 | S07 | Atomic immutable outbox, namespace preflight, same-occurrence retries, publisher revision fences and queue review | Two-component/two-OU inbox routing, duplicate/changed-content checks, restart lease retry, uncertain restore/discard and storm suppression now tested; Real isolated Portal capture-to-signed-WebHook drill now covers source quota cooldown, lost capture acknowledgement/deduplication, channel Retry-After, stable delivery IDs and financial redaction; real SMTP/Slack/operator acceptance remains |
 | S08 | Three-locale sandbox ZIP; admin component/monitor/grant/credential/operations UI; browser multi-monitor save | Form-error input retention/focus, duplicate-action guard, operations bridge budget, dark theme, locale switching and keyboard navigation tested; Component detail/export and visible idle polling added; Runtime capability refusal/retry and paused first-start now tested; Automated WCAG A/AA checks now cover light/dark mobile overview, component list/editor, operations and public overview; primary contrast and keyboard table scrolling fixed; 320-CSS-pixel reflow with doubled app text, long labels and keyboard Enter/Tab/Space now tested in private overview/list/editor/operations and the public page; intrinsic field sizing fixed without weakening CSP; remaining manual screen-reader/native-browser-zoom audit |
 | S09 | Private redirect and exact public proxy templates; real browser prefix/public-isolation check | Real nginx allowlist/assets/history passed CI at 05787ac; bounded peer/global rate budgets and forwarded-header bypass tests now pass; production capacity remains deployment-specific |
 | S10 | Deterministic local ZIP/checksum and pure-Go service archive builder; executable/version/checksum/repeated-byte verification; six-target CI added; service Dockerfile/compose | All six artifact target jobs passed at 8d580d9; complete CI passed at 47824bb; independent Linux candidate installed and isolated container restart/default-access smoke passed on the target host; A guarded manual publication workflow now verifies exact-main CI, six archives, released-Portal integration, prebuilt image bytes, immutable asset download and acceptance records; its live publication, migration/index compatibility and operator upgrade/rollback remain gated |
-| S11 | Local Go race/vet/build/vulnerability checks; CLI storage tests; eight frontend contract tests; nine real browser scenarios plus the isolated Portal/channel failure drill | Full requirement-by-requirement audit, remaining failure drills and operator sign-off; first complete CI run passed at 636db6f |
+| S11 | Local Go race/vet/build/vulnerability checks; CLI storage tests; eight frontend contract tests; thirteen real browser scenarios plus the isolated Portal/channel failure drill | Pre-release requirement audit is recorded in requirement-audit.md; actual environment, final manual/operator acceptance and release/catalogue rollout remain; first complete CI run passed at 636db6f |
 
 Publication tooling now has sixteen focused policy tests (twenty-five Python
 checks in total), including source/CI admission, hostile artifacts, metadata
@@ -86,3 +86,26 @@ deletes and recreates its account, and verifies a different opaque principal,
 the hidden label for detail. This complements the existing dual-driver Portal
 identity-generation tests and current-OU browser checks. It runs only in isolated
 fixture databases and does not create or delete production accounts.
+
+## Independent-process and installation lifecycle drills
+
+The complete browser suite now has thirteen scenarios against the published
+Portal binary. The browser-close drill holds a real HTTP probe across context
+closure, then observes another queued background check with no browser open.
+Status outage is an actual service process stop: Portal authentication, report
+reads and queue stay available, and the app recovers after service restart.
+The inverse drill keeps Portal stopped for a complete later scheduled interval;
+Status completes fresh observations and serves only the approved public DTO.
+
+The lifecycle drill disables the backend, verifies token denial, reenables it,
+reinstalls the ZIP and verifies cleared keys/new instance, then uninstalls it and
+verifies registration/asset removal. A fresh unpaired installation displays no
+component data or management controls. Portal's normal read/auth/queue APIs and
+the independent service remain available. The local fixture is removed afterward;
+none of these tests changes production installation or stops production services.
+
+Unit evidence now explicitly covers zero/negative fractional/large balances for
+both provider families, typed authentication/permission failures without balances,
+and private/public last-success expiry at and immediately after TTL without
+rewriting evidence time. The [requirement audit](requirement-audit.md) separates
+this verified fixture scope from the unfinished environment/publication gates.

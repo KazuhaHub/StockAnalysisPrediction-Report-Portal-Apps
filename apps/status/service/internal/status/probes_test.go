@@ -103,3 +103,27 @@ func TestAlibabaACS3MatchesOfficialVector(t *testing.T) {
 		t.Fatal("ACS3 signature differs from official fixed-input vector")
 	}
 }
+
+func TestNonpositiveProviderBalancesNeverBecomeHealthy(t *testing.T) {
+	config := ProbeConfig{Currency: "CNY", LowBalance: "0", RecoveryBalance: "0.01"}
+	for _, amount := range []string{"0", "-0.000000000001", "-12345678901234567890.12"} {
+		t.Run(amount, func(t *testing.T) {
+			deepseek, err := json.Marshal(map[string]any{"is_available": true, "balance_infos": []map[string]string{{"currency": "CNY", "total_balance": amount, "granted_balance": "0", "topped_up_balance": "0"}}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			ds := deepSeekResult(deepseek, config)
+			if ds.Outcome != "degraded" || ds.ReasonCode != "low_balance" || len(ds.Measurements.Balances) != 1 || ds.Measurements.Balances[0].Total != amount {
+				t.Fatalf("nonpositive DeepSeek amount was changed or reported healthy: %+v", ds)
+			}
+			qwen, err := json.Marshal(map[string]any{"Success": true, "Code": "200", "Data": map[string]string{"Currency": "CNY", "AvailableAmount": amount, "AvailableCashAmount": amount, "CreditAmount": "80.25"}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			qw := qwenResult(qwen, config)
+			if qw.Outcome != "degraded" || qw.ReasonCode != "low_credit" || len(qw.Measurements.Balances) != 1 || qw.Measurements.Balances[0].Total != amount || qw.Measurements.Balances[0].Credit != "80.25" {
+				t.Fatalf("positive credit line hid exhausted available funds: %+v", qw)
+			}
+		})
+	}
+}
