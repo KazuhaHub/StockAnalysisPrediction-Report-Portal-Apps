@@ -2,15 +2,25 @@
 
 ## Scope and prerequisites
 
-This runbook applies to the unreleased `0.1.0-dev` development build. Do not change
-the Portal default marketplace or install it into production until the acceptance
-checklist and both dependency PRs are approved. The application sources remain in
-the shared Apps monorepo; no separate Status repository is needed.
+This runbook applies to the unreleased `0.1.0-dev` development build. Do not publish
+it or change the default marketplace before the acceptance and immutable-artifact
+gates are complete. The application sources remain in the shared Apps monorepo;
+no separate Status repository is needed.
 
-Use a Portal build containing notification PR #141 and platform PR #142. The
-Portal connection uses migration 0008; its frozen baseline is unchanged. Back up
-Portal before upgrading, following its existing backup runbook. Status has its own
-SQLite database and its own backup procedure below. They are separate backups.
+An authorized operator may install a reviewed, checksum-verified CI candidate for
+controlled environment acceptance after the platform prerequisites are deployed.
+That installation is how the operator configures and verifies real target access;
+it is not a public app release or completed production rollout. Confirm the app's
+exact permissions, keep probes/outbox paused and public access disabled initially,
+and leave components administrator-only until their grants are deliberately reviewed.
+Enable only the selected read-only checks after their target/credential review.
+Do not send secrets in chat or test messages to unapproved external recipients.
+
+The notification/platform prerequisites are published as Portal `v2026.43.2` and
+are deployed on the authorized target. The connection uses migration 0008; the
+frozen baseline is unchanged. Other deployments must back up and upgrade Portal
+using its operator runbook. Status has a separate SQLite database, storage key and
+backup procedure below. A Portal backup does not replace a Status backup.
 
 Provide a private service network or verified HTTPS endpoint for Status. Do not
 publish its private `/v1/*` API, heartbeat ingress or health endpoints through a
