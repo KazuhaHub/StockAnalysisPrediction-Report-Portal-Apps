@@ -114,8 +114,9 @@ The authorized target's previous PostgreSQL TLS gateway, scoped probe identity,
 trust override, verification receipts and rotation/rollback procedure are recorded
 in [the PostgreSQL target runbook](postgresql-target-deployment.md). The unused
 gateway container was removed at the owner's request on 2026-10-24. PostgreSQL
-monitoring is not currently ready; validate a replacement connection before
-enabling it. Native database SSL and existing application credentials were
+monitoring is not currently ready; validate the [local socket replacement](postgresql-local-socket.md)
+before enabling it. It needs a matching new app/service build and a narrowly
+mounted trusted socket, rather than another proxy container. Native database SSL and existing application credentials were
 retained. Historical one-shot checks do not establish a currently reachable
 monitor or bypass marketplace installation/pairing.
 

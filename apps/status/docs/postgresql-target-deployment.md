@@ -15,6 +15,11 @@ replacement connection before activation. Do not weaken verified network TLS or
 automatically recreate this gateway as a normal Status rollout step. Retained
 start commands are recovery reference only.
 
+The [explicit local socket alternative](postgresql-local-socket.md) adds no helper
+container and leaves native database SSL unchanged. Its source/fixture acceptance
+does not establish authorization on this target; validate that route with the
+dedicated credential before enabling the monitor.
+
 This records the authorized target deployment on 2026-10-23 Pacific. It is an
 infrastructure runbook, not a new Portal migration or a completed Status rollout.
 The server directory is `/data/report-portal/status-postgres`. It is owner-only;

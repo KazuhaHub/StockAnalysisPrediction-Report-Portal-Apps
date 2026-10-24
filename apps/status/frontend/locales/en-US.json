@@ -165,5 +165,10 @@
   "historyRetention": "History retention (days)",
   "retentionHint": "Raw observations: 1–30 days. Aggregates, resolved incidents and completed notices: up to 90 days, at least the raw retention. Active incidents and pending notices retain required evidence. Shorter periods are applied by background cleanup.",
   "backendUpgradeRequired": "The paired Status backend does not support the capabilities required by this app. Deploy the matching verified service artifact and refresh.",
-  "backendNotReady": "Backend compatibility could not be verified. Status data is not displayed until the connection and service capabilities are verified."
+  "backendNotReady": "Backend compatibility could not be verified. Status data is not displayed until the connection and service capabilities are verified.",
+  "postgresConnection": "PostgreSQL connection",
+  "postgresTLS": "Network with verified TLS",
+  "postgresUnix": "Local Unix socket",
+  "postgresUnixHint": "Uses the database socket mounted by your deployment administrator. No network host or proxy container is needed.",
+  "postgresSocketHint": "The local database connection is unavailable. Ask the deployment administrator to check the socket mount and database access."
 }

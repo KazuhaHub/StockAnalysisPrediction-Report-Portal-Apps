@@ -32,7 +32,7 @@
   }
   function text(key, className = '') { return h('p', { class: className }, t(key)) }
   function button(key, action, primary = false) { return h('button', { type: 'button', class: primary ? 'primary' : '', onClick: action }, t(key)) }
-  function field(key, input) { return h('label', {}, t(key), input) }
+  function field(key, input) { if (input.tagName === 'SELECT') input.setAttribute('aria-label', t(key)); return h('label', {}, t(key), input) }
   function input(value = '', type = 'text') { return h('input', { value, type, autoComplete: type === 'password' ? 'new-password' : 'off' }) }
   function check(key, value = false) { const node = h('input', { type: 'checkbox', checked: value }); return { node, label: h('label', { class: 'check' }, node, t(key)) } }
   function select(options, value, multiple = false) {
@@ -201,22 +201,30 @@
     const kind = select(['http', 'dify', 'postgres', 'deepseek', 'qwen', 'heartbeat'].map(id => [id, t(id)]), value.kind || 'http'), name = input(value.label), enabled = check('enabled', value.enabled !== false), interval = input(value.interval_seconds || 60, 'number'), timeout = input(value.timeout_seconds || 5, 'number')
     const credential = select([['', t('none')], ...credentials.map(c => [c.id, c.label + ' · ' + t(c.kind)])], value.credential_id || '')
     const config = value.config || {}, accountRef = input(config.account_ref), url = input(config.url), expectedStatus = input(config.expected_status || '', 'number'), bodyContains = input(config.body_contains), hostName = input(config.host), port = input(config.port || 5432, 'number'), database = input(config.database), networks = h('textarea', { value: (config.networks || []).join('\n'), rows: 2 }), plain = check('plainHTTP', !!config.plain_http), low = input(config.low_balance), recovery = input(config.recovery_balance), currency = select([['CNY', 'CNY'], ['USD', 'USD']], config.currency || 'CNY'), site = select([['china', t('china')], ['international', t('international')]], config.site || 'china')
+    const postgresTransport = select([['tls', t('postgresTLS')], ['unix', t('postgresUnix')]], config.postgres_transport || 'tls')
     const target = h('div'), renderTarget = () => {
       target.replaceChildren()
       if (['http', 'dify'].includes(kind.value)) target.append(field('url', url), field('networks', networks), plain.label)
       if (kind.value === 'http') target.append(field('expectedStatus', expectedStatus), field('bodyContains', bodyContains), text('httpConditionHint', 'muted'))
-      if (kind.value === 'postgres') target.append(field('host', hostName), field('port', port), field('database', database), field('networks', networks))
+      if (kind.value === 'postgres') {
+        target.append(field('postgresConnection', postgresTransport), field('port', port), field('database', database))
+        if (postgresTransport.value === 'unix') target.append(text('postgresUnixHint', 'muted'))
+        else target.append(field('host', hostName), field('networks', networks))
+      }
       if (['deepseek', 'qwen'].includes(kind.value)) target.append(text('accountBalanceHint', 'muted'), text('accountRefHint', 'muted'), field('accountRef', accountRef), field('low', low), field('recovery', recovery), field('currency', currency))
       if (kind.value === 'qwen') target.append(field('site', site))
     }
-    kind.addEventListener('change', renderTarget); renderTarget()
+    kind.addEventListener('change', renderTarget); postgresTransport.addEventListener('change', renderTarget); renderTarget()
     const element = h('fieldset', {}, h('legend', {}, t('monitor')), field('name', name), field('kind', kind), field('credential', credential), target, h('div', { class: 'row' }, field('interval', interval), field('timeout', timeout)), enabled.label)
     if (value.id) element.append(text('checkSavedHint', 'muted'), button('checkNow', run(() => api('POST', '/v1/manage/probes/request', { id: value.id, revision: value.revision }), 'checkQueued')))
     return { element, read() {
       const config = { version: 1 }
       if (['http', 'dify'].includes(kind.value)) { config.url = url.value; config.networks = networks.value.split(/\s+/).filter(Boolean); config.plain_http = plain.node.checked }
       if (kind.value === 'http') { config.expected_status = Number(expectedStatus.value); config.body_contains = bodyContains.value }
-      if (kind.value === 'postgres') { config.host = hostName.value; config.port = Number(port.value); config.database = database.value; config.networks = networks.value.split(/\s+/).filter(Boolean) }
+      if (kind.value === 'postgres') {
+        config.postgres_transport = postgresTransport.value; config.port = Number(port.value); config.database = database.value
+        if (postgresTransport.value === 'tls') { config.host = hostName.value; config.networks = networks.value.split(/\s+/).filter(Boolean) }
+      }
       if (['deepseek', 'qwen'].includes(kind.value)) { config.account_ref = accountRef.value; config.currency = currency.value; config.low_balance = low.value; config.recovery_balance = recovery.value }
       if (kind.value === 'qwen') config.site = site.value
       return { id: value.id, label: name.value, kind: kind.value, credential_id: credential.value, enabled: enabled.node.checked, interval_seconds: Number(interval.value), timeout_seconds: Number(timeout.value), config }

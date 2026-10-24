@@ -608,3 +608,19 @@ monitor readiness. A replacement connection must be validated before activation;
 the normal rollout must not silently recreate the removed helper container or
 downgrade network TLS. Qwen credential provisioning and the remaining immutable
 Status release/installation gates also remain open.
+
+## Explicit PostgreSQL Unix transport implementation (2026-10-24)
+
+Status can select a fixed, administrator-mounted local PostgreSQL Unix socket
+without a helper container or native database SSL changes. Network mode still
+requires verified TLS. Configured arbitrary paths, TCP/DNS fallback, symlinks and
+non-socket files are refused. The existing monitor JSON holds the optional
+transport; no database DDL changes. A new backend capability prevents a newer
+frontend from opening against an older service that lacks this transport.
+
+Go race/vet, frontend contracts and shared Python checks passed. Fifteen browser
+scenarios pass against published Portal v2026.43.4, including the local transport
+editor, save/reopen and removal of stale network fields. The target's dedicated
+local authentication rule and actual bounded query remain to be validated before
+activation. Retained older candidate bytes do not contain this new capability.
+See [the local socket runbook](../apps/status/docs/postgresql-local-socket.md).

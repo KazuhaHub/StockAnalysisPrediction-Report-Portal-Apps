@@ -13,7 +13,7 @@
   function percentage(value, total) { return total > 0 && value >= 0 && value <= total ? (value / total * 100).toFixed(2) + '%' : null }
   function monitorHint(monitor) {
     if (monitor.stale) return 'staleHint'
-    return ({ billing_unsupported: 'billingUnsupportedHint', billing_permission_required: 'billingPermissionHint', billing_site_mismatch: 'billingSiteHint', currency_unavailable: 'currencyHint', authentication_failed: 'authenticationHint', observer_unavailable: 'observerHint' })[monitor.reason_code] || ''
+    return ({ billing_unsupported: 'billingUnsupportedHint', billing_permission_required: 'billingPermissionHint', billing_site_mismatch: 'billingSiteHint', currency_unavailable: 'currencyHint', authentication_failed: 'authenticationHint', observer_unavailable: 'observerHint', local_socket_unavailable: 'postgresSocketHint' })[monitor.reason_code] || ''
   }
   function requestErrorKey(status) {
     return ({ 400: 'invalidConfiguration', 401: 'accessDenied', 403: 'accessDenied', 404: 'itemUnavailable', 409: 'configurationConflict', 422: 'invalidConfiguration', 429: 'requestBusy' })[status] || 'unavailable'
@@ -26,7 +26,7 @@
     const foreground = (luminance + 0.05) / 0.05 >= 1.05 / (luminance + 0.05) ? '#000000' : '#ffffff'
     return { background, foreground }
   }
-  const REQUIRED_CAPABILITIES = Object.freeze(['status.components.v1', 'status.history.v2', 'status.export.v1', 'status.retention.v1'])
+  const REQUIRED_CAPABILITIES = Object.freeze(['status.components.v1', 'status.history.v2', 'status.export.v1', 'status.retention.v1', 'status.postgres-unix.v1'])
   function compatibleBackend(reply) { return reply?.api_version === 1 && Array.isArray(reply.capabilities) && REQUIRED_CAPABILITIES.every(capability => reply.capabilities.includes(capability)) }
   const contracts = Object.freeze({ proxyRequest, safeState, selectLocale, percentage, monitorHint, requestErrorKey, compatibleBackend, REQUIRED_CAPABILITIES, primaryColors })
   globalThis.StatusContracts = contracts

@@ -1,0 +1,9 @@
+services:
+  status:
+    volumes:
+      - type: bind
+        source: ${STATUS_POSTGRES_SOCKET:?Set the absolute PostgreSQL socket file path}
+        target: /run/status-postgres/.s.PGSQL.5432
+        read_only: true
+        bind:
+          create_host_path: false

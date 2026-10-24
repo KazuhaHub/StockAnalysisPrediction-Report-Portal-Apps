@@ -226,3 +226,22 @@ both provider families, typed authentication/permission failures without balance
 and private/public last-success expiry at and immediately after TTL without
 rewriting evidence time. The [requirement audit](requirement-audit.md) separates
 this verified fixture scope from the unfinished environment/publication gates.
+
+## Explicit local PostgreSQL transport
+
+The local socket configuration test first rejected the new transport; frontend
+contract tests also reproduced the missing capability gate and setup hint.
+The implementation now selects Unix sockets explicitly, with no configurable
+arbitrary path and no network fallback. Actual Unix protocol fixtures pass for
+SELECT 1, authentication/query deadlines, destination refusal, symlink/file
+replacement and stale socket failure. The existing verified-network TLS suite
+continues to pass. Complete Go race tests, vet, eight frontend contract tests and
+34 shared Python tests passed locally.
+
+Fifteen browser scenarios pass against published Portal v2026.43.4. The new case
+saves/reopens a PostgreSQL local monitor and proves switching back from TLS does
+not retain host/CIDR destinations. It also exposed select labels polluted by
+option text; selects now have explicit localized accessible names. Actual target
+socket authorization and read-only query evidence remain pending, as described
+in [the local socket runbook](postgresql-local-socket.md). No gateway was recreated
+and no production Status process, monitor or notification was enabled.

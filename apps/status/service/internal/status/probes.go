@@ -356,6 +356,13 @@ func (p *Prober) Check(ctx context.Context, m Monitor) (result Result) {
 }
 func postgresCheck(ctx context.Context, m Monitor) Result {
 	c := m.Config
+	if c.PostgresTransport == "unix" {
+		cfg, err := postgresSocketConfig(m, postgresSocketDirectory)
+		if err != nil {
+			return unknown("local_socket_unavailable")
+		}
+		return postgresReadCheck(ctx, cfg)
+	}
 	guard, err := newProbeTransport(ProbeConfig{URL: "https://" + net.JoinHostPort(c.Host, strconv.Itoa(int(c.Port))), Networks: c.Networks})
 	if err != nil {
 		return unknown("invalid_destination")

@@ -67,20 +67,21 @@ type MonitorInput struct {
 	TimeoutSeconds  int             `json:"timeout_seconds"`
 }
 type ProbeConfig struct {
-	ExpectedStatus  int            `json:"expected_status,omitempty"`
-	BodyContains    string         `json:"body_contains,omitempty"`
-	AccountRef      string         `json:"account_ref,omitempty"`
-	Version         int            `json:"version"`
-	URL             string         `json:"url,omitempty"`
-	Host            string         `json:"host,omitempty"`
-	Port            uint16         `json:"port,omitempty"`
-	Database        string         `json:"database,omitempty"`
-	Networks        []netip.Prefix `json:"networks,omitempty"`
-	PlainHTTP       bool           `json:"plain_http,omitempty"`
-	Site            string         `json:"site,omitempty"`
-	LowBalance      string         `json:"low_balance,omitempty"`
-	RecoveryBalance string         `json:"recovery_balance,omitempty"`
-	Currency        string         `json:"currency,omitempty"`
+	ExpectedStatus    int            `json:"expected_status,omitempty"`
+	BodyContains      string         `json:"body_contains,omitempty"`
+	AccountRef        string         `json:"account_ref,omitempty"`
+	Version           int            `json:"version"`
+	URL               string         `json:"url,omitempty"`
+	Host              string         `json:"host,omitempty"`
+	PostgresTransport string         `json:"postgres_transport,omitempty"`
+	Port              uint16         `json:"port,omitempty"`
+	Database          string         `json:"database,omitempty"`
+	Networks          []netip.Prefix `json:"networks,omitempty"`
+	PlainHTTP         bool           `json:"plain_http,omitempty"`
+	Site              string         `json:"site,omitempty"`
+	LowBalance        string         `json:"low_balance,omitempty"`
+	RecoveryBalance   string         `json:"recovery_balance,omitempty"`
+	Currency          string         `json:"currency,omitempty"`
 }
 
 func validateMonitor(m *MonitorInput) error {
@@ -113,6 +114,9 @@ func validateMonitor(m *MonitorInput) error {
 	if c.Version != 1 || len(c.Networks) > 16 {
 		return ErrInvalid
 	}
+	if m.Kind != "postgres" && c.PostgresTransport != "" {
+		return ErrInvalid
+	}
 	for _, prefix := range c.Networks {
 		if !prefix.IsValid() {
 			return ErrInvalid
@@ -135,7 +139,19 @@ func validateMonitor(m *MonitorInput) error {
 			return ErrInvalid
 		}
 	case "postgres":
-		if c.Host == "" || strings.ContainsAny(c.Host, "/\\@?# ") || c.Port == 0 || c.Database == "" || m.CredentialID == "" {
+		if c.Port == 0 || c.Database == "" || m.CredentialID == "" {
+			return ErrInvalid
+		}
+		switch c.PostgresTransport {
+		case "", "tls":
+			if c.Host == "" || strings.ContainsAny(c.Host, "/\\@?# ") {
+				return ErrInvalid
+			}
+		case "unix":
+			if c.Host != "" || c.URL != "" || c.PlainHTTP || len(c.Networks) != 0 {
+				return ErrInvalid
+			}
+		default:
 			return ErrInvalid
 		}
 	case "deepseek", "qwen":
