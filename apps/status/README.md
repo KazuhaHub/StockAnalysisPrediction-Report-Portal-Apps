@@ -6,8 +6,7 @@ Its frontend is an installable sandboxed ZIP. Its Go service owns a separate
 SQLite database and never opens the Portal database. The Portal supplies current
 viewer/OU identity through its generic paired backend connection.
 
-Status `0.1.0-beta.3` is the React/Ant Design UI release candidate.
-The currently published market version remains Beta.2 until publication is verified. Deploy and pair the application
+Status `0.1.0-beta.3` is the published React/Ant Design UI Beta. Deploy and pair the application
 before configuring optional providers. New installations have no components or
 credentials; monitoring and notification delivery remain paused until configured.
 Provider configuration is not a requirement for downloading or installing the app.
