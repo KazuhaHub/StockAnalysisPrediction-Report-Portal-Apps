@@ -7,7 +7,7 @@
   "overview": "狀態概覽",
   "incidents": "事故",
   "manage": "管理",
-  "empty": "沒有可見的元件",
+  "empty": "暫無可見的元件。管理員可在「管理」中設定監控和檢視權限。",
   "observed": "最近觀測",
   "operational": "執行正常",
   "degraded": "服務降級",

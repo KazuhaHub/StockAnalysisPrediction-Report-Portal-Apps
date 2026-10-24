@@ -5,6 +5,12 @@ It does not redefine completion around passing development checks. Local fixture
 evidence proves the named behavior, not production configuration or provider access.
 The [acceptance ledger](acceptance.md) records current source and deployment state.
 
+For the initial Beta, the owner's 2026-10-24 install-first decision is recorded in
+[release readiness](../../../docs/status-0.1.0-beta.1-readiness.md). Optional live
+credentials and recipients are configured after installation. The matrix below
+preserves the larger plan and its historical observations rather than presenting
+those optional configuration tasks as distribution blockers.
+
 ## Product and authorization boundaries
 
 | Requirement | Inspected evidence | Classification and limit |

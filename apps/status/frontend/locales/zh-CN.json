@@ -7,7 +7,7 @@
   "overview": "状态概览",
   "incidents": "事故",
   "manage": "管理",
-  "empty": "没有可见的组件",
+  "empty": "暂无可见的组件。管理员可在“管理”中配置监控和查看权限。",
   "observed": "最近观测",
   "operational": "运行正常",
   "degraded": "服务降级",

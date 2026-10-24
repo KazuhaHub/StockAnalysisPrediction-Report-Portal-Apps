@@ -7,7 +7,7 @@
   "overview": "Overview",
   "incidents": "Incidents",
   "manage": "Manage",
-  "empty": "No visible components",
+  "empty": "No visible components. An administrator can configure monitors and viewing permissions in Manage.",
   "observed": "Last observed",
   "operational": "Operational",
   "degraded": "Degraded",

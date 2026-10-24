@@ -6,11 +6,13 @@ Its frontend is an installable sandboxed ZIP. Its Go service owns a separate
 SQLite database and never opens the Portal database. The Portal supplies current
 viewer/OU identity through its generic paired backend connection.
 
-This is a development build (`0.1.0-dev`), excluded from the production catalogue.
-The platform dependency is [Portal PR #142](https://github.com/KazuhaHub/StockAnalysisPrediction-Report-Portal/pull/142),
-stacked on notification PR #141. Neither dependency is claimed deployed.
+Status `0.1.0-beta.1` is the first installable Beta. Deploy and pair the application
+before configuring optional providers. New installations have no components or
+credentials; monitoring and notification delivery remain paused until configured.
+Provider configuration is not a requirement for downloading or installing the app.
+The minimum verified Portal release is `v2026.43.2`.
 
-## Implemented development surfaces
+## Features
 
 - Multiple components and HTTP, Dify read-access, PostgreSQL `SELECT 1`, DeepSeek
   balance, Alibaba/Qwen account billing and authenticated heartbeat monitors.
@@ -43,7 +45,7 @@ GOWORK=off GOTOOLCHAIN=go1.26.10 go test -race ./...
 GOWORK=off GOTOOLCHAIN=go1.26.10 go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
 ```
 
-The ZIP is `dist/status/0.1.0-dev/status.zip` with a SHA-256 sidecar. It contains only
+The ZIP is `dist/status/0.1.0-beta.1/status.zip` with a SHA-256 sidecar. It contains only
 `app.json`, the root HTML and built static assets. Source tests and credentials do
 not enter the archive. Public service assets are embedded and deterministically
 rebuilt by the same script. A classic script is intentional: a null-origin iframe
@@ -63,12 +65,7 @@ No billable provider call or real external notification is needed.
 - [Platform contract](../../docs/platform-contract.md)
 - [Full implementation plan and exit gates](../../docs/implementation-plan.md)
 
-The implementation is not yet a released or fully accepted Status product. The
-remaining acceptance audit must cover historical maintenance-edit/retention boundaries,
-maintenance-exit evidence, retention/recovery edge cases, operator test controls,
-public history/freshness, full browser workflows, container/gateway runtime and
-immutable release/catalogue migration. Provider fixtures and official signing
-vectors do not replace deployment-specific Qwen billing authorization checks.
-
-Independent binary/ZIP candidate commands and publication prerequisites are in
-[the artifact build guide](docs/artifact-build.md).
+The Beta's verified scope, optional configuration and remaining manual audits are
+recorded in [the readiness decision](../../docs/status-0.1.0-beta.1-readiness.md).
+The historical S00-S11 audit remains evidence of the wider plan; it is not a
+requirement to provision every third-party account before installing this release.

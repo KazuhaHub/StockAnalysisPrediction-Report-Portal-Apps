@@ -2,11 +2,14 @@
 
 ## Scope and prerequisites
 
-This runbook applies to the unreleased `0.1.0-dev` development build. Do not publish
-it or add Status to the catalogue before its acceptance and immutable-artifact
-gates are complete. The Portal's separate default-catalogue migration requires
-verification of every currently listed asset and the real installation path;
-it does not depend on publishing Status. The application sources remain in the
+This runbook applies to Status `0.1.0-beta.1`. Installation and backend deployment
+precede optional provider credential provisioning. Missing Qwen billing credentials
+or unconfigured notification destinations do not block distributing the application.
+Fresh storage starts without components, with probes/outbox paused and public
+output disabled. Configure each monitor, audience and notification route afterward.
+The Beta release scope and verified limits are recorded in
+[the readiness decision](../../../docs/status-0.1.0-beta.1-readiness.md).
+The application sources remain in the
 shared Apps monorepo; no separate Status repository is needed.
 
 An authorized operator may install a reviewed, checksum-verified CI candidate for
@@ -19,7 +22,7 @@ Enable only the selected read-only checks after their target/credential review.
 Do not send secrets in chat or test messages to unapproved external recipients.
 
 The notification/platform prerequisites are published as Portal `v2026.43.2`;
-the authorized target now runs `v2026.43.4` with the canonical market default
+the authorized target was verified on `v2026.43.4` with the canonical market default
 ([rollout evidence](portal-market-rollout.md)). The connection uses migration 0008; the
 frozen baseline is unchanged. Other deployments must back up and upgrade Portal
 using its operator runbook. Status has a separate SQLite database, storage key and
@@ -62,8 +65,7 @@ permissions, normally `0600`; the service refuses wider permissions.
    application market and select **Status**. Review the exact version and confirm
    `extension.read` and `extension.manage` in its permission preview before
    installing. These scopes grant neither report ingestion nor unrestricted report
-   access. Ordinary readers receive read capability only. Status is not yet listed:
-   complete its release/catalogue gates before attempting this production step.
+   access. Ordinary readers receive read capability only. The listing is added only after its immutable release assets are verified.
    Use the verified canonical Apps catalogue once it is published and the host
    migration is approved; an existing custom market is not changed automatically.
 2. Open the app's **Backend** dialog. Enter the backend root URL, label and audience
