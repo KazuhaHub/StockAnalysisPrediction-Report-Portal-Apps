@@ -56,15 +56,15 @@ Email/Slack recipient, real billing authorization, or a production outage exerci
 
 | Gate | Authoritative current evidence | Remaining work |
 | --- | --- | --- |
-| Notification and generic platform prerequisites | Portal #141/#142 and protocol #1 merged; Portal v2026.43.2 published/deployed with migration and recovery evidence | Complete actual installed-app pairing/configuration review |
+| Notification and generic platform prerequisites | Portal #141/#142 and protocol #1 merged; minimum v2026.43.2 published; target now runs v2026.43.4 with [recovery and continuity evidence](portal-market-rollout.md) | Complete actual installed-app pairing/configuration review |
 | Dify, PostgreSQL and both provider families | Actual guarded Dify info, DeepSeek balance and PostgreSQL verified-TLS SELECT 1 succeed; dedicated scoped database login and negative controls verified | Qwen billing account/site/authorization checks; the owner will provision RAM credentials, because Dify holds a DashScope model key |
 | Six platforms and exact image executable bytes | Artifact builder and CI; non-root prebuilt image checks | Publish a non-development app-qualified version from clean reviewed main after acceptance |
-| Released minimum Portal compatibility | Browser and real notification checks use checksum-verified published v2026.43.2 binaries | Record the final version-specific acceptance and operator evidence |
+| Released minimum Portal compatibility | CI uses checksum-verified published v2026.43.2; all fourteen browser scenarios also pass locally against published v2026.43.3 and v2026.43.4 | Record the final Status version-specific acceptance and operator evidence |
 | Immutable tag/image/assets and public downloads | Guarded workflow, policy tests, metadata binding and draft/public download verification implementation | No actual Status release has run; do not treat workflow code as publication evidence |
-| Canonical catalogue and legacy-compatible migration | Legacy demo preserved and public download verified; CI verifies published extension metadata/checksums; Portal #171 permission declaration binding merged | Add Status only after immutable artifacts exist and are verified; separately review Portal default URL/override compatibility |
+| Canonical catalogue and legacy-compatible migration | Apps #4 exporter/real market acceptance merged and CI passed; Portal #171 declaration binding and #174 default migration are deployed in v2026.43.4; legacy URLs and saved overrides are preserved | Add Status only after its immutable artifacts exist and are verified; complete its actual market installation |
 | Production operator approval and activation | Current candidate is prepared, paused, stopped and unpaired; existing admin browser session is available | Marketplace installation/permission confirmation after publication; private pairing; target configuration; deliberate probe/audience/gateway review; a manual ZIP is optional controlled acceptance |
 
 Overall completion is **not proven**. In particular, the production app, actual
 Qwen billing authorization, final operator/manual
-acceptance, immutable publication and catalogue/default-market rollout are not
+acceptance, immutable Status publication and its catalogue/installation rollout are not
 substituted by the successful fixture tests above.

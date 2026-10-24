@@ -213,6 +213,14 @@ refusal of changed bytes and path escape, unsupported capabilities and symlinked
 archives. The canonical catalogue's real download verification also passed. Its
 single published entry remains the demo; Status publication gates remain open.
 
+The same fourteen scenarios subsequently passed against published Portal
+v2026.43.3 and v2026.43.4. The target is now on v2026.43.4 with the canonical
+compiled market default, preserved saved settings/data, old/new image restore
+checks and healthy public assets. See [the host rollout evidence](portal-market-rollout.md)
+for exact source, CI, image and protected receipt references. This supersedes
+earlier host-version and default-market pending observations without claiming
+Status publication, installation or activation.
+
 Unit evidence now explicitly covers zero/negative fractional/large balances for
 both provider families, typed authentication/permission failures without balances,
 and private/public last-success expiry at and immediately after TTL without

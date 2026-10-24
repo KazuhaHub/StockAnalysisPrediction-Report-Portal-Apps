@@ -568,3 +568,28 @@ claim. Production still awaits the operator installation confirmation.
 Full CI at e96cf69 passed on the PR run. Its push run initially failed only while
 Docker Hub returned HTTP 502 for the Go base-image manifest, before building app
 code; the failed job was rerun and passed. Both exact-source runs are successful.
+
+## Canonical market and host rollout (2026-10-24)
+
+Apps #4 is merged, including the real public market permission/install/bridge
+scenario and legacy catalogue exporter. Both exact-source CI runs passed, followed
+by successful merged-main CI `40065825246`. The 34 shared Python tests and actual
+catalogue downloads passed. All fourteen browser scenarios pass locally against
+published Portal v2026.43.2, v2026.43.3 and v2026.43.4; CI retains the minimum
+v2026.43.2 compatibility check.
+
+Portal #173/#174 are merged, fully tested and published/deployed as v2026.43.4
+Beta. The bell follows the application launcher beside the account menu. The
+canonical default and legacy exporter preserve explicit overrides and existing
+apps. The target had no override. Old/new image recovery checks, a final stopped-
+writer backup, core-data continuity and all 64 public entry assets passed.
+[The rollout evidence](../apps/status/docs/portal-market-rollout.md) records exact
+source, image, CI and protected receipt references.
+
+The prepared Status image/archive/ZIP match the verified merged-main build;
+formal Status remains paused, stopped, unpaired and unlisted. Dify, DeepSeek and
+the scoped PostgreSQL target have real read-only capability evidence. The owner
+or account administrator will provision Qwen billing RAM credentials and notify
+the operator. Actual Qwen validation, final operator/version acceptance, immutable
+Status release, market installation/pairing and deliberate activation remain
+open. A manual development ZIP upload is optional, not a rollout prerequisite.
