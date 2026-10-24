@@ -20,6 +20,7 @@ bundle this stack completely; sandbox isolation does not require handwritten DOM
 - Retain `sandbox="allow-scripts"`. No `allow-same-origin`, `allow-forms`, host DOM
   injection, broad null-origin CORS, tokens in browser storage or weakened Portal CSP.
 - Theme through `ConfigProvider` and the SDK's trusted Portal color/radius snapshot.
+  Verify primary button text contrast in normal, hover and active states.
   Use Ant Design typography, spacing, buttons, fields, validation, drawers, tables,
   alerts and loading states. Custom CSS is for layout and app-specific visualization.
 - Language resources cover en-US, zh-CN and zh-TW with identical keys. Prefer an
