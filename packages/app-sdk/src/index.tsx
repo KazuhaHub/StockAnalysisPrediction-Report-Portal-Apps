@@ -80,21 +80,59 @@ export function bridgeRequest(
   };
 }
 
-export function primaryColors(value: string) {
-  const background = /^#[0-9a-f]{6}$/i.test(value) ? value : "#1762c4";
+function colorLuminance(color: string) {
   const channels = [1, 3, 5].map(
-    (index) => parseInt(background.slice(index, index + 2), 16) / 255,
+    (index) => parseInt(color.slice(index, index + 2), 16) / 255,
   );
   const linear = channels.map((channel) =>
     channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4,
   );
-  const luminance =
-    0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2];
+  return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2];
+}
+export function primaryColors(value: string) {
+  const background = /^#[0-9a-f]{6}$/i.test(value) ? value : "#1762c4";
+  const luminance = colorLuminance(background);
   const foreground =
     (luminance + 0.05) / 0.05 >= 1.05 / (luminance + 0.05)
       ? "#000000"
       : "#ffffff";
   return { background, foreground };
+}
+export function primaryButtonPalette(
+  base: string,
+  hover: string,
+  active: string,
+) {
+  const colors = primaryColors(base);
+  const adjust = (value: string) => {
+    let color = primaryColors(value).background;
+    const target = colors.foreground === "#ffffff" ? 0 : 255;
+    for (let step = 0; step < 256; step++) {
+      const luminance = colorLuminance(color);
+      const contrast =
+        colors.foreground === "#ffffff"
+          ? 1.05 / (luminance + 0.05)
+          : (luminance + 0.05) / 0.05;
+      if (contrast >= 4.5) return color;
+      color =
+        "#" +
+        [1, 3, 5]
+          .map((index) => {
+            const channel = parseInt(color.slice(index, index + 2), 16);
+            const next =
+              target === 0
+                ? Math.max(0, channel - Math.max(1, Math.round(channel * 0.04)))
+                : Math.min(
+                    255,
+                    channel + Math.max(1, Math.round((255 - channel) * 0.04)),
+                  );
+            return next.toString(16).padStart(2, "0");
+          })
+          .join("");
+    }
+    return color;
+  };
+  return { ...colors, hover: adjust(hover), active: adjust(active) };
 }
 
 export interface AppClient {
@@ -310,9 +348,26 @@ export function PortalAppProvider({
       ? "dark"
       : "light";
   }, [snapshot.dark]);
+  const algorithm = snapshot.dark
+    ? theme.darkAlgorithm
+    : theme.defaultAlgorithm;
+  const derived = theme.getDesignToken({
+    algorithm,
+    token: { colorPrimary: snapshot.colorPrimary },
+  });
+  const primary = primaryButtonPalette(
+    snapshot.colorPrimary,
+    derived.colorPrimaryHover,
+    derived.colorPrimaryActive,
+  );
   const config: ThemeConfig = {
-    algorithm: snapshot.dark ? theme.darkAlgorithm : theme.defaultAlgorithm,
+    algorithm,
     components: {
+      Button: {
+        primaryColor: primary.foreground,
+        colorPrimaryHover: primary.hover,
+        colorPrimaryActive: primary.active,
+      },
       Tabs: { itemSelectedColor: snapshot.dark ? "#91caff" : "#0958d9" },
       Steps: { colorTextDescription: snapshot.dark ? "#bfbfbf" : "#595959" },
       Tag: {
@@ -336,7 +391,7 @@ export function PortalAppProvider({
       colorPrimaryText: snapshot.dark ? "#91caff" : "#0958d9",
       colorPrimaryTextHover: snapshot.dark ? "#bae0ff" : "#003eb3",
       colorLink: snapshot.dark ? "#91caff" : "#0958d9",
-      colorTextLightSolid: primaryColors(snapshot.colorPrimary).foreground,
+      colorTextLightSolid: primary.foreground,
     },
   };
   return (

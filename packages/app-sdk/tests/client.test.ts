@@ -4,6 +4,7 @@ import {
   PortalClient,
   localeOf,
   primaryColors,
+  primaryButtonPalette,
   requestErrorKey,
 } from "../src/index";
 
@@ -129,4 +130,30 @@ test("shared bridge status errors remain bounded localized keys", () => {
   expect(requestErrorKey(409)).toBe("configurationConflict");
   expect(requestErrorKey(429)).toBe("requestBusy");
   expect(requestErrorKey(502)).toBe("unavailable");
+});
+
+test("primary buttons retain AA text contrast in normal, hover and active states", () => {
+  function luminance(color: string) {
+    const values = [1, 3, 5]
+      .map((index) => parseInt(color.slice(index, index + 2), 16) / 255)
+      .map((value) =>
+        value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4,
+      );
+    return values[0] * 0.2126 + values[1] * 0.7152 + values[2] * 0.0722;
+  }
+  for (const [base, hover, active] of [
+    ["#1668dc", "#387ed3", "#1554ad"],
+    ["#1677ff", "#4096ff", "#0958d9"],
+    ["#ffffff", "#eeeeee", "#bbbbbb"],
+    ["#000000", "#444444", "#111111"],
+  ]) {
+    const result = primaryButtonPalette(base, hover, active);
+    const text = luminance(result.foreground);
+    for (const background of [result.background, result.hover, result.active]) {
+      const bg = luminance(background);
+      expect(
+        (Math.max(bg, text) + 0.05) / (Math.min(bg, text) + 0.05),
+      ).toBeGreaterThanOrEqual(4.5);
+    }
+  }
 });

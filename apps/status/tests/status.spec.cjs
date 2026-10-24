@@ -361,6 +361,7 @@ test('private and public status pages meet automated accessibility checks', asyn
       await audit(frame, mode + ' overview')
       await controls.getByRole('button', { name: 'Manage', exact: true }).click()
       await expect(controls.getByRole('button', { name: 'New component', exact: true })).toBeVisible()
+      await controls.getByRole('button', { name: 'Manage', exact: true }).hover()
       await audit(frame, mode + ' components')
       await controls.getByRole('button', { name: 'New component', exact: true }).click()
       await expect(controls.getByLabel('Internal label', { exact: true })).toBeVisible()
