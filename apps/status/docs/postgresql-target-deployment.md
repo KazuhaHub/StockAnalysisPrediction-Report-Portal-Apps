@@ -10,10 +10,15 @@ files were retained for recovery, with `gateway-removal-verification.json` under
 the directory below. Status remains stopped and unpaired.
 
 The gateway path documented below is historical verification evidence, not a
-currently available monitor destination. PostgreSQL monitoring needs a reviewed
-replacement connection before activation. Do not weaken verified network TLS or
+currently available monitor destination. The local socket replacement now has
+one-shot target query acceptance; production activation still needs matching
+artifacts, pairing and configuration. Do not weaken verified network TLS or
 automatically recreate this gateway as a normal Status rollout step. Retained
 start commands are recovery reference only.
+
+The [explicit local socket alternative](postgresql-local-socket.md) adds no helper
+container and leaves native database SSL unchanged. Its runbook records actual
+target authorization/query evidence as well as the remaining activation steps.
 
 This records the authorized target deployment on 2026-10-23 Pacific. It is an
 infrastructure runbook, not a new Portal migration or a completed Status rollout.

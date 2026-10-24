@@ -173,6 +173,46 @@ test('administrator can create a component and multiple monitors through the ins
   await context.close()
 })
 
+test('administrator configures an explicit local PostgreSQL socket without retaining network destinations', async ({ browser }) => {
+  const credential = (await proxy(adminAPI, 'PUT', '/v1/manage/credentials', { kind: 'postgres', label: 'Local database fixture', revision: 0, secret: { username: 'read_fixture', password: 'fixture-only' } })).item
+  const context = await browser.newContext({ storageState: await adminAPI.storageState(), locale: 'en-US' })
+  try {
+    const page = await context.newPage(); await page.goto(base + '/apps/x/status')
+    const frame = page.frameLocator('iframe')
+    await frame.getByRole('button', { name: 'Manage', exact: true }).click()
+    await frame.getByRole('button', { name: 'New component', exact: true }).click()
+    await frame.getByLabel('Internal label', { exact: true }).fill('Local database component')
+    await frame.getByRole('button', { name: 'Add monitor', exact: true }).click()
+    const monitor = frame.locator('fieldset').last()
+    await monitor.getByLabel('Internal label', { exact: true }).fill('Socket readiness')
+    await monitor.getByLabel('Check type', { exact: true }).selectOption('postgres')
+    await monitor.getByLabel('Saved credential', { exact: true }).selectOption(credential.id)
+    await monitor.getByLabel('PostgreSQL connection', { exact: true }).selectOption('unix')
+    await expect(monitor.getByLabel('Database host', { exact: true })).toHaveCount(0)
+    await monitor.getByLabel('Database name', { exact: true }).fill('fixture')
+    await frame.getByRole('button', { name: 'Save', exact: true }).click()
+    const card = frame.locator('article').filter({ has: frame.getByRole('heading', { name: 'Local database component', exact: true }) })
+    await card.getByRole('button', { name: 'Edit', exact: true }).click()
+    await expect(monitor.getByLabel('PostgreSQL connection', { exact: true })).toHaveValue('unix')
+    await monitor.getByLabel('PostgreSQL connection', { exact: true }).selectOption('tls')
+    await monitor.getByLabel('Database host', { exact: true }).fill('database.internal.example')
+    await monitor.getByLabel('Allowed private CIDRs (one per line)', { exact: true }).fill('10.0.0.0/8')
+    await monitor.getByLabel('PostgreSQL connection', { exact: true }).selectOption('unix')
+    await frame.getByRole('button', { name: 'Save', exact: true }).click()
+    // The existing card stays visible while saving. Wait for the completed save
+    // and refresh before an independent request uses the bounded proxy capacity.
+    await expect(frame.getByRole('button', { name: 'Save', exact: true })).toHaveCount(0)
+    await expect(frame.locator('#app')).not.toHaveAttribute('aria-busy', 'true')
+    await expect(card).toBeVisible()
+    const saved = (await proxy(adminAPI, 'GET', '/v1/manage/components')).items.find(c => c.label === 'Local database component').monitors[0]
+    expect(saved.config.postgres_transport).toBe('unix')
+    expect(saved.config.host).toBeUndefined()
+    expect(saved.config.networks).toBeUndefined()
+    expect(saved.config.port).toBe(5432)
+    expect((await proxy(adminAPI, 'GET', '/v1/manage/operations')).settings.probes_paused).toBe(true)
+  } finally { await context.close() }
+})
+
 test('public prefix projection remains closed until enabled and excludes private labels', async ({ browser }) => {
   expect((await fetch(statusBase + '/')).status).toBe(404)
   await proxy(adminAPI, 'PUT', '/v1/manage/settings', { public_enabled: true, probes_paused: true, outbox_paused: true, portal_url: '', portal_networks: [] })

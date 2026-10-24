@@ -165,5 +165,10 @@
   "historyRetention": "歷史保留天數",
   "retentionHint": "原始觀測可保留 1–30 天；彙總歷史、已解決事故及已完成通知最多保留 90 天，且不得短於原始觀測。活動事故和待處理通知所需的證據會保留。縮短保留期間後由背景執行清理。",
   "backendUpgradeRequired": "已配對的 Status 後端不支援此外掛所需的能力。請部署相符且已驗證的服務版本後重新整理。",
-  "backendNotReady": "無法驗證後端相容性。連線與服務能力驗證通過前不會顯示狀態資料。"
+  "backendNotReady": "無法驗證後端相容性。連線與服務能力驗證通過前不會顯示狀態資料。",
+  "postgresConnection": "PostgreSQL 連線方式",
+  "postgresTLS": "網路連線（驗證 TLS）",
+  "postgresUnix": "本機 Unix socket",
+  "postgresUnixHint": "使用部署管理員掛載的資料庫本機連線，無須填寫網路主機或增加代理容器。",
+  "postgresSocketHint": "本機資料庫連線無法使用，請聯絡部署管理員檢查連線掛載和資料庫存取權限。"
 }
