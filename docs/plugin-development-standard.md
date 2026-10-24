@@ -139,6 +139,9 @@ relevant. Verify a failed save retains the draft and its error is visible inside
 the active dialog. Review secrets, exports, publication and notification recipients
 separately from ordinary component visibility.
 
+The Status publisher requires the `frontend-standard` job in addition to the full
+service/browser/artifact matrix; an older successful job set cannot bypass it.
+
 Before publication, select a new app version, review its app-specific acceptance
 record and run the guarded release workflow against the exact accepted main commit.
 Source migrations can be reviewed before a release version is selected; such local
