@@ -55,10 +55,14 @@ permissions, normally `0600`; the service refuses wider permissions.
 
 ## Install and pair the private application
 
-1. Sign in to Portal as an administrator. Open application management and upload
-   `dist/status/0.1.0-dev/status.zip`. Review `extension.read` and
-   `extension.manage`. These scopes grant neither report ingestion nor unrestricted
-   report access. Ordinary readers receive read capability only.
+1. For a published version, sign in to Portal as an administrator, open the
+   application market and select **Status**. Review the exact version and confirm
+   `extension.read` and `extension.manage` in its permission preview before
+   installing. These scopes grant neither report ingestion nor unrestricted report
+   access. Ordinary readers receive read capability only. Status is not yet listed:
+   complete its release/catalogue gates before attempting this production step.
+   Use the verified canonical Apps catalogue once it is published and the host
+   migration is approved; an existing custom market is not changed automatically.
 2. Open the app's **Backend** dialog. Enter the backend root URL, label and audience
    `status`. Start from `deploy/connection-policy.json`. Replace port/network
    allowances with the exact destination needed by this deployment.
@@ -102,6 +106,13 @@ requires `plain_http: true` and is permitted only within an explicitly authorize
 private network. Loopback, link-local and metadata targets remain forbidden. The
 base URL has no credentials, query string, fragment or route path. The iframe
 cannot select a different backend host.
+
+An operator may optionally upload a reviewed development ZIP for controlled
+acceptance under the restrictions at the start of this guide. This is an
+alternative test path, not a mandatory step before marketplace installation.
+Never publish a development ZIP in the production catalogue to bypass release
+gates. Market installation and manual upload use the same host parser and
+permission review; neither starts the independent service.
 
 ## Offline connection and notification drills
 
