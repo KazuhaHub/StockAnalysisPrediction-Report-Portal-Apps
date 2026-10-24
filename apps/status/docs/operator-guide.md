@@ -18,8 +18,9 @@ and leave components administrator-only until their grants are deliberately revi
 Enable only the selected read-only checks after their target/credential review.
 Do not send secrets in chat or test messages to unapproved external recipients.
 
-The notification/platform prerequisites are published as Portal `v2026.43.2` and
-are deployed on the authorized target. The connection uses migration 0008; the
+The notification/platform prerequisites are published as Portal `v2026.43.2`;
+the authorized target now runs `v2026.43.4` with the canonical market default
+([rollout evidence](portal-market-rollout.md)). The connection uses migration 0008; the
 frozen baseline is unchanged. Other deployments must back up and upgrade Portal
 using its operator runbook. Status has a separate SQLite database, storage key and
 backup procedure below. A Portal backup does not replace a Status backup.
