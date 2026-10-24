@@ -341,3 +341,20 @@ preserved. Full service race/vet/build and all five real browser scenarios pass,
 including exported JSON parsed from the installed sandbox and private target
 redaction. All six artifact target CI jobs passed at 8d580d9; complete run status
 remains tracked separately from individual job completion.
+
+
+## Configurable retention, recovery refusal and public paging (2026-10-23)
+
+The existing approved settings ledger now holds bounded raw/history retention
+periods, edited through Operations. Defaults remain 30/90 days; raw is 1–30 and
+history is at least raw through 90. Cleanup reads the policy inside its transaction
+and preserves active/pending evidence and overlapping boundary hours. Race tests
+and installed-UI save/readback cover bounds, persistence and actual cutoff work.
+No DB columns, tables or migrations were added.
+
+Recovery drills reject wrong-key, future-schema, missing-index and occupied
+rollback candidates while proving the live database remains readable/writable and
+candidate pause values do not leak into live state. Public component lists now
+have filtered totals/limits and independent component/incident pager controls.
+Service tests cover global-default closure, explicit publication filtering and
+page bounds. The prior 0ff87f6 head passed full CI including all six artifacts.

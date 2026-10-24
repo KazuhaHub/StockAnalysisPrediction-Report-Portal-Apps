@@ -317,6 +317,22 @@ trusted gateway for high-traffic publication. Do not enable arbitrary forwarded
 header trust to obtain separate budgets. This is a bounded development service,
 not a claim of an unmeasured public traffic capacity.
 
+## Retention policy
+
+In **Manage → Operations**, configure raw observations for 1–30 days (default 30)
+and aggregate history/resolved incident families for a period from the raw
+retention through 90 days (default 90). Saved values stay in Status storage.
+Shortening retention authorizes background cleanup after the new cutoff; increase
+it before cleanup if additional history must be retained. Raising the period
+cannot recreate deleted evidence. Cleanup is bounded, preserves active incident
+and unresolved notice evidence, and retains the hour overlapping the boundary.
+The API accepts omitted/zero durations as preserving the current policy for older
+clients; negative or out-of-range periods are refused.
+
+Public component and incident lists also use 50-item pages with a 100 maximum.
+Their counts contain only explicitly published components/narratives. Global
+publication disabled returns no public counts or records.
+
 ## Backup, restore and rollback
 
 Run offline backup commands with the same service account and encryption key.

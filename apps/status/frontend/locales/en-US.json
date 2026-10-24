@@ -160,5 +160,8 @@
   "latency": "Observation latency",
   "exportJSON": "Export component JSON",
   "exportReady": "Authorized snapshot prepared. Select the text to copy it.",
-  "exportCopyHint": "The sandbox keeps the export as selectable text. Copy it to a local file. Financial values are included only with current finance permission."
+  "exportCopyHint": "The sandbox keeps the export as selectable text. Copy it to a local file. Financial values are included only with current finance permission.",
+  "rawRetention": "Raw observation retention (days)",
+  "historyRetention": "History retention (days)",
+  "retentionHint": "Raw observations: 1–30 days. Aggregates, resolved incidents and completed notices: up to 90 days, at least the raw retention. Active incidents and pending notices retain required evidence. Shorter periods are applied by background cleanup."
 }

@@ -75,3 +75,19 @@ func (s *Store) ExportComponent(v protocol.Viewer, id string, from, to time.Time
 	}
 	return result, nil
 }
+
+func (s *Store) PublicComponentPage(now time.Time, offset, limit int) (ComponentPage, error) {
+	page := ComponentPage{Items: []ComponentView{}, Offset: offset, Limit: limit}
+	if offset < 0 || offset > 1000000 || limit < 1 || limit > 100 {
+		return page, ErrInvalid
+	}
+	if s.setting("public_enabled") != "1" {
+		return page, nil
+	}
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM components WHERE enabled=1 AND public_enabled=1`).Scan(&page.Total); err != nil {
+		return page, err
+	}
+	var err error
+	page.Items, err = s.componentRange(protocol.Viewer{}, true, now, "", "", offset, limit)
+	return page, err
+}

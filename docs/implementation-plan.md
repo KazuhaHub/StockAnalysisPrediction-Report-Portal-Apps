@@ -1,8 +1,10 @@
 # Status application: implementation and execution plan
 
-Status: implementation in progress. The shared public application repository and
-protocol/catalogue bootstrap exist; Status runtime, schemas, monitors and deployment
-are not yet implemented. See the execution log and storage approval gate.
+Status: implementation and acceptance in progress. The shared repository, paired
+platform, independent Status service/storage, monitors, sandbox/public UI and
+artifact candidates are implemented in review branches. Publication, deployment
+and the remaining acceptance gates are not complete. See `docs/progress.md` and
+`apps/status/docs/acceptance.md` for exact evidence.
 
 Prepared: 2026-10-21. Baseline: notification consolidation PR #141, commit
 `b4741355118c28d95dcf3c096115963ce5936f01`. Verify that PR's merge and deployed

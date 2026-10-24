@@ -112,7 +112,12 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if r.Method == "GET" && r.URL.Path == "/public/v1/status" {
-		components, err := s.store.Components(protocol.Viewer{}, true, time.Now())
+		offset, limit, err := pageParams(r)
+		if err != nil {
+			apiError(w, err)
+			return
+		}
+		page, err := s.store.PublicComponentPage(time.Now(), offset, limit)
 		if err != nil {
 			apiError(w, err)
 			return
@@ -126,11 +131,11 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			Stale      bool   `json:"stale"`
 		}
 		out := []publicComponent{}
-		for _, c := range components {
+		for _, c := range page.Items {
 			out = append(out, publicComponent{c.ID, c.Label, c.State, c.ObservedAt, c.Stale})
 		}
 		w.Header().Set("Cache-Control", "public, max-age=10")
-		write(w, 200, map[string]any{"ok": true, "items": out, "generated_at": time.Now().UTC().Format(time.RFC3339)})
+		write(w, 200, map[string]any{"ok": true, "items": out, "total": page.Total, "offset": page.Offset, "limit": page.Limit, "generated_at": time.Now().UTC().Format(time.RFC3339)})
 		return
 	}
 	headers := r.Header.Values(protocol.Header)

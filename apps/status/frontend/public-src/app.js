@@ -1,8 +1,18 @@
 (function () {
   const root = document.getElementById('app'), { safeState, selectLocale } = StatusContracts
-  let language = selectLocale(navigator.language), busy = false
+  let language = selectLocale(navigator.language), busy = false, componentOffset = 0, incidentOffset = 0
   const t = key => STATUS_LOCALES[language][key] || key
   function h(tag, text, className) { const node = document.createElement(tag); if (text) node.textContent = text; if (className) node.className = className; return node }
+  function pager(label, page, offset, jump) {
+    const nav = h('nav'), previous = h('button', t('pagePrevious')), next = h('button', t('pageNext'))
+    nav.setAttribute('aria-label', t(label))
+    previous.type = next.type = 'button'
+    previous.disabled = offset === 0; next.disabled = offset + 50 >= page.total
+    previous.addEventListener('click', () => { jump(Math.max(0, offset - 50)); render() })
+    next.addEventListener('click', () => { jump(offset + 50); render() })
+    nav.append(previous, h('span', offset + ' / ' + page.total), next)
+    return nav
+  }
   async function render() {
     if (busy) return
     busy = true
@@ -15,7 +25,7 @@
     title.append(h('h1', t('title')), h('p', t('subtitle'))); header.append(title, languages); root.append(header)
     const content = h('section', '', 'grid'); root.append(content)
     try {
-      const [status, incidents] = await Promise.all(['public/v1/status', 'public/v1/incidents?limit=50'].map(path => fetch(path, { credentials: 'omit', cache: 'no-store' }).then(async response => { if (!response.ok) throw new Error(); return response.json() })))
+      const [status, incidents] = await Promise.all(['public/v1/status?limit=50&offset=' + componentOffset, 'public/v1/incidents?limit=50&offset=' + incidentOffset].map(path => fetch(path, { credentials: 'omit', cache: 'no-store' }).then(async response => { if (!response.ok) throw new Error(); return response.json() })))
       if (!status.items?.length) content.append(h('p', t('empty'), 'notice'))
       for (const component of status.items || []) {
         const card = h('article', '', 'card'), state = safeState(component.state), history = h('button', t('history')), chart = h('div')
@@ -33,9 +43,11 @@
         })
         card.append(h('h2', component.label), h('span', t(state), 'badge ' + state), h('p', t('observed') + ': ' + (component.observed_at ? new Date(component.observed_at).toLocaleString(language) : '—'), 'muted'), history, chart); content.append(card)
       }
+      root.append(pager('components', status, componentOffset, value => { componentOffset = value }))
       root.append(h('h2', t('incidents')))
       if (!incidents.items?.length) root.append(h('p', t('noIncidents'), 'muted'))
       for (const incident of incidents.items || []) { const card = h('article', '', 'card'); card.append(h('h3', incident.summary), h('p', new Date(incident.opened_at).toLocaleString(language))); root.append(card) }
+      root.append(pager('incidents', incidents, incidentOffset, value => { incidentOffset = value }))
       root.append(h('small', t('pageUpdated') + ': ' + new Date(status.generated_at).toLocaleString(language)))
     } catch { content.replaceChildren(h('p', t('unavailable'), 'notice error')) } finally { busy = false }
   }

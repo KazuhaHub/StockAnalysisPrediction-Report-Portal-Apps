@@ -106,7 +106,7 @@ func (s *Store) setting(key string) string {
 	return value
 }
 func setSetting(tx *sql.Tx, key, value string) error {
-	if !strings.Contains("|probes_paused|outbox_paused|public_enabled|storage_key_fingerprint|portal_url|portal_networks|", "|"+key+"|") {
+	if !strings.Contains("|probes_paused|outbox_paused|public_enabled|storage_key_fingerprint|portal_url|portal_networks|raw_retention_days|history_retention_days|", "|"+key+"|") {
 		return errors.New("unregistered status setting")
 	}
 	_, err := tx.Exec(`INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value`, key, value)

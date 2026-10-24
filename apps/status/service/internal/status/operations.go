@@ -4,27 +4,51 @@ import (
 	"encoding/json"
 	"net/netip"
 	"net/url"
+	"strconv"
 	"time"
 
 	protocol "github.com/KazuhaHub/StockAnalysisPrediction-Report-Portal-Apps/packages/extensionprotocol"
 )
 
 type ServiceSettings struct {
-	PublicEnabled  bool           `json:"public_enabled"`
-	ProbesPaused   bool           `json:"probes_paused"`
-	OutboxPaused   bool           `json:"outbox_paused"`
-	PortalURL      string         `json:"portal_url"`
-	PortalNetworks []netip.Prefix `json:"portal_networks"`
+	RawRetentionDays     int            `json:"raw_retention_days"`
+	HistoryRetentionDays int            `json:"history_retention_days"`
+	PublicEnabled        bool           `json:"public_enabled"`
+	ProbesPaused         bool           `json:"probes_paused"`
+	OutboxPaused         bool           `json:"outbox_paused"`
+	PortalURL            string         `json:"portal_url"`
+	PortalNetworks       []netip.Prefix `json:"portal_networks"`
 }
 
 func (s *Store) Settings() ServiceSettings {
 	out := ServiceSettings{PublicEnabled: s.setting("public_enabled") == "1", ProbesPaused: s.setting("probes_paused") == "1", OutboxPaused: s.setting("outbox_paused") == "1", PortalURL: s.setting("portal_url"), PortalNetworks: []netip.Prefix{}}
+	out.RawRetentionDays = s.retentionDays("raw_retention_days", 30, 30)
+	out.HistoryRetentionDays = max(out.RawRetentionDays, s.retentionDays("history_retention_days", 90, 90))
 	json.Unmarshal([]byte(s.setting("portal_networks")), &out.PortalNetworks)
 	return out
+}
+func parseRetentionDays(value string, fallback, maximum int) int {
+	days, err := strconv.Atoi(value)
+	if err != nil || days < 1 || days > maximum {
+		return fallback
+	}
+	return days
+}
+func (s *Store) retentionDays(key string, fallback, maximum int) int {
+	return parseRetentionDays(s.setting(key), fallback, maximum)
 }
 func (s *Store) SaveSettings(v protocol.Viewer, in ServiceSettings) error {
 	if !isAdmin(v) {
 		return ErrForbidden
+	}
+	if in.RawRetentionDays == 0 {
+		in.RawRetentionDays = s.retentionDays("raw_retention_days", 30, 30)
+	}
+	if in.HistoryRetentionDays == 0 {
+		in.HistoryRetentionDays = s.retentionDays("history_retention_days", 90, 90)
+	}
+	if in.RawRetentionDays < 1 || in.RawRetentionDays > 30 || in.HistoryRetentionDays < in.RawRetentionDays || in.HistoryRetentionDays > 90 {
+		return ErrInvalid
 	}
 	if in.PortalURL != "" {
 		u, err := url.Parse(in.PortalURL)
@@ -66,7 +90,7 @@ func (s *Store) SaveSettings(v protocol.Viewer, in ServiceSettings) error {
 			}
 		}
 	}
-	values := map[string]string{"public_enabled": boolString(in.PublicEnabled), "probes_paused": boolString(in.ProbesPaused), "outbox_paused": boolString(in.OutboxPaused), "portal_url": in.PortalURL, "portal_networks": string(networks)}
+	values := map[string]string{"raw_retention_days": strconv.Itoa(in.RawRetentionDays), "history_retention_days": strconv.Itoa(in.HistoryRetentionDays), "public_enabled": boolString(in.PublicEnabled), "probes_paused": boolString(in.ProbesPaused), "outbox_paused": boolString(in.OutboxPaused), "portal_url": in.PortalURL, "portal_networks": string(networks)}
 	for key, value := range values {
 		if err := setSetting(tx, key, value); err != nil {
 			return err
@@ -153,16 +177,22 @@ func (s *Store) Cleanup(now time.Time) error {
 		return err
 	}
 	defer tx.Rollback()
-	cutoff := now.Add(-90 * 24 * time.Hour).UnixMilli()
+	var rawDays, historyDays string
+	if err := tx.QueryRow(`SELECT COALESCE((SELECT value FROM settings WHERE key='raw_retention_days'),''),COALESCE((SELECT value FROM settings WHERE key='history_retention_days'),'')`).Scan(&rawDays, &historyDays); err != nil {
+		return err
+	}
+	policy := ServiceSettings{RawRetentionDays: parseRetentionDays(rawDays, 30, 30), HistoryRetentionDays: parseRetentionDays(historyDays, 90, 90)}
+	policy.HistoryRetentionDays = max(policy.RawRetentionDays, policy.HistoryRetentionDays)
+	cutoff := now.Add(-time.Duration(policy.HistoryRetentionDays) * 24 * time.Hour).UnixMilli()
 	queries := []struct {
 		q    string
 		args []any
 	}{
-		{`DELETE FROM hourly_aggregates WHERE rowid IN(SELECT rowid FROM hourly_aggregates WHERE hour_at<? LIMIT 500)`, []any{now.Add(-90 * 24 * time.Hour).UTC().Truncate(time.Hour).UnixMilli()}},
+		{`DELETE FROM hourly_aggregates WHERE rowid IN(SELECT rowid FROM hourly_aggregates WHERE hour_at<? LIMIT 500)`, []any{now.Add(-time.Duration(policy.HistoryRetentionDays) * 24 * time.Hour).UTC().Truncate(time.Hour).UnixMilli()}},
 		{`DELETE FROM audit_events WHERE id IN(SELECT a.id FROM audit_events a WHERE a.created_at<? AND (a.action NOT IN('probes.pause','probes.resume','component.pause','component.resume','monitor.pause','monitor.resume') OR EXISTS(SELECT 1 FROM audit_events b WHERE b.target_id=a.target_id AND b.action IN('probes.pause','probes.resume','component.pause','component.resume','monitor.pause','monitor.resume') AND b.created_at<? AND (b.created_at>a.created_at OR (b.created_at=a.created_at AND b.rowid>a.rowid)))) ORDER BY a.created_at LIMIT 500)`, []any{cutoff, cutoff}},
 		{`DELETE FROM notification_outbox WHERE id IN(SELECT o.id FROM notification_outbox o JOIN incidents i ON i.id=(SELECT incident_id FROM incident_transitions WHERE id=o.transition_id) WHERE i.resolved_at>0 AND i.resolved_at<? AND o.state IN('delivered','discarded') LIMIT 100)`, []any{cutoff}},
 		{`DELETE FROM incidents WHERE id IN(SELECT i.id FROM incidents i WHERE i.resolved_at>0 AND i.resolved_at<? AND NOT EXISTS(SELECT 1 FROM incident_transitions t JOIN notification_outbox o ON o.transition_id=t.id WHERE t.incident_id=i.id) LIMIT 100)`, []any{cutoff}},
-		{`DELETE FROM observations WHERE id IN(SELECT o.id FROM observations o JOIN monitors m ON m.id=o.monitor_id WHERE o.observed_at<? AND NOT EXISTS(SELECT 1 FROM incidents i WHERE i.component_id=m.component_id AND i.resolved_at=0) AND NOT EXISTS(SELECT 1 FROM notification_outbox n WHERE n.component_id=m.component_id AND n.state NOT IN('delivered','discarded')) ORDER BY o.observed_at LIMIT 500)`, []any{now.Add(-30 * 24 * time.Hour).UnixMilli()}},
+		{`DELETE FROM observations WHERE id IN(SELECT o.id FROM observations o JOIN monitors m ON m.id=o.monitor_id WHERE o.observed_at<? AND NOT EXISTS(SELECT 1 FROM incidents i WHERE i.component_id=m.component_id AND i.resolved_at=0) AND NOT EXISTS(SELECT 1 FROM notification_outbox n WHERE n.component_id=m.component_id AND n.state NOT IN('delivered','discarded')) ORDER BY o.observed_at LIMIT 500)`, []any{now.Add(-time.Duration(policy.RawRetentionDays) * 24 * time.Hour).UnixMilli()}},
 	}
 	for _, query := range queries {
 		if _, err := tx.Exec(query.q, query.args...); err != nil {

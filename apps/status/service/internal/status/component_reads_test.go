@@ -103,3 +103,29 @@ func TestComponentExportRequiresSeparateCurrentFinanceGrant(t *testing.T) {
 		t.Fatal("finance grant was ignored or internal evidence exposed")
 	}
 }
+
+func TestPublicComponentPagesCountOnlyExplicitPublication(t *testing.T) {
+	s := testStore(t)
+	admin := protocol.Viewer{Subject: "admin", Role: "admin"}
+	now := time.Now()
+	for i := 0; i < 3; i++ {
+		_, err := s.SaveComponent(admin, ComponentInput{Label: "Private label", PublicLabel: fmt.Sprintf("Public %d", i), PublicEnabled: i < 2, Enabled: true})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	page, err := s.PublicComponentPage(now, 0, 1)
+	if err != nil || page.Total != 0 || len(page.Items) != 0 {
+		t.Fatal("public counts exposed before global publication")
+	}
+	if _, err := s.db.Exec(`INSERT INTO settings(key,value) VALUES('public_enabled','1')`); err != nil {
+		t.Fatal(err)
+	}
+	page, err = s.PublicComponentPage(now, 1, 1)
+	if err != nil || page.Total != 2 || len(page.Items) != 1 || page.Items[0].Label == "Private label" {
+		t.Fatalf("public page=%+v err=%v", page, err)
+	}
+	if _, err := s.PublicComponentPage(now, 0, 101); err != ErrInvalid {
+		t.Fatal("unbounded public page")
+	}
+}
