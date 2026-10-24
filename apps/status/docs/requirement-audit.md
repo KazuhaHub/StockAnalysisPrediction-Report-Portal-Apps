@@ -11,6 +11,18 @@ credentials and recipients are configured after installation. The matrix below
 preserves the larger plan and its historical observations rather than presenting
 those optional configuration tasks as distribution blockers.
 
+## Current-state supplement
+
+The [production rollout audit](production-rollout.md) records successful immutable
+publication, canonical listing, actual installation/private pairing, native Chrome
+reads, authenticated `/status`, independent-service restart and isolated backup
+verification. It supersedes the pending distribution/deployment statements in the
+historical matrix below. The matrix retains its original scope and fixture limits;
+it must not be read as a claim that optional production credentials, real recipient
+delivery or full manual accessibility certification have been completed.
+
+## Historical pre-publication matrix
+
 ## Product and authorization boundaries
 
 | Requirement | Inspected evidence | Classification and limit |

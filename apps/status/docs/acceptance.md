@@ -10,6 +10,12 @@ supersedes historical prerequisites that coupled distribution to optional live
 provider credentials. The remaining configuration and manual audits below are
 retained honestly; they do not prevent installing the scoped Beta.
 
+The [production rollout audit](production-rollout.md) supersedes historical
+unpublished, stopped, unpaired and installation-pending statements in this ledger.
+It records the actual 0.1.0-beta.2 marketplace installation, pairing, private route,
+native browser acceptance, restart and protected recovery verification. Remaining
+provider/recipient configuration is distinguished from implementation evidence.
+
 ## Target PostgreSQL checks, 2026-10-23 Pacific
 
 Prepared an independent PostgreSQL-aware stunnel TLS gateway, private CA and
