@@ -33,6 +33,27 @@ class PublicationTests(unittest.TestCase):
         (self.folder / "app.json").write_text(json.dumps(self.manifest))
         (self.folder / "releases/1.2.3.json").write_text(json.dumps(self.approval))
 
+    def image_index(self):
+        return {"schemaVersion": 2, "mediaType": "application/vnd.oci.image.index.v1+json", "manifests": [
+            {"mediaType": "application/vnd.oci.image.manifest.v1+json", "digest": "sha256:" + digest * 64, "platform": {"os": "unknown" if architecture == "unknown" else "linux", "architecture": architecture}}
+            for architecture, digest in [("amd64", "a"), ("arm64", "b"), ("unknown", "c")]]}
+
+    def test_platform_references_do_not_reuse_the_multiarch_index_digest(self):
+        result = publish.image_platform_references(self.image_index())
+        self.assertEqual(result, {"amd64": publish.IMAGE + "@sha256:" + "a" * 64, "arm64": publish.IMAGE + "@sha256:" + "b" * 64})
+        self.assertNotEqual(result["amd64"], result["arm64"])
+
+    def test_platform_references_reject_missing_duplicate_or_invalid_images(self):
+        bad_indexes = []
+        missing = self.image_index(); missing["manifests"].pop(1); bad_indexes.append(missing)
+        duplicate = self.image_index(); duplicate["manifests"].append(copy.deepcopy(duplicate["manifests"][0])); bad_indexes.append(duplicate)
+        bad_digest = self.image_index(); bad_digest["manifests"][0]["digest"] = "../../other"; bad_indexes.append(bad_digest)
+        wrong_os = self.image_index(); wrong_os["manifests"][0]["platform"]["os"] = "windows"; bad_indexes.append(wrong_os)
+        same_digest = self.image_index(); same_digest["manifests"][1]["digest"] = same_digest["manifests"][0]["digest"]; bad_indexes.append(same_digest)
+        wrong_type = self.image_index(); wrong_type["mediaType"] = "application/vnd.oci.image.manifest.v1+json"; bad_indexes.append(wrong_type)
+        for index in bad_indexes:
+            with self.assertRaises(ValueError): publish.image_platform_references(index)
+
     def test_release_requires_exact_version_confirmation_and_review(self):
         result = publish.release_contract(self.root, "1.2.3", "status/v1.2.3")
         self.assertEqual(result["minimum_portal_release"], "v2026.44")

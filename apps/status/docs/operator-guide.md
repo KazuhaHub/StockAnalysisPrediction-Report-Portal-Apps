@@ -2,13 +2,13 @@
 
 ## Scope and prerequisites
 
-This runbook applies to Status `0.1.0-beta.1`. Installation and backend deployment
+This runbook applies to Status `0.1.0-beta.2`. Installation and backend deployment
 precede optional provider credential provisioning. Missing Qwen billing credentials
 or unconfigured notification destinations do not block distributing the application.
 Fresh storage starts without components, with probes/outbox paused and public
 output disabled. Configure each monitor, audience and notification route afterward.
 The Beta release scope and verified limits are recorded in
-[the readiness decision](../../../docs/status-0.1.0-beta.1-readiness.md).
+[the readiness decision](../../../docs/status-0.1.0-beta.2-readiness.md).
 The application sources remain in the
 shared Apps monorepo; no separate Status repository is needed.
 
