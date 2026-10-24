@@ -27,7 +27,7 @@ The [acceptance ledger](acceptance.md) records current source and deployment sta
 | Provider quota API unavailable | `TestBalanceObservationFailureRemainsUnknown`, provider Retry-After tests | DeepSeek/Qwen network failure yields unknown without a fabricated balance; cooldown prevents premature next observation |
 | Negative/zero credit | `TestNonpositiveProviderBalancesNeverBecomeHealthy`, exact-decimal adapter tests | Zero, negative fractional and large negative amounts remain exact and non-healthy; a positive credit line does not imply available funds |
 | Expired/unauthorized key | `TestBillingAuthenticationFailureRemainsUnknown`, Qwen permission/site fixtures | Both provider families return unknown with their typed setup/authentication reason and no inferred zero balance |
-| Database timeout | `TestPostgresGuardedDriverTLSAndTimeouts` | Actual pgx/TLS protocol fixtures cover negotiation, authentication, query and teardown deadlines and socket release; live verified-TLS access is still unconfigured |
+| Database timeout | `TestPostgresGuardedDriverTLSAndTimeouts`; real target adapter checks in acceptance ledger | Wire fixtures cover deadlines/socket release; real verified-TLS SELECT 1 succeeds, wrong password/CA/hostname and another database are refused, and gateway restart recovers |
 | Last-success evidence becomes stale | `TestLastSuccessExpiresInPrivateAndPublicSnapshotsWithoutRewritingItsTime` | Private/public snapshots retain original evidence times, change to stale/unknown after TTL and do not invent a new success |
 | Removed OU membership | Current-OU browser and component/export authority tests | Counts, list, detail, export and inbox access re-evaluate current authority |
 | Service restart mid-probe | `TestExpiredProbeAfterRestartRecordsUnknownAndRequiresFreshConfirmation`, revision/lease tests | Abandoned evidence is unknown; old configuration/credential results cannot commit; fresh confirmation is required |
@@ -57,7 +57,7 @@ Email/Slack recipient, real billing authorization, or a production outage exerci
 | Gate | Authoritative current evidence | Remaining work |
 | --- | --- | --- |
 | Notification and generic platform prerequisites | Portal #141/#142 and protocol #1 merged; Portal v2026.43.2 published/deployed with migration and recovery evidence | Complete actual installed-app pairing/configuration review |
-| Dify, PostgreSQL and both provider families | Typed adapters and protocol fixtures; actual guarded Dify GET /v1/info and DeepSeek account balance succeeded on the authorized target, recorded in the acceptance ledger | Separate verified-TLS PostgreSQL/read-only identity and Qwen billing account/site/authorization checks; Dify holds a DashScope model key, not a RAM pair |
+| Dify, PostgreSQL and both provider families | Actual guarded Dify info, DeepSeek balance and PostgreSQL verified-TLS SELECT 1 succeed; dedicated scoped database login and negative controls verified | Qwen billing account/site/authorization checks; the owner will provision RAM credentials, because Dify holds a DashScope model key |
 | Six platforms and exact image executable bytes | Artifact builder and CI; non-root prebuilt image checks | Publish a non-development app-qualified version from clean reviewed main after acceptance |
 | Released minimum Portal compatibility | Browser and real notification checks use checksum-verified published v2026.43.2 binaries | Record the final version-specific acceptance and operator evidence |
 | Immutable tag/image/assets and public downloads | Guarded workflow, policy tests, metadata binding and draft/public download verification implementation | No actual Status release has run; do not treat workflow code as publication evidence |
@@ -65,6 +65,6 @@ Email/Slack recipient, real billing authorization, or a production outage exerci
 | Production operator approval and activation | Current candidate is prepared, paused, stopped and unpaired; existing admin browser session is available | Marketplace installation/permission confirmation after publication; private pairing; target configuration; deliberate probe/audience/gateway review; a manual ZIP is optional controlled acceptance |
 
 Overall completion is **not proven**. In particular, the production app, actual
-provider authorization, PostgreSQL TLS/read-only path, final operator/manual
+Qwen billing authorization, final operator/manual
 acceptance, immutable publication and catalogue/default-market rollout are not
 substituted by the successful fixture tests above.

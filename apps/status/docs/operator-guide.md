@@ -107,6 +107,12 @@ private network. Loopback, link-local and metadata targets remain forbidden. The
 base URL has no credentials, query string, fragment or route path. The iframe
 cannot select a different backend host.
 
+The authorized target's dedicated PostgreSQL TLS gateway, scoped probe identity,
+trust override, verification receipts and rotation/rollback procedure are recorded
+in [the PostgreSQL target runbook](postgresql-target-deployment.md). Native database
+SSL and existing application credentials were retained. The one-shot checks do
+not enable a production component or bypass marketplace installation/pairing.
+
 An operator may optionally upload a reviewed development ZIP for controlled
 acceptance under the restrictions at the start of this guide. This is an
 alternative test path, not a mandatory step before marketplace installation.
