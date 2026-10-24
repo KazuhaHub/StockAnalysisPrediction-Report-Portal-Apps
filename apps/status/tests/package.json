@@ -1,6 +1,11 @@
 {
   "name": "status-acceptance",
   "private": true,
-  "scripts": { "test": "playwright test" },
-  "devDependencies": { "@playwright/test": "1.64.1" }
+  "scripts": {
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.64.1",
+    "axe-core": "4.14.0"
+  }
 }

@@ -229,3 +229,44 @@ test('incompatible backend is refused before any component data and can be retri
   await expect(frame.getByRole('heading', { name: 'Private operations A', exact: true })).toBeVisible()
   await context.close()
 })
+
+test('private and public status pages meet automated accessibility checks', async ({ browser }) => {
+  const axeSource = readFileSync(require.resolve('axe-core/axe.min.js'), 'utf8')
+  async function audit(frame, label) {
+    await frame.evaluate(axeSource)
+    const violations = await frame.evaluate(async () => (await axe.run(document, { runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa'] } })).violations.map(v => ({ id: v.id, nodes: v.nodes.map(n => ({ target: n.target, summary: n.failureSummary })) })))
+    expect(violations, label).toEqual([])
+  }
+  for (const mode of ['light', 'dark']) {
+    const context = await browser.newContext({ storageState: await adminAPI.storageState(), locale: 'en-US', colorScheme: mode, viewport: { width: 390, height: 844 } })
+    await context.addInitScript(mode => { if (window.top === window) localStorage.setItem('rp_theme', mode) }, mode)
+    const page = await context.newPage()
+    try {
+      await page.goto(base + '/apps/x/status')
+      const controls = page.frameLocator('iframe')
+      await expect(controls.getByRole('heading', { name: 'Private operations A', exact: true })).toBeVisible()
+      const frame = page.frames().find(f => /\/app-assets\//.test(f.url()))
+      await audit(frame, mode + ' overview')
+      await controls.getByRole('button', { name: 'Manage', exact: true }).click()
+      await expect(controls.getByRole('button', { name: 'New component', exact: true })).toBeVisible()
+      await audit(frame, mode + ' components')
+      await controls.getByRole('button', { name: 'New component', exact: true }).click()
+      await expect(controls.getByLabel('Internal label', { exact: true })).toBeVisible()
+      await audit(frame, mode + ' component editor')
+      await controls.getByRole('button', { name: 'Operations', exact: true }).click()
+      await expect(controls.getByLabel('Enable reviewed public projection', { exact: true })).toBeVisible()
+      await audit(frame, mode + ' operations')
+    } finally { await context.close() }
+  }
+  await proxy(adminAPI, 'PUT', '/v1/manage/settings', { public_enabled: true, probes_paused: true, outbox_paused: true, portal_url: '', portal_networks: [] })
+  const context = await browser.newContext({ locale: 'en-US', viewport: { width: 390, height: 844 } })
+  try {
+    const page = await context.newPage()
+    await page.goto(statusBase + '/')
+    await expect(page.getByRole('heading', { name: 'Public report storage', exact: true })).toBeVisible()
+    await audit(page, 'public overview')
+  } finally {
+    await context.close()
+    await proxy(adminAPI, 'PUT', '/v1/manage/settings', { public_enabled: false, probes_paused: true, outbox_paused: true, portal_url: '', portal_networks: [] })
+  }
+})

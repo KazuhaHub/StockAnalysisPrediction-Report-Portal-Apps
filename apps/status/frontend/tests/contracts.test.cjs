@@ -1,6 +1,6 @@
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
-const { proxyRequest, safeState, selectLocale, percentage, monitorHint, requestErrorKey, compatibleBackend, REQUIRED_CAPABILITIES } = require('../src/contracts.cjs')
+const { proxyRequest, safeState, selectLocale, percentage, monitorHint, requestErrorKey, compatibleBackend, REQUIRED_CAPABILITIES, primaryColors } = require('../src/contracts.cjs')
 test('private requests use the exact installed-app bridge without caller authority', () => {
   assert.deepEqual(proxyRequest('GET', '/v1/components'), { method: 'POST', path: '/api/v1/extensions/status/request', body: { method: 'GET', path: '/v1/components' } })
   for (const path of ['https://other/v1/x', '/api/admin/users', '/v1/../x', '/v1/%252e%252e/x', '//other/v1/x']) assert.throws(() => proxyRequest('GET', path))
@@ -43,4 +43,13 @@ test('backend capability handshake refuses old or malformed service replies', ()
   assert.equal(compatibleBackend({ api_version: 2, capabilities: REQUIRED_CAPABILITIES }), false)
   assert.equal(compatibleBackend({ api_version: 1, capabilities: [] }), false)
   assert.equal(compatibleBackend({ api_version: 1, capabilities: REQUIRED_CAPABILITIES }), true)
+})
+
+
+test('primary button text stays readable on Portal theme colors', () => {
+  assert.deepEqual(primaryColors('#1677ff'), { background: '#1677ff', foreground: '#000000' })
+  assert.deepEqual(primaryColors('#1668dc'), { background: '#1668dc', foreground: '#ffffff' })
+  assert.equal(primaryColors('#ffffff').foreground, '#000000')
+  assert.equal(primaryColors('#000000').foreground, '#ffffff')
+  assert.deepEqual(primaryColors('invalid'), primaryColors('#1762c4'))
 })

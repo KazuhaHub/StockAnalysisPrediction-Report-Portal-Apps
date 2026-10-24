@@ -405,3 +405,26 @@ path and read-only identity, plus real provider billing authorization, remain
 operational gates. The candidate preparation does not publish a release, change
 the market or claim S00–S11 completion. Complete CI passed at a4ffec6 before this
 documentation-only update.
+
+
+## Accessibility acceptance and unified-release hold (2026-10-23)
+
+A pinned axe-core browser check first reproduced insufficient primary-button text
+contrast (4.1:1 on the Portal light-blue theme) and a keyboard-inaccessible
+horizontal table region. Primary buttons now select the higher-contrast black or
+white text using sRGB luminance; invalid non-hex theme values fall back to the
+accessible default. Table wrappers have a named, visibly focused keyboard stop
+and column headers declare scope. No host page or sandbox permission changed.
+
+Eight contract tests and seven browser scenarios pass. The added WCAG A/AA scan
+covers narrow-screen light/dark private overview, component management/editor,
+operations, and the independent public overview. This is automated evidence, not
+a claim of complete manual screen-reader acceptance. Generated public assets
+were rebuilt through the normal builder.
+
+The owner explicitly deferred the Portal upgrade and asked to retain the Status
+candidate for a unified release. The target's formal service stays stopped and
+unpaired, with probes/publication paused and no gateway change. The existing
+server candidate is a4ffec6; these later UI fixes remain in the PR until a new
+candidate is verified. No dependency PR merge, release or Portal restart was
+performed.

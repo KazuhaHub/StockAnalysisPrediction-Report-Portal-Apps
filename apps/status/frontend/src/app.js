@@ -1,6 +1,6 @@
 (function () {
   'use strict'
-  const { proxyRequest, safeState, selectLocale, percentage, monitorHint, requestErrorKey, compatibleBackend } = StatusContracts
+  const { proxyRequest, safeState, selectLocale, percentage, monitorHint, requestErrorKey, compatibleBackend, primaryColors } = StatusContracts
   let language = selectLocale(navigator.language), tab = 'overview', adminTab = 'components', admin = false, initialized = false, backendReady = false
   let componentOffset = 0, componentSearch = '', exportedComponent = null
   let error = '', notice = '', generation = 0, sequence = 0, incidentOffset = 0, selectedComponent = '', selectedIncident = ''
@@ -71,7 +71,10 @@
   async function api(method, path, body) { return host(proxyRequest(method, path, body)) }
   function theme(snapshot) {
     if (!snapshot) return
-    for (const [key, value] of Object.entries({ '--bg': snapshot.colorBgLayout, '--surface': snapshot.colorBg, '--text': snapshot.colorText, '--border': snapshot.colorBorder, '--primary': snapshot.colorPrimary })) if (typeof value === 'string') document.documentElement.style.setProperty(key, value)
+    for (const [key, value] of Object.entries({ '--bg': snapshot.colorBgLayout, '--surface': snapshot.colorBg, '--text': snapshot.colorText, '--border': snapshot.colorBorder })) if (typeof value === 'string') document.documentElement.style.setProperty(key, value)
+    const primary = primaryColors(snapshot.colorPrimary)
+    document.documentElement.style.setProperty('--primary', primary.background)
+    document.documentElement.style.setProperty('--on-primary', primary.foreground)
     document.documentElement.style.colorScheme = snapshot.dark ? 'dark' : 'light'
     document.documentElement.style.setProperty('--muted', snapshot.dark ? '#b2bed0' : '#57657a')
   }
@@ -97,7 +100,7 @@
   }
   function badge(state) { state = safeState(state); return h('span', { class: 'badge ' + state }, t(state)) }
   function date(instant) { return instant ? new Date(instant).toLocaleString(language) : '—' }
-  function table(headings, rows) { return h('div', { class: 'scroll' }, h('table', {}, h('thead', {}, h('tr', {}, headings.map(key => h('th', {}, t(key))))), h('tbody', {}, rows.map(row => h('tr', {}, row.map(cell => h('td', {}, cell))))))) }
+  function table(headings, rows) { return h('div', { class: 'scroll', tabIndex: 0, role: 'region', 'aria-label': t(headings[0]) }, h('table', {}, h('thead', {}, h('tr', {}, headings.map(key => h('th', { scope: 'col' }, t(key))))), h('tbody', {}, rows.map(row => h('tr', {}, row.map(cell => h('td', {}, cell))))))) }
   async function render() {
     if (rendering) { rerender = true; return }
     rendering = true
