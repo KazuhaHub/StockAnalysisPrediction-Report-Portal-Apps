@@ -34,8 +34,6 @@ async function choose(frame, name, label, popup = frame) {
 async function openStatus(page) {
   await page.addLocatorHandler(page.locator('.rp-login-activity-notice'), async notice => { await notice.getByRole('button', { name: 'Close', exact: true }).click() })
   await page.goto(base + '/apps/x/status')
-  const loginNotice = page.locator('.rp-login-activity-notice')
-  if (await loginNotice.isVisible()) await loginNotice.getByRole('button', { name: 'Close', exact: true }).click()
 }
 async function next(frame) { await frame.getByRole('button', { name: 'Next', exact: true }).click() }
 test.beforeAll(async () => {
