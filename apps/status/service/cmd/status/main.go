@@ -21,7 +21,7 @@ import (
 	protocol "github.com/KazuhaHub/StockAnalysisPrediction-Report-Portal-Apps/packages/extensionprotocol"
 )
 
-var version = "0.1.0-beta.1"
+var version = "0.1.0-beta.2"
 
 type pairing struct {
 	Issuer     string `json:"issuer"`

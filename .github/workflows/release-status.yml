@@ -147,14 +147,28 @@ jobs:
         run: |
           set -euo pipefail
           reference="${STATUS_IMAGE%:*}@$DIGEST"
-          for arch in amd64 arm64; do
-            docker pull --platform "linux/$arch" "$reference"
-            id=$(docker create --platform "linux/$arch" "$reference")
+          docker buildx imagetools inspect "$reference" --raw > "$RUNNER_TEMP/release-bundle/image-index.json"
+          python3 - <<'PYCODE'
+          import importlib.util, json, os
+          from pathlib import Path
+          folder = Path(os.environ['RUNNER_TEMP']) / 'release-bundle'
+          spec = importlib.util.spec_from_file_location('status_publish', 'scripts/status-publish.py')
+          module = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(module)
+          references = module.image_platform_references(json.loads((folder / 'image-index.json').read_text()))
+          (folder / 'image-platforms.tsv').write_text(''.join(arch + '\t' + references[arch] + '\n' for arch in ['amd64', 'arm64']))
+          PYCODE
+          native_reference=
+          while IFS=$'\t' read -r arch platform_reference; do
+            docker pull --platform "linux/$arch" "$platform_reference"
+            id=$(docker create --platform "linux/$arch" "$platform_reference")
             docker cp "$id:/status" "$RUNNER_TEMP/image-status-$arch"
             docker rm "$id"
             cmp "$RUNNER_TEMP/image-status-$arch" "$RUNNER_TEMP/image-context/linux-$arch/status"
-          done
-          test "$(docker run --rm --pull always --platform linux/amd64 "$reference" version)" = "$VERSION"
+            if [ "$arch" = amd64 ]; then native_reference="$platform_reference"; fi
+          done < "$RUNNER_TEMP/release-bundle/image-platforms.tsv"
+          test -n "$native_reference"
+          test "$(docker run --rm --platform linux/amd64 "$native_reference" version)" = "$VERSION"
       - name: Bind image digest, upload and verify draft assets, then publish
         env:
           VERSION: ${{ inputs.version }}

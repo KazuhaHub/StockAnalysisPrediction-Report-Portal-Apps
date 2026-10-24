@@ -90,6 +90,31 @@ def verified_jobs(jobs):
         raise ValueError("all required CI jobs must have completed successfully")
 
 
+def image_platform_references(index):
+    if not isinstance(index, dict) or type(index.get("schemaVersion")) is not int or index["schemaVersion"] != 2 or index.get("mediaType") not in {"application/vnd.oci.image.index.v1+json", "application/vnd.docker.distribution.manifest.list.v2+json"}:
+        raise ValueError("a multi-platform image index is required")
+    manifests = index.get("manifests")
+    if not isinstance(manifests, list) or not 2 <= len(manifests) <= 16:
+        raise ValueError("invalid image manifest list")
+    references = {}
+    digests = set()
+    for manifest in manifests:
+        if not isinstance(manifest, dict) or not isinstance(manifest.get("platform"), dict):
+            raise ValueError("image manifest platform is missing")
+        platform = manifest["platform"]
+        if platform.get("os") == "unknown" and platform.get("architecture") == "unknown":
+            continue
+        architecture = platform.get("architecture")
+        digest = manifest.get("digest")
+        if platform.get("os") != "linux" or architecture not in {"amd64", "arm64"} or architecture in references or not isinstance(digest, str) or not DIGEST.fullmatch(digest) or digest in digests or manifest.get("mediaType") not in {"application/vnd.oci.image.manifest.v1+json", "application/vnd.docker.distribution.manifest.v2+json"}:
+            raise ValueError("invalid or duplicate runtime platform manifest")
+        references[architecture] = IMAGE + "@" + digest
+        digests.add(digest)
+    if set(references) != {"amd64", "arm64"}:
+        raise ValueError("both runtime platforms are required")
+    return references
+
+
 def checksums(text):
     result = {}
     for line in text.splitlines():
