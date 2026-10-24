@@ -56,9 +56,11 @@ Before the first app release:
    its immutable digest.
 5. Download and verify the published bytes/checksums. Install the ZIP through the
    real Portal installer against the released platform and exercise the runbook.
-6. Only then add the immutable ZIP URL to the catalogue and explicitly migrate the
-   Portal default/override policy in its own reviewed change. A checksum file does
-   not add host-enforced checksum verification to the existing marketplace.
+6. Only then add the immutable Status ZIP URL to the catalogue. The independent
+   Portal default/override migration follows implementation plan section 14.2 and
+   may precede Status publication when all currently listed apps are verified.
+   A checksum file does not add host-enforced checksum verification to the
+   existing marketplace.
 
 No production/provider credential, recipient delivery or operator sign-off is
 inferred from building candidates. No release, tag or image is created by this
