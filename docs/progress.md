@@ -663,3 +663,15 @@ Production remains Beta.2 with four configured administrator-only probes and
 paused notifications; Qwen billing credentials and owner-selected recipients/grants
 remain separate follow-up work. Existing public versions and catalogue URLs are
 unchanged by this source migration.
+
+
+## React UI Beta.3 publication
+
+The shared-standard/UI change and release preparation merged through PR #13/#14.
+Exact-main source `d80858feedaec23cb68ab51f120555c0ded31e93` passed all thirteen
+checks. Release run 40143092234 published Beta.3; independent verification matched
+all public assets and the target host image executable. The
+[publication checkpoint](status-0.1.0-beta.3-publication.md) records hashes and
+remaining deployment boundaries. At publication the running service and installed
+frontend were still Beta.2; the market update does not itself establish upgrade,
+new pairing or resumed scheduled-probe acceptance.

@@ -15,13 +15,13 @@
       "id": "status",
       "name": "Status",
       "icon": "🟢",
-      "version": "0.1.0-beta.2",
+      "version": "0.1.0-beta.3",
       "description": "Service status, uptime history and incidents with OU visibility. Install first, then configure monitors, provider credentials and notifications.",
       "scopes": [
         "extension.read",
         "extension.manage"
       ],
-      "url": "https://github.com/KazuhaHub/StockAnalysisPrediction-Report-Portal-Apps/releases/download/status/v0.1.0-beta.2/status.zip"
+      "url": "https://github.com/KazuhaHub/StockAnalysisPrediction-Report-Portal-Apps/releases/download/status%2Fv0.1.0-beta.3/status.zip"
     }
   ]
 }
