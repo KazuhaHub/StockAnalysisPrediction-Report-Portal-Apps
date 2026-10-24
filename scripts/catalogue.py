@@ -1,17 +1,111 @@
 """Validate the catalogue and build bounded reproducible app archives."""
 import argparse
 import hashlib
+import io
 import json
 import re
 import stat
 import sys
 import zipfile
 from pathlib import Path
+from urllib.parse import urlsplit, unquote, quote
+from urllib.request import HTTPRedirectHandler, build_opener
 
 ROOT = Path(__file__).resolve().parents[1]
 SLUG = re.compile(r"[a-z0-9][a-z0-9_-]{0,63}")
 VERSION = re.compile(r"(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-[0-9A-Za-z.-]+)?")
 SCOPES = {"query", "ingest", "notify", "extension.read", "extension.manage"}
+PORTAL_REPO = "KazuhaHub/StockAnalysisPrediction-Report-Portal"
+
+
+class ArtifactRedirect(HTTPRedirectHandler):
+    def redirect_request(self, request, fp, code, msg, headers, newurl):
+        u = urlsplit(newurl)
+        if u.scheme != "https" or u.username or u.password or u.hostname not in {
+            "github.com", "api.github.com", "raw.githubusercontent.com",
+            "objects.githubusercontent.com", "release-assets.githubusercontent.com",
+        }:
+            raise ValueError("refused artifact redirect")
+        return super().redirect_request(request, fp, code, msg, headers, newurl)
+
+
+def download(url, limit):
+    with build_opener(ArtifactRedirect()).open(url, timeout=30) as response:
+        raw = response.read(limit + 1)
+    if len(raw) > limit:
+        raise ValueError("remote artifact exceeded its bound")
+    return raw
+
+
+def extension_record(root, m):
+    version = m["version"]
+    path = root / "apps" / m["id"] / "releases" / (version + ".json")
+    if path.is_symlink() or not path.resolve().is_relative_to(root.resolve()):
+        raise ValueError("unsafe acceptance record path")
+    try:
+        record = json.loads(path.read_text())
+    except OSError:
+        raise ValueError("extension applications require a version-specific acceptance record") from None
+    if type(record.get("schema_version")) is not int or record["schema_version"] != 1 or record.get("app_id") != m["id"] or record.get("version") != version:
+        raise ValueError("acceptance record identity mismatch")
+    minimum = record.get("minimum_portal_release", "")
+    match = re.fullmatch(r"v([0-9]{4})\.([1-9]|[1-4][0-9]|5[0-3])(?:\.([1-9][0-9]*))?", minimum)
+    if not match or tuple(int(value or 0) for value in match.groups()) < (2026, 43, 2):
+        raise ValueError("extension capabilities require Portal v2026.43.2 or later")
+    return record
+
+
+def verify_download(entry, m, record, fetch):
+    raw = fetch(entry["url"], 10 * 1024 * 1024)
+    with zipfile.ZipFile(io.BytesIO(raw)) as bundle:
+        entries = bundle.infolist()
+        names = [item.filename for item in entries]
+        if len(entries) > 200 or len(set(names)) != len(names) or sum(item.file_size for item in entries) > 10 * 1024 * 1024 or m["entry"] not in names or "app.json" not in names:
+            raise ValueError("invalid marketplace archive")
+        for item in entries:
+            path = Path(item.filename)
+            if path.is_absolute() or ".." in path.parts or "\\" in item.filename or stat.S_ISLNK(item.external_attr >> 16):
+                raise ValueError("unsafe marketplace archive entry")
+        if json.loads(bundle.read("app.json")) != m:
+            raise ValueError("published archive and source manifest disagree")
+    if record is None:
+        return
+    u = urlsplit(entry["url"])
+    owner, repo = unquote(u.path).strip("/").split("/")[:2]
+    tag = m["id"] + "/v" + m["version"]
+    for repository, release_tag in [(owner + "/" + repo, tag), (PORTAL_REPO, record["minimum_portal_release"])]:
+        release = json.loads(fetch("https://api.github.com/repos/" + repository + "/releases/tags/" + quote(release_tag, safe=""), 2 * 1024 * 1024))
+        if release.get("draft") is not False or not release.get("published_at") or release.get("tag_name") != release_tag:
+            raise ValueError("application and compatible Portal releases must both be published")
+    base = entry["url"].rsplit("/", 1)[0]
+    metadata_raw = fetch(base + "/release.json", 1024 * 1024)
+    metadata = json.loads(metadata_raw)
+    for key, value in record.items():
+        actual = metadata.get("image", {}).get("runtime_image") if key == "runtime_image" else metadata.get(key)
+        if actual != value:
+            raise ValueError("published metadata and acceptance record disagree")
+    if metadata.get("tag") != tag or not re.fullmatch(r"[a-f0-9]{40}", metadata.get("source_commit", "")):
+        raise ValueError("invalid published release provenance")
+    api = "https://api.github.com/repos/" + owner + "/" + repo
+    ref = json.loads(fetch(api + "/git/ref/tags/" + quote(tag, safe=""), 65536)).get("object", {})
+    for _ in range(3):
+        if ref.get("type") != "tag":
+            break
+        if not re.fullmatch(r"[a-f0-9]{40}", ref.get("sha", "")):
+            raise ValueError("invalid annotated release tag")
+        ref = json.loads(fetch(api + "/git/tags/" + ref["sha"], 65536)).get("object", {})
+    if ref.get("type") != "commit" or ref.get("sha") != metadata["source_commit"]:
+        raise ValueError("published tag and release source commit disagree")
+    sums = {}
+    for line in fetch(base + "/SHA256SUMS", 65536).decode().splitlines():
+        match = re.fullmatch(r"([a-f0-9]{64}) [ *]([A-Za-z0-9_.-]+)", line)
+        if not match or match[2] in sums:
+            raise ValueError("invalid published checksum list")
+        sums[match[2]] = match[1]
+    name = m["id"] + ".zip"
+    digest = hashlib.sha256(raw).hexdigest()
+    if sums.get(name) != digest or metadata.get("artifacts", {}).get(name) != digest or sums.get("release.json") != hashlib.sha256(metadata_raw).hexdigest():
+        raise ValueError("published catalogue artifact checksum mismatch")
 
 
 def manifest(root, app_id):
@@ -29,7 +123,7 @@ def manifest(root, app_id):
     return data
 
 
-def check(root=ROOT):
+def check(root=ROOT, verify_downloads=False, fetch=download):
     data = json.loads((root / "index.json").read_text())
     if set(data) != {"apps"} or not isinstance(data["apps"], list):
         raise ValueError("invalid catalogue envelope")
@@ -42,18 +136,20 @@ def check(root=ROOT):
         m = manifest(root, app_id)
         if entry.get("version") != m["version"] or entry.get("scopes") != m["scopes"]:
             raise ValueError("catalogue and package declarations disagree")
-        from urllib.parse import urlsplit, unquote
         u = urlsplit(entry.get("url", ""))
         if u.scheme != "https" or u.username or u.password or u.query or u.fragment or not u.hostname:
             raise ValueError("invalid download URL")
-        immutable = (u.hostname == "github.com" and unquote(u.path).endswith(
-            "/releases/download/" + app_id + "/v" + m["version"] + "/" + app_id + ".zip"))
+        immutable = (u.hostname == "github.com" and re.fullmatch(
+            r"/[^/]+/[^/]+/releases/download/" + re.escape(app_id + "/v" + m["version"] + "/" + app_id + ".zip"), unquote(u.path)))
         # The original demo archive has an explicitly pinned immutable source commit.
-        legacy = u.hostname == "raw.githubusercontent.com" and re.search(r"/[a-f0-9]{40}/apps/demo-symbols\.zip$", u.path)
+        legacy = app_id == "demo-symbols" and u.hostname == "raw.githubusercontent.com" and re.fullmatch(r"/" + PORTAL_REPO + r"/[a-f0-9]{40}/apps/demo-symbols\.zip", u.path)
         if not (immutable or legacy) or not u.path.endswith(".zip"):
             raise ValueError("download must reference an immutable ZIP")
-        if any(s.startswith("extension.") for s in m["scopes"]):
-            raise ValueError("unreleased extension capabilities cannot enter the catalogue")
+        if any(part.lower() in {"dev", "snapshot"} for part in re.split(r"[.-]", m["version"])):
+            raise ValueError("development versions cannot enter the catalogue")
+        record = extension_record(root, m) if any(s.startswith("extension.") for s in m["scopes"]) else None
+        if verify_downloads:
+            verify_download(entry, m, record, fetch)
     return len(ids)
 
 
@@ -102,14 +198,15 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("command", choices=["check", "package"])
     parser.add_argument("app_id", nargs="?")
+    parser.add_argument("--verify-downloads", action="store_true", help="verify published archives and extension release provenance")
     args = parser.parse_args()
     try:
         if args.command == "check":
-            print(f"Validated {check()} catalogue entries")
+            print(f"Validated {check(verify_downloads=args.verify_downloads)} catalogue entries")
         elif not args.app_id:
             parser.error("package requires an application ID")
         else:
             print(package(args.app_id))
-    except (ValueError, OSError, KeyError, TypeError) as err:
+    except (ValueError, OSError, KeyError, TypeError, zipfile.BadZipFile) as err:
         print(f"Validation failed: {err}", file=sys.stderr)
         sys.exit(1)

@@ -1,0 +1,9 @@
+ARG RUNTIME_IMAGE
+FROM ${RUNTIME_IMAGE}
+ARG TARGETARCH
+COPY linux-${TARGETARCH}/status /status
+WORKDIR /data
+EXPOSE 8791
+USER 65532:65532
+ENTRYPOINT ["/status"]
+CMD ["serve", "-listen", ":8791", "-database", "/data/status.db", "-storage-key-file", "/run/secrets/status-storage.key", "-pairing-file", "/run/secrets/status-pairing.json"]

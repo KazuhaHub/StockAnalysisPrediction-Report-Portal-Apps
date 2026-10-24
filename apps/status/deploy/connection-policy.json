@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "routes": [
+    {"method": "GET", "prefix": "/v1/me"},
+    {"method": "GET", "prefix": "/v1/components"},
+    {"method": "GET", "prefix": "/v1/incidents"},
+    {"method": "GET", "prefix": "/v1/history"},
+    {"method": "GET", "prefix": "/v1/manage"},
+    {"method": "PUT", "prefix": "/v1/manage"},
+    {"method": "POST", "prefix": "/v1/manage"},
+    {"method": "DELETE", "prefix": "/v1/manage"}
+  ],
+  "ports": [443],
+  "networks": [],
+  "plain_http": false
+}

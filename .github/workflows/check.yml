@@ -5,6 +5,15 @@ on:
 permissions:
   contents: read
 jobs:
+  workflow-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: apps/status/service/go.mod
+          cache: false
+      - run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
   catalogue:
     runs-on: ubuntu-latest
     steps:
@@ -13,7 +22,7 @@ jobs:
         with:
           python-version: '3.13'
       - run: python3 -m unittest discover -s scripts/tests -v
-      - run: python3 scripts/catalogue.py check
+      - run: python3 scripts/catalogue.py check --verify-downloads
       - run: python3 scripts/catalogue.py package demo-symbols
   protocol:
     runs-on: ubuntu-latest
@@ -29,3 +38,143 @@ jobs:
       - run: go vet ./...
       - run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
       - run: go test -race ./...
+  status:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: apps/status/service/go.mod
+          cache: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: node --test apps/status/frontend/tests/*.test.cjs
+      - run: python3 scripts/build-status-frontend.py
+      - run: git diff --exit-code -- apps/status/service/internal/status/public
+      - run: python3 scripts/catalogue.py package status
+      - run: go build ./...
+        working-directory: apps/status/service
+      - run: go vet ./...
+        working-directory: apps/status/service
+      - run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
+        working-directory: apps/status/service
+      - run: go test -race ./...
+        working-directory: apps/status/service
+  status-browser:
+    runs-on: ubuntu-latest
+    env:
+      GOWORK: 'off'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: apps/status/service/go.mod
+          cache: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Verify the published minimum Portal binary
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download v2026.43.2 --repo KazuhaHub/StockAnalysisPrediction-Report-Portal --pattern SHA256SUMS.txt --pattern report-portal_v2026.43.2_linux_amd64.tar.gz --dir "$RUNNER_TEMP/portal-release"
+          python3 - <<'PYCODE'
+          import hashlib, importlib.util, os
+          from pathlib import Path
+          folder = Path(os.environ['RUNNER_TEMP']) / 'portal-release'
+          archive = folder / 'report-portal_v2026.43.2_linux_amd64.tar.gz'
+          spec = importlib.util.spec_from_file_location('status_publish', 'scripts/status-publish.py')
+          module = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(module)
+          sums = module.checksums((folder / 'SHA256SUMS.txt').read_text())
+          if hashlib.sha256(archive.read_bytes()).hexdigest() != sums.get(archive.name):
+              raise SystemExit('Published Portal archive checksum mismatch')
+          binary = module.tar_binary(archive.read_bytes(), 'report-portal_v2026.43.2_linux_amd64/report-portal')
+          target = Path(os.environ['RUNNER_TEMP']) / 'status-portal-acceptance'
+          target.write_bytes(binary)
+          target.chmod(0o700)
+          PYCODE
+          "$RUNNER_TEMP/status-portal-acceptance" version
+      - run: go build -o "$RUNNER_TEMP/status-service-acceptance" ./cmd/status
+        working-directory: apps/status/service
+      - name: Verify real Portal notification capture and channel quota handling
+        run: go test -race ./internal/status -run '^TestPortalNotificationCaptureAndChannelQuota$' -count=1
+        working-directory: apps/status/service
+        env:
+          PORTAL_BINARY: ${{ runner.temp }}/status-portal-acceptance
+      - run: python3 scripts/build-status-frontend.py && python3 scripts/catalogue.py package status
+      - run: npm ci && npx playwright install --with-deps chromium
+        working-directory: apps/status/tests
+      - run: npm test
+        working-directory: apps/status/tests
+        env:
+          PORTAL_BINARY: ${{ runner.temp }}/status-portal-acceptance
+          STATUS_BINARY: ${{ runner.temp }}/status-service-acceptance
+          RP_DB_DRIVER: postgres
+          RP_DB_DSN: fixture-must-not-be-used
+          RP_LISTEN: invalid-fixture-listen
+  status-container:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -f apps/status/Dockerfile -t status-development .
+      - run: docker run --rm status-development version
+      - name: Verify the prebuilt release image path without publishing
+        run: |
+          set -euo pipefail
+          context="$RUNNER_TEMP/prebuilt-image"
+          mkdir -p "$context/linux-amd64"
+          id=$(docker create status-development)
+          docker cp "$id:/status" "$context/linux-amd64/status"
+          docker rm "$id"
+          docker pull gcr.io/distroless/static-debian12:nonroot
+          runtime=$(docker image inspect gcr.io/distroless/static-debian12:nonroot --format '{{index .RepoDigests 0}}')
+          docker build --platform linux/amd64 -f apps/status/deploy/Dockerfile.release --build-arg "RUNTIME_IMAGE=$runtime" --build-arg TARGETARCH=amd64 -t status-prebuilt-smoke "$context"
+          test "$(docker run --rm status-prebuilt-smoke version)" = "$(docker run --rm status-development version)"
+          test "$(docker image inspect status-prebuilt-smoke --format '{{.Config.User}}')" = '65532:65532'
+          id=$(docker create status-prebuilt-smoke)
+          docker cp "$id:/status" "$RUNNER_TEMP/prebuilt-status"
+          docker rm "$id"
+          cmp "$context/linux-amd64/status" "$RUNNER_TEMP/prebuilt-status"
+      - run: python3 scripts/status-container-smoke.py
+  status-artifacts:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [linux-amd64, linux-arm64, linux-armv7, darwin-amd64, darwin-arm64, windows-amd64]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: apps/status/service/go.mod
+          cache: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: python3 scripts/build-status-release.py --target "${{ matrix.target }}"
+      - name: Verify every artifact checksum
+        shell: bash
+        run: |
+          version=$(python3 -c 'import json; print(json.load(open("apps/status/app.json"))["version"])')
+          cd "dist/artifacts/status/$version"
+          sha256sum -c SHA256SUMS
+      - name: Execute the native service artifact
+        if: matrix.target == 'linux-amd64'
+        shell: bash
+        run: |
+          version=$(python3 -c 'import json; print(json.load(open("apps/status/app.json"))["version"])')
+          tar -xzf "dist/artifacts/status/$version/status-v$version-linux-amd64.tar.gz" -C "$RUNNER_TEMP"
+          test "$("$RUNNER_TEMP/status" version)" = "$version"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: status-development-${{ matrix.target }}
+          path: dist/artifacts/status/
+          retention-days: 7
