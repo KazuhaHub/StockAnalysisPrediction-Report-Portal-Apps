@@ -1,8 +1,8 @@
 # Version-specific publication acceptance
 
 The manual Release Status workflow requires `<version>.json` here, committed on
-main with the matching non-development app manifest. No record exists for the
-current development candidate. Creating a record means the referenced evidence
+main with the matching non-development app manifest. The first Beta has a record for its
+explicit install-first scope. Creating a record means the referenced evidence
 has been reviewed; a link alone never proves the underlying acceptance.
 
 The JSON object has exactly these fields:
@@ -19,7 +19,9 @@ The JSON object has exactly these fields:
   HTTPS evidence or an existing `docs/` path relative to the repository root.
 
 Do not enter placeholder evidence, manufacture operator approval or commit provider
-credentials. Complete the acceptance ledger and actual environment checks first.
+credentials. Review the release scope and acceptance evidence first. Optional provider credentials
+and recipient configuration are post-installation tasks; never claim they have
+been validated when absent.
 The workflow then downloads and verifies the selected Portal archive, exercises real
 notification and browser integration, builds all six app archives and packages the
 same Linux executable bytes into the image. A separate write-capable job rechecks

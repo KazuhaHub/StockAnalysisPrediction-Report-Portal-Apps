@@ -43,7 +43,7 @@ are development evidence, not immutable public release URLs.
 
 Before the first app release:
 
-1. Finish the acceptance ledger and review the independent storage/upgrade and
+1. Review the release-specific scope, acceptance ledger and the independent storage/upgrade and
    operator recovery runbook.
 2. Merge/release the shared protocol, Portal notification and backend platform
    dependencies through their own review process. Record the actual minimum
@@ -70,9 +70,10 @@ script or the artifact CI jobs.
 
 `.github/workflows/release-status.yml` is dispatched on main with `version`, the
 matching `status/v<version>` confirmation and release notes. It requires the
-version-specific record described in `../releases/README.md`; the current
-`0.1.0-dev` manifest is deliberately refused. Do not dispatch a production release
-until the record's evidence and all remaining environment acceptance are complete.
+version-specific record described in `../releases/README.md`. Development
+manifests are deliberately refused. The first Beta record accepts installation
+before optional provider/recipient provisioning; verify its stated software and
+distribution evidence without claiming absent credentials have been tested.
 
 The read-only job requires successful exact-main push CI, builds all six targets,
 and runs real browser/notification acceptance using the verified binary from the
