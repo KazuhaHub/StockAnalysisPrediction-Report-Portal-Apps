@@ -63,3 +63,28 @@ Before the first app release:
 No production/provider credential, recipient delivery or operator sign-off is
 inferred from building candidates. No release, tag or image is created by this
 script or the artifact CI jobs.
+
+## Guarded manual publication
+
+`.github/workflows/release-status.yml` is dispatched on main with `version`, the
+matching `status/v<version>` confirmation and release notes. It requires the
+version-specific record described in `../releases/README.md`; the current
+`0.1.0-dev` manifest is deliberately refused. Do not dispatch a production release
+until the record's evidence and all remaining environment acceptance are complete.
+
+The read-only job requires successful exact-main push CI, builds all six targets,
+and runs real browser/notification acceptance using the verified binary from the
+selected published Portal release. The write job checks source and CI again,
+refuses an existing image/tag/release, publishes a digest-pinned runtime with the
+prebuilt Linux executables, compares both image binaries with the archives, binds
+the digest and compatibility evidence in `release.json`, and verifies every draft
+asset by downloading it before publication. Public downloads are checked again.
+There is no rolling image tag and no automatic catalogue/default-market edit.
+
+GitHub retains the verified candidate bundle for fourteen days and the publication
+bundle for thirty days. Preserve the original plan and finalized artifacts for
+operator recovery. A partial failure does not replace or erase remote versions;
+review current state before using a new version. Never rerun blindly to repair an
+existing image or draft. Policy unit tests exercise unsafe archives, tampered
+metadata, missing targets, source admission and failed-upload draft retention.
+The workflow implementation is not evidence of an actual completed publication.

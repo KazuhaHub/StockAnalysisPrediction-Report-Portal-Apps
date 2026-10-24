@@ -15,7 +15,15 @@ function fixtureEnvironment(overrides = {}) { return { ...Object.fromEntries(Obj
 function launch(binary, args, env) { const process = spawn(binary, args, { cwd: folder, env: fixtureEnvironment(env), stdio: ['ignore', 'pipe', 'pipe'] }); let output = ''; process.stdout.on('data', chunk => { output += chunk }); process.stderr.on('data', chunk => { output += chunk }); process.output = () => output; processes.push(process); return process }
 async function ready(url, process) { const deadline = Date.now() + 30000; while (Date.now() < deadline) { if (process.exitCode !== null) throw new Error('Fixture process exited: ' + process.output()); try { const response = await fetch(url); if (response.ok) return } catch {} await new Promise(r => setTimeout(r, 100)) } throw new Error('Fixture readiness timed out') }
 async function body(response) { const text = await response.text(); if (!response.ok()) throw new Error('Fixture request failed (' + response.status() + '): ' + text); return JSON.parse(text) }
-async function login(username) { const context = await request.newContext({ baseURL: base }); contexts.push(context); await body(await context.post('/api/login', { data: { username, password } })); return context }
+async function login(username) {
+  const context = await request.newContext({ baseURL: base }); contexts.push(context)
+  await body(await context.post('/api/login', { data: { username, password } }))
+  // These fixture accounts have already used this release. Portal's first-use
+  // release-note dialog is covered by Portal tests and would obscure app controls.
+  const version = await body(await context.get('/api/version'))
+  await body(await context.post('/api/me/version-use', { data: { version: version.version } }))
+  return context
+}
 async function proxy(api, method, path, input) { const token = await body(await api.post('/api/apps/status/token')); return body(await api.post('/api/v1/extensions/status/request', { headers: { Authorization: 'Bearer ' + token.token }, data: { method, path, ...(input === undefined ? {} : { body: input }) } })) }
 
 test.beforeAll(async () => {
@@ -31,7 +39,7 @@ test.beforeAll(async () => {
   if (seeded.status !== 0) throw new Error('Portal fixture account setup failed: ' + seeded.stderr)
   portal = launch(portalBinary, [], { RP_CONFIG: config }); await ready(base + '/healthz', portal)
   adminAPI = await login('admin')
-  const bundle = readFileSync(resolve(__dirname, '../../../dist/status/0.1.0-dev/status.zip'))
+  const bundle = readFileSync(resolve(__dirname, '../../../dist/status', JSON.parse(readFileSync(resolve(__dirname, '../app.json'), 'utf8')).version, 'status.zip'))
   await body(await adminAPI.post('/api/admin/apps/install', { multipart: { bundle: { name: 'status.zip', mimeType: 'application/zip', buffer: bundle } } }))
   const signingKey = randomBytes(32).toString('base64')
   const registration = await body(await adminAPI.put('/api/admin/apps/status/backend', { data: { revision: 0, label: 'Status fixture', base_url: 'http://' + address + ':' + servicePort, audience: 'status', enabled: true, key_id: 'fixture-key', signing_key: signingKey, policy: { version: 1, plain_http: true, networks: [address + '/32'], ports: [servicePort], routes: ['GET', 'POST', 'PUT', 'DELETE'].map(method => ({ method, prefix: '/v1/' })) } } }))

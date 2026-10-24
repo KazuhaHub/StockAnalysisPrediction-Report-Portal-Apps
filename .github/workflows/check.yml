@@ -5,6 +5,15 @@ on:
 permissions:
   contents: read
 jobs:
+  workflow-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: apps/status/service/go.mod
+          cache: false
+      - run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
   catalogue:
     runs-on: ubuntu-latest
     steps:
@@ -61,11 +70,6 @@ jobs:
       GOWORK: 'off'
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/checkout@v4
-        with:
-          repository: KazuhaHub/StockAnalysisPrediction-Report-Portal
-          ref: b23f43ceea030279d991dc4d4f07827ea6bdbd71
-          path: .acceptance/portal
       - uses: actions/setup-go@v5
         with:
           go-version-file: apps/status/service/go.mod
@@ -76,10 +80,28 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
-      - run: npm ci && npm run build
-        working-directory: .acceptance/portal/web
-      - run: go build -o "$RUNNER_TEMP/status-portal-acceptance" ./cmd/report-portal
-        working-directory: .acceptance/portal
+      - name: Verify the published minimum Portal binary
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download v2026.43.2 --repo KazuhaHub/StockAnalysisPrediction-Report-Portal --pattern SHA256SUMS.txt --pattern report-portal_v2026.43.2_linux_amd64.tar.gz --dir "$RUNNER_TEMP/portal-release"
+          python3 - <<'PYCODE'
+          import hashlib, importlib.util, os
+          from pathlib import Path
+          folder = Path(os.environ['RUNNER_TEMP']) / 'portal-release'
+          archive = folder / 'report-portal_v2026.43.2_linux_amd64.tar.gz'
+          spec = importlib.util.spec_from_file_location('status_publish', 'scripts/status-publish.py')
+          module = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(module)
+          sums = module.checksums((folder / 'SHA256SUMS.txt').read_text())
+          if hashlib.sha256(archive.read_bytes()).hexdigest() != sums.get(archive.name):
+              raise SystemExit('Published Portal archive checksum mismatch')
+          binary = module.tar_binary(archive.read_bytes(), 'report-portal_v2026.43.2_linux_amd64/report-portal')
+          target = Path(os.environ['RUNNER_TEMP']) / 'status-portal-acceptance'
+          target.write_bytes(binary)
+          target.chmod(0o700)
+          PYCODE
+          "$RUNNER_TEMP/status-portal-acceptance" version
       - run: go build -o "$RUNNER_TEMP/status-service-acceptance" ./cmd/status
         working-directory: apps/status/service
       - name: Verify real Portal notification capture and channel quota handling
