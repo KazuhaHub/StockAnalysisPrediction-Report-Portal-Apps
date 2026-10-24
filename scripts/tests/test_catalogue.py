@@ -47,6 +47,12 @@ class CatalogueTests(unittest.TestCase):
             self.assertEqual(z.namelist(), ["app.json", "index.html"])
         self.assertEqual(c.check(self.root), 1)
 
+    def test_compiled_workspace_cannot_fall_back_to_development_sources(self):
+        assets = self.root / "apps/sample/frontend"
+        (assets / "package.json").write_text('{"private":true}')
+        with self.assertRaisesRegex(ValueError, "Build the frontend"):
+            c.package("sample", self.root)
+
     def test_symlink_and_secret_files_rejected(self):
         assets = self.root / "apps/sample/frontend"
         (assets / ".env").write_text("placeholder")

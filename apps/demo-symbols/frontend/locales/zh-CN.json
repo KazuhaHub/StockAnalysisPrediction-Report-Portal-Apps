@@ -1,0 +1,14 @@
+{
+  "title": "报告股票",
+  "description": "通过 Portal 桥接查看报告覆盖情况。",
+  "search": "搜索",
+  "filter": "按代码或名称搜索",
+  "symbol": "代码",
+  "name": "名称",
+  "count": "报告数",
+  "latest": "最新报告",
+  "unavailable": "暂时无法读取报告，请重试。",
+  "privateOnly": "请从 Portal 应用入口打开。",
+  "languageName": "简体中文",
+  "language": "语言"
+}

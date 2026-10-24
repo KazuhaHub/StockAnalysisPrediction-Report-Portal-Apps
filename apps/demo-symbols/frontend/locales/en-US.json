@@ -1,0 +1,14 @@
+{
+  "title": "Stocks with reports",
+  "description": "Read report coverage through the Portal bridge.",
+  "search": "Search",
+  "filter": "Filter by code or name",
+  "symbol": "Symbol",
+  "name": "Name",
+  "count": "Reports",
+  "latest": "Latest report",
+  "unavailable": "Unable to load reports. Try again.",
+  "privateOnly": "Open this app from the Portal application hub.",
+  "languageName": "English",
+  "language": "Language"
+}

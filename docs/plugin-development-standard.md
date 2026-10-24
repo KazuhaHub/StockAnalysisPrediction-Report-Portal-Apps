@@ -1,0 +1,152 @@
+# Portal application development standard
+
+This standard applies to every maintained application in this monorepo. React,
+TypeScript and Ant Design are the common frontend stack, matching Portal's pinned
+major versions. Independent plugins must look and behave like part of the Portal
+without accessing its DOM, cookies, credentials or private APIs. A static ZIP can
+bundle this stack completely; sandbox isolation does not require handwritten DOM UI.
+
+## Shared frontend foundation
+
+- Use `@portal-app/sdk` for parent-window identity checks, scoped request/reply
+  handling, timeouts, theme snapshots and supported locales. Do not copy a bridge
+  implementation into a plugin or call session-authenticated admin endpoints.
+- Use React 19.3, Ant Design 6.6 and TypeScript 7, pinned in the workspace lockfile.
+  Upgrade shared versions deliberately against Portal compatibility checks rather
+  than allowing individual plugins to select unrelated UI frameworks or versions.
+- Build a self-contained classic IIFE, local CSS and static entry document.
+  Do not depend on CDN scripts, remote fonts, ESM fetches from an opaque origin,
+  inline scripts, shared localStorage or dynamically fetched executable code.
+- Retain `sandbox="allow-scripts"`. No `allow-same-origin`, `allow-forms`, host DOM
+  injection, broad null-origin CORS, tokens in browser storage or weakened Portal CSP.
+- Theme through `ConfigProvider` and the SDK's trusted Portal color/radius snapshot.
+  Verify primary button text contrast in normal, hover and active states.
+  Use Ant Design typography, spacing, buttons, fields, validation, drawers, tables,
+  alerts and loading states. Custom CSS is for layout and app-specific visualization.
+- Language resources cover en-US, zh-CN and zh-TW with identical keys. Prefer an
+  optional trusted host locale; fall back to browser locale on older Portal versions.
+  Runtime locale changes must preserve unsaved form drafts.
+
+## Interaction and information architecture
+
+The initial page answers the reader's main question. For Status this is current
+service availability, rather than internal identifiers, configuration records or
+notification queue details. A backend outage, stale sample or absent permission
+must never be styled as a healthy result.
+
+Keep operator configuration behind an administrator entry. Create/edit flows use
+focused drawers or dialogs and progressive steps. Basic setup shows only the fields
+needed for the selected check type. Advanced timeouts, network exceptions and
+transport details are explicitly expandable. Current defaults are explained near
+their controls. Do not present every database field as a compulsory configuration.
+
+Keep read visibility, financial visibility and anonymous publication distinct.
+Administrator-only is the initial policy. Explain the effect of a grant before
+saving it. Never infer notification recipients from read grants.
+
+Use stable loading, empty, forbidden, unavailable, conflict and validation states.
+Preserve drafts and focus after failed requests. Prevent duplicate writes, perform
+keyboard actions without native sandbox form submission, and refresh idle views
+without replacing focused inputs or active forms. Confirm destructive actions with
+their actual effect; keep independent controls independent (for example, resuming
+probes must not implicitly resume notification delivery).
+
+## Application and backend boundaries
+
+Each app owns `apps/<id>/app.json`, its frontend workspace, tests and documentation.
+An optional backend owns its independent runtime, storage, keys and lifecycle.
+Installing a ZIP does not silently start a process or grant provider credentials.
+Use the documented viewer-bound extension API for private backends. Recheck current
+account/OU/installation authority on the server, filter before counts/pagination and
+use explicit public DTOs. A frontend permission check is only a presentation aid.
+
+Configuration belongs in app-managed storage and the UI. Infrastructure/key sources
+may use deployment configuration. DB shape changes still require owner approval;
+this frontend standard does not authorize any schema change or host business patch.
+
+## Required repository artifacts and checks
+
+Generate an unlisted app with `python3 scripts/create-app.py my-app --name "My app"`.
+Run `npm install` at the repository root, review the zero-scope manifest and add
+behavior-specific UI tests before publication. Build with
+`python3 scripts/build-app-frontend.py my-app`; this creates only local static assets.
+
+New apps start from the shared React/Ant Design template, including the SDK, strict
+TypeScript config, deterministic IIFE build, three locales and meaningful UI tests.
+Every frontend declares the SDK/React/Ant Design dependencies and participates in
+the root workspaces/lockfile. The standards validator refuses missing foundations.
+
+CI runs dependency installation from the lockfile, standards validation, typecheck,
+SDK and app UI tests, locale parity, package validation and browser integration.
+Integration checks retain sandbox isolation, theme/locale changes, current viewer
+authority, error/draft handling, keyboard navigation, narrow layouts, accessibility
+and installation lifecycle. Tests must follow the intended user flow; do not retain
+a simpler hidden test-only UI or weaken a gate to make a rewrite pass.
+
+Published versions remain immutable. Migrate maintained source and publish a new
+app-qualified release; never overwrite an older ZIP/image to retrofit this standard.
+The existing demo and Status are migration targets, not examples that authorize new
+exceptions. A release must disclose any unfinished migration or acceptance work.
+
+## Working example and review checklist
+
+A generated workspace has this structure:
+
+```text
+apps/my-app/
+  app.json                    # Identity, version, entry and requested scopes
+  README.md                   # Setup, supported Portal version and lifecycle
+  frontend/
+    package.json              # Shared pinned dependencies and scripts
+    tsconfig.json             # Strict TypeScript, including unused checks
+    vite.config.ts            # Local classic-script bundle
+    locales/{en-US,zh-CN,zh-TW}.json
+    src/{main.tsx,App.tsx,index.html,style.css}
+    tests/{app.test.tsx,setup.ts}
+```
+
+From the repository root:
+
+```sh
+python3 scripts/create-app.py my-app --name "My app"
+npm install
+python3 scripts/plugin-standard.py
+npm run typecheck
+npm test --workspace=apps/my-app/frontend
+python3 scripts/build-app-frontend.py my-app
+python3 scripts/catalogue.py package my-app
+```
+
+The generator refuses existing directories and invalid IDs. It does not edit the
+catalogue, deploy a backend or grant permissions. Packaging a compiled workspace
+without `frontend/dist` fails; source files are never a substitute for a build.
+CI also generates a disposable app and actually typechecks, tests and builds it,
+so the documented starting point is exercised rather than only inspected.
+
+For a reviewed query-scope application, use
+`client.machine('GET', '/api/v1/symbols?limit=20')`. For an independent backend,
+use `client.request('GET', '/v1/components')`; the SDK wraps the app-bound extension
+route. Grant only the matching manifest scopes and verify denial without them.
+Call `client.dispose()` when the app is destroyed. Components never construct a
+Bearer token, read Portal cookies or issue their own parent-window bridge messages.
+Anonymous public pages may read only their explicit public projections with
+`credentials: 'omit'`; they use the same React/Ant Design dependencies and locales,
+without a private bridge or an authenticated-client fallback.
+
+Before review, provide the problem and resulting reader/operator flow, permission
+and data impact, validation evidence and rollout/rollback instructions. Include
+screens for empty/loading/error states, narrow layouts and both themes where
+relevant. Verify a failed save retains the draft and its error is visible inside
+the active dialog. Review secrets, exports, publication and notification recipients
+separately from ordinary component visibility.
+
+The Status publisher requires the `frontend-standard` job in addition to the full
+service/browser/artifact matrix; an older successful job set cannot bypass it.
+
+Before publication, select a new app version, review its app-specific acceptance
+record and run the guarded release workflow against the exact accepted main commit.
+Source migrations can be reviewed before a release version is selected; such local
+builds are development candidates and must never replace an existing public ZIP.
+Update the market only after immutable assets and compatible Portal downloads are
+verified. Upgrade through the market, preserve independent storage and keys, and
+check current installation identity and backend pairing before resuming operations.

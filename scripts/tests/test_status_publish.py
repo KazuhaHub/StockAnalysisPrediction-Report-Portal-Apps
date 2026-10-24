@@ -88,6 +88,12 @@ class PublicationTests(unittest.TestCase):
         for conclusion in ["skipped", "failure", "cancelled"]:
             with self.assertRaises(ValueError): publish.verified_jobs([{**jobs[0], "conclusion": conclusion}, *jobs[1:]])
 
+    def test_publication_cannot_skip_the_shared_frontend_standard_gate(self):
+        jobs = [{"name": name, "status": "completed", "conclusion": "success"}
+                for name in publish.REQUIRED_JOBS if name != "frontend-standard"]
+        with self.assertRaisesRegex(ValueError, "required CI jobs"):
+            publish.verified_jobs(jobs)
+
     def test_checksum_duplicates_and_path_entries_are_refused(self):
         digest = hashlib.sha256(b"fixture").hexdigest()
         self.assertEqual(publish.checksums(digest + "  archive.tar.gz\n"), {"archive.tar.gz": digest})
