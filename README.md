@@ -21,6 +21,7 @@ Use Python 3.11+ without additional packages for catalogue/packaging tools:
 ```sh
 python3 -m unittest discover -s scripts/tests -v
 python3 scripts/catalogue.py check
+python3 scripts/catalogue.py check --verify-downloads
 python3 scripts/catalogue.py package demo-symbols
 ```
 
@@ -28,6 +29,42 @@ Build output is under ignored `dist/`; package generation is deterministic.
 Shared protocol and app-specific checks are described under their own directories.
 See `docs/implementation-plan.md` for the complete ordered Status implementation,
 and `docs/progress.md` for actual evidence and remaining gates.
+
+## Marketplace publication and installation
+
+The normal installation path is the Portal application market. A manually uploaded
+development ZIP is optional for controlled acceptance; it is not a prerequisite
+for normal installation. Installations still require the administrator's permission
+review, and a frontend installation does not deploy or pair an independent backend.
+
+Publish an app-qualified immutable Release before editing `index.json`. An entry
+must use its exact `/releases/download/<id>/v<version>/<id>.zip` URL (the slash in
+the tag may be URL-encoded). Development and snapshot versions are refused.
+The existing commit-pinned demo archive remains supported at its original URL.
+
+For an application declaring `extension.*`, commit its version-specific acceptance
+record at `apps/<id>/releases/<version>.json`. The record must identify schema
+version 1, the exact app ID/version and a minimum published Portal release of
+v2026.43.2 or later. App-specific release workflows may require additional evidence;
+Status publication retains every gate in `apps/status/releases/README.md`.
+
+Run `python3 scripts/catalogue.py check --verify-downloads` before committing the
+catalogue change. CI runs this same check. It downloads the actual bounded ZIP,
+checks its manifest against source, and rejects duplicate entries, path traversal,
+symlinks and oversized expanded content. For extension apps it also verifies that
+the app and minimum Portal Releases are published, downloads `release.json` and
+`SHA256SUMS` from the same immutable release, and binds the acceptance record,
+source commit, ZIP digest and metadata digest. A missing asset or draft Release
+fails the check. The offline `check` command validates local declarations only;
+its success alone does not prove publication or installation.
+
+After the canonical catalogue and real market installation path are verified,
+change the Portal default URL in a separate host change. Preserve explicit DB
+overrides and the legacy catalogue/archive URLs. The host currently does not
+enforce a catalogue checksum field or minimum-version field: these publication
+checks do not add that runtime behavior. Verify permission preview and installation
+on the supported Portal release before rollout. See implementation plan section
+14.2 for the migration and rollback requirements.
 
 ## Boundaries
 

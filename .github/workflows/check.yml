@@ -22,7 +22,7 @@ jobs:
         with:
           python-version: '3.13'
       - run: python3 -m unittest discover -s scripts/tests -v
-      - run: python3 scripts/catalogue.py check
+      - run: python3 scripts/catalogue.py check --verify-downloads
       - run: python3 scripts/catalogue.py package demo-symbols
   protocol:
     runs-on: ubuntu-latest
