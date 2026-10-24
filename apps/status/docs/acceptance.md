@@ -4,6 +4,53 @@ This ledger preserves the complete S00–S11 scope in
 [the implementation plan](../../../docs/implementation-plan.md). A passing unit
 or browser test is evidence for its own behavior, not a claim of full acceptance.
 
+## Target PostgreSQL checks, 2026-10-23 Pacific
+
+Prepared an independent PostgreSQL-aware stunnel TLS gateway, private CA and
+dedicated probe login. The original PostgreSQL SSL setting remains off. The
+explicit final hop is private same-host TCP; certificate verification protects the
+Status-to-gateway connection. The deployment and rollback boundaries are in
+[the target runbook](postgresql-target-deployment.md).
+
+The new role has CONNECT only and no existing business table/schema/sequence or
+custom security-definer access. An authentication block permits only this login
+from the fixed gateway address to the target database, rejecting its other sources
+and databases. Existing authentication rules were byte-preserved and backed up;
+the edited file parsed without errors before reload. No business schema changed.
+
+The actual `status.Prober.Check` from clean source
+`d529abc4fc30d6e4df2c650a6255052b4a0854af`, compiled as an isolated one-shot harness,
+ran in candidate runtime image
+`sha256:a99326edc3d3dd3b9782b1b5011dd5ad23caa6fbb58edb131aca7344b1e3bbdf`
+as UID 1001 with a read-only filesystem, dropped capabilities and bounded resources.
+At `2026-10-24T03:54:49Z`, the verified-TLS query returned success/reachable and
+`read_query_only` in 22 ms. Wrong password and untrusted CA returned failure.
+Current gateway controls also reject a wrong hostname and plaintext StartupMessage.
+Another database is refused, and an actual gateway restart is followed by another
+successful guarded SELECT 1 at `03:57:50Z` (16 ms). Portal health stays DB/OK.
+
+Receipts, source/executable hashes, private configuration and protected rollback
+material live under `/data/report-portal/status-postgres/`. Credentials passed only
+through stdin/file mounts and are absent from receipts. The candidate trust bundle
+preserves public CA roots; its prepared override was resolved without starting the
+formal service. Formal Status remains stopped/unpaired/paused, with no monitored
+component or public gateway enabled by these checks. This proves the real database
+path and adapter controls, not marketplace installation or continuous production
+observation. Qwen billing, final operator policy and immutable distribution remain.
+
+Portal PR #172 corrected incomplete historical test fixtures and their selective
+replay assertion, without changing runtime migrations or rewriting any production
+ledger. It merged as `5c3344cf43c6326fd5ef95f760264ce8f8d5e58d`; full exact-main CI
+`40059777948`, including all race shards, passed.
+
+Protected infrastructure backup
+`/data/report-portal/backups/status-postgres-20261024T040425Z/infrastructure.tgz`
+was extracted into an isolated owner-only scratch directory. All sixteen named
+files matched their source hashes and the restored leaf verified against its CA;
+scratch copies were removed. This proves file/chain recovery, not a live database
+or automatic role/pairing restore. An off-host recovery copy remains an operator
+storage responsibility, not a claimed same-host disaster-recovery guarantee.
+
 ## Target read-only provider checks, 2026-10-23 Pacific
 
 After the owner explicitly identified Dify as the credential source, inspected
@@ -37,8 +84,9 @@ production observation, notification delivery, public activation or installed UI
 
 Qwen account billing still requires an account owner's RAM identity; the reviewed
 minimal policy and exact operator steps are in the operator guide. PostgreSQL
-verified TLS/read-only identity, final manual/operator acceptance, immutable Status
-publication and marketplace installation remain incomplete.
+acceptance was pending at this checkpoint and was subsequently verified above.
+Final manual/operator acceptance, immutable Status publication and marketplace
+installation remain incomplete.
 
 Marketplace preparation at `d091665` passed both full twelve-job CI runs
 `40057064497` and `40057068779`, including thirty Python tests, thirteen browser
@@ -50,11 +98,11 @@ catalogue and current installed apps were not changed by that merge.
 
 | Package | Current evidence | Remaining gate |
 | --- | --- | --- |
-| S00 | Repository/capability inventory and official adapter fixtures; authorized target inspection now verifies Portal v2026.43.2, Dify image 1.17.1, Docker Compose 5.3.0 and PostgreSQL without TLS | Verified PostgreSQL TLS path and read-only identity, provider account/site/authorization verification |
+| S00 | Repository/capability inventory; Portal v2026.43.2, Dify 1.17.1 and Compose 5.3.0 inspected; native PostgreSQL SSL is off and a dedicated private TLS gateway/read-only identity is now verified | Qwen billing account/site/authorization verification; owner will provision the RAM credential |
 | S01 | Portal paired backend platform, migration 0008, identity/scopes/directory and negative tests; PR #142 CI passed at b23f43ce after main integration; local Go/PG/race/web/browser checks passed | Portal #141/#142 are merged; v2026.43.2 Beta is published and deployed; full main CI, isolated PG/released-binary upgrade, final backup, business-count and forecast-setting continuity, health and offline post-backup restore verified; installed-app disable/reinstall/uninstall and fresh-unpaired behavior now pass against the released Portal; production install/pairing and released-version rollout remain |
 | S02 | Public shared repo; approved independent schema; locking/key/backup/restore tests; CLI | Wrong-key/future-schema/missing-product/occupied-rollback rejection and live continuity now tested; released-version operator upgrade/rollback remains gated |
 | S03 | Signed private API, explicit public DTOs, read/finance grants, filtered incident counts/detail; two-OU browser check | Component paging/search/count/detail/export authority and separate finance projection now tested; real released-Portal account deletion/recreation now proves changed opaque principal, rejected old application token, no inherited direct grant and nondisclosing hidden detail; final release/production authority review remains |
-| S04 | Four workers, persisted leases, credential/target revision fences, read-only probes and signed heartbeat | Abandoned lease/restart evidence and manual saved-configuration controls now tested; Guarded PostgreSQL hostname/TLS negotiation, untrusted/mismatched certificate refusal, no plaintext fallback and TLS/auth/query/teardown timeout and wire-release drills now pass; HTTP header/body timeouts, same-target redirect refusal and subsequent DNS rebinding refusal now tested; actual target TLS/read-only identity acceptance remains |
+| S04 | Four workers, persisted leases, revision fences, read-only probes and signed heartbeat; actual target PostgreSQL verified-TLS SELECT 1, scoped login and restart/negative controls pass | Abandoned lease/restart and saved-configuration controls tested; guarded hostname/TLS, untrusted/mismatched certificate refusal, no plaintext fallback, setup/query/teardown deadlines and wire release pass; HTTP timeout, redirect and rebinding controls pass; continuous production observation awaits market installation/pairing |
 | S05 | DeepSeek exact-decimal/currency fixtures, Qwen cash/credit distinction, ACS3 official vector, pinned endpoints | Unsupported capability and setup hints tested; Shared-account references and cross-component/currency guards tested; remaining deployment-specific non-production billing authorization |
 | S06 | Confirmation/hysteresis reducer, incident transitions, maintenance and hourly aggregates | Partial-hour and missing/paused-time accounting plus both history charts tested; Retrospective full-hour corrections, expired-evidence fallback, multi-bucket evidence and retention boundary now tested; Configurable bounded retention and public paging tested; named offline failure drills are mapped in requirement-audit.md, including TTL boundary/private-public expiry; live target/operator acceptance remains |
 | S07 | Atomic immutable outbox, namespace preflight, same-occurrence retries, publisher revision fences and queue review | Two-component/two-OU inbox routing, duplicate/changed-content checks, restart lease retry, uncertain restore/discard and storm suppression now tested; Real isolated Portal capture-to-signed-WebHook drill now covers source quota cooldown, lost capture acknowledgement/deduplication, channel Retry-After, stable delivery IDs and financial redaction; real SMTP/Slack/operator acceptance remains |
