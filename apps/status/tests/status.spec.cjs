@@ -339,10 +339,11 @@ test('incompatible backend is refused before any component data and can be retri
 test('private and public status pages meet automated accessibility checks', async ({ browser }) => {
   const axeSource = readFileSync(require.resolve('axe-core/axe.min.js'), 'utf8')
   async function audit(frame, label) {
-    // Audit settled drawer content, rather than colors during its entrance fade.
+    // Let drawer and collapse transitions finish before measuring text colors.
     await frame.evaluate(async () => {
-      const elements = document.querySelectorAll('.ant-drawer-content-wrapper, .ant-drawer-mask')
-      await Promise.all([...elements].flatMap(element => element.getAnimations().map(animation => animation.finished.catch(() => {}))))
+      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+      const animations = document.getAnimations().filter(animation => animation.effect?.getTiming().iterations !== Infinity)
+      await Promise.all(animations.map(animation => animation.finished.catch(() => {})))
     })
     await frame.evaluate(axeSource)
     const violations = await frame.evaluate(async () => (await axe.run(document, { runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa'] } })).violations.map(v => ({ id: v.id, nodes: v.nodes.map(n => ({ target: n.target, summary: n.failureSummary })) })))
