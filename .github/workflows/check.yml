@@ -64,7 +64,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: KazuhaHub/StockAnalysisPrediction-Report-Portal
-          ref: b4eabb4fca7af2cfce9e8eaebfb9a15158d86044
+          ref: b23f43ceea030279d991dc4d4f07827ea6bdbd71
           path: .acceptance/portal
       - uses: actions/setup-go@v5
         with:
@@ -82,6 +82,11 @@ jobs:
         working-directory: .acceptance/portal
       - run: go build -o "$RUNNER_TEMP/status-service-acceptance" ./cmd/status
         working-directory: apps/status/service
+      - name: Verify real Portal notification capture and channel quota handling
+        run: go test -race ./internal/status -run '^TestPortalNotificationCaptureAndChannelQuota$' -count=1
+        working-directory: apps/status/service
+        env:
+          PORTAL_BINARY: ${{ runner.temp }}/status-portal-acceptance
       - run: python3 scripts/build-status-frontend.py && python3 scripts/catalogue.py package status
       - run: npm ci && npx playwright install --with-deps chromium
         working-directory: apps/status/tests
@@ -90,6 +95,9 @@ jobs:
         env:
           PORTAL_BINARY: ${{ runner.temp }}/status-portal-acceptance
           STATUS_BINARY: ${{ runner.temp }}/status-service-acceptance
+          RP_DB_DRIVER: postgres
+          RP_DB_DSN: fixture-must-not-be-used
+          RP_LISTEN: invalid-fixture-listen
   status-container:
     runs-on: ubuntu-latest
     steps:

@@ -360,22 +360,91 @@ func postgresCheck(ctx context.Context, m Monitor) Result {
 	if err != nil {
 		return unknown("invalid_destination")
 	}
+	cfg, err := postgresProbeConfig(m, guard)
+	if err != nil {
+		return Result{Outcome: "failure", ReasonCode: "database_unavailable"}
+	}
+	return postgresReadCheck(ctx, cfg)
+}
+
+func postgresProbeConfig(m Monitor, guard *probeTransport) (*pgx.ConnConfig, error) {
+	c := m.Config
 	// Parse only a constant DSN. All target and credential fields are assigned as
 	// data, preventing injected driver parameters or SQL in the configured values.
 	cfg, err := pgx.ParseConfig("sslmode=verify-full")
 	if err != nil {
-		return Result{Outcome: "failure", ReasonCode: "database_unavailable"}
+		return nil, err
 	}
 	cfg.Host, cfg.Port, cfg.Database, cfg.User, cfg.Password = c.Host, c.Port, c.Database, m.Secret.Username, m.Secret.Password
 	cfg.Fallbacks = nil
+	// Keep the original hostname until the guarded dial. pgx otherwise resolves
+	// it first and passes an IP that cannot match the configured destination.
+	cfg.LookupFunc = func(ctx context.Context, host string) ([]string, error) {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		if !strings.EqualFold(host, c.Host) {
+			return nil, ErrInvalid
+		}
+		return []string{c.Host}, nil
+	}
 	cfg.DialFunc = guard.dialContext
 	cfg.ConnectTimeout = 5 * time.Second
 	cfg.TLSConfig = &tls.Config{ServerName: c.Host, MinVersion: tls.VersionTLS12}
+	return cfg, nil
+}
+
+type postgresProbeConn struct {
+	net.Conn
+	stop func() bool
+}
+
+func (c *postgresProbeConn) Close() error {
+	c.stop()
+	return c.Conn.Close()
+}
+
+func postgresReadCheck(ctx context.Context, cfg *pgx.ConnConfig) Result {
+	// Cover setup failures as well as connected queries: TLS close-notify and
+	// asynchronous driver cleanup must not outlive the probe's own deadline.
+	scope, cancelScope := context.WithCancel(ctx)
+	defer cancelScope()
+	cfg = cfg.Copy()
+	dial := cfg.DialFunc
+	cfg.DialFunc = func(dialCtx context.Context, network, address string) (net.Conn, error) {
+		if err := scope.Err(); err != nil {
+			return nil, err
+		}
+		bounded, cancel := context.WithCancel(dialCtx)
+		stopDial := context.AfterFunc(scope, cancel)
+		wire, err := dial(bounded, network, address)
+		stopDial()
+		cancel()
+		if err != nil {
+			return nil, err
+		}
+		stopWire := context.AfterFunc(scope, func() { _ = wire.Close() })
+		return &postgresProbeConn{Conn: wire, stop: stopWire}, nil
+	}
 	conn, err := pgx.ConnectConfig(ctx, cfg)
 	if err != nil {
 		return Result{Outcome: "failure", ReasonCode: "database_unavailable"}
 	}
-	defer conn.Close(context.Background())
+	defer func() {
+		// pgx may mark a timed-out connection closed while its asynchronous
+		// cancellation/drain still owns the socket. Bound graceful teardown and
+		// release the underlying wire even when driver cleanup is still pending.
+		wire := conn.PgConn().Conn()
+		if secure, ok := wire.(*tls.Conn); ok {
+			wire = secure.NetConn()
+		}
+		closing, cancel := context.WithTimeout(ctx, time.Second)
+		defer cancel()
+		stop := context.AfterFunc(closing, func() { _ = wire.Close() })
+		defer stop()
+		_ = conn.Close(closing)
+		_ = wire.Close()
+	}()
 	var value int
 	if conn.QueryRow(ctx, `SELECT 1`).Scan(&value) != nil || value != 1 {
 		return Result{Outcome: "failure", ReasonCode: "database_query_failed"}

@@ -11,7 +11,8 @@ let folder, portal, service, base, statusBase, adminAPI, groupA, groupB, compone
 const processes = [], contexts = []
 const password = 'Fixture-Only-Password-1022'
 function freePort() { return new Promise((resolve, reject) => { const server = net.createServer(); server.once('error', reject); server.listen(0, '0.0.0.0', () => { const port = server.address().port; server.close(() => resolve(port)) }) }) }
-function launch(binary, args, env) { const process = spawn(binary, args, { cwd: folder, env: { ...global.process.env, ...env }, stdio: ['ignore', 'pipe', 'pipe'] }); let output = ''; process.stdout.on('data', chunk => { output += chunk }); process.stderr.on('data', chunk => { output += chunk }); process.output = () => output; processes.push(process); return process }
+function fixtureEnvironment(overrides = {}) { return { ...Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('RP_'))), ...overrides } }
+function launch(binary, args, env) { const process = spawn(binary, args, { cwd: folder, env: fixtureEnvironment(env), stdio: ['ignore', 'pipe', 'pipe'] }); let output = ''; process.stdout.on('data', chunk => { output += chunk }); process.stderr.on('data', chunk => { output += chunk }); process.output = () => output; processes.push(process); return process }
 async function ready(url, process) { const deadline = Date.now() + 30000; while (Date.now() < deadline) { if (process.exitCode !== null) throw new Error('Fixture process exited: ' + process.output()); try { const response = await fetch(url); if (response.ok) return } catch {} await new Promise(r => setTimeout(r, 100)) } throw new Error('Fixture readiness timed out') }
 async function body(response) { const text = await response.text(); if (!response.ok()) throw new Error('Fixture request failed (' + response.status() + '): ' + text); return JSON.parse(text) }
 async function login(username) { const context = await request.newContext({ baseURL: base }); contexts.push(context); await body(await context.post('/api/login', { data: { username, password } })); return context }
@@ -26,7 +27,7 @@ test.beforeAll(async () => {
   base = 'http://127.0.0.1:' + port; statusBase = 'http://127.0.0.1:' + servicePort
   const config = join(folder, 'portal.yaml')
   writeFileSync(config, 'listen: "127.0.0.1:' + port + '"\nsecret_key: "' + randomBytes(32).toString('hex') + '"\ndb_driver: "sqlite"\ndb_path: "' + join(folder, 'portal.db') + '"\n', { mode: 0o600 })
-  const seeded = spawnSync(portalBinary, ['adduser', 'admin', password, 'admin'], { cwd: folder, env: { ...process.env, RP_CONFIG: config }, encoding: 'utf8' })
+  const seeded = spawnSync(portalBinary, ['adduser', 'admin', password, 'admin'], { cwd: folder, env: fixtureEnvironment({ RP_CONFIG: config }), encoding: 'utf8' })
   if (seeded.status !== 0) throw new Error('Portal fixture account setup failed: ' + seeded.stderr)
   portal = launch(portalBinary, [], { RP_CONFIG: config }); await ready(base + '/healthz', portal)
   adminAPI = await login('admin')

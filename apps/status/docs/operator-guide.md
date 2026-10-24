@@ -93,6 +93,35 @@ private network. Loopback, link-local and metadata targets remain forbidden. The
 base URL has no credentials, query string, fragment or route path. The iframe
 cannot select a different backend host.
 
+## Offline connection and notification drills
+
+The PostgreSQL adapter leaves hostname resolution to its guarded dialer; it does
+not let the driver substitute an unvalidated resolved address. The original
+hostname remains the TLS certificate identity. Every new connection validates all
+DNS answers before dialing a pinned address. A TLS-disabled server, untrusted CA
+or mismatched name is a failure, never permission to retry without TLS.
+
+The service test suite includes in-memory PostgreSQL wire-protocol fixtures for
+SELECT 1, TLS refusal, SSL/authentication/query/teardown deadlines and wire
+cleanup, plus HTTP timeout,
+redirect and DNS-rebinding fixtures. These tests require no real credentials.
+To exercise Status capture through a real isolated Portal and local signed
+Webhook receiver, build the compatible Portal binary and run from the service
+module:
+
+```sh
+PORTAL_BINARY=/absolute/path/to/compatible-report-portal \
+  GOWORK=off GOTOOLCHAIN=go1.26.10 go test -race ./internal/status \
+  -run '^TestPortalNotificationCaptureAndChannelQuota$' -count=1
+```
+
+The drill creates temporary stores and generated fixture identities; it does not
+connect to the operator's Portal. It covers source quota cooldown, lost capture
+acknowledgement with idempotent retry, destination Retry-After, signatures, stable
+delivery identity and financial redaction. Portal capture acknowledgement is
+separate from channel acceptance. Passing this fixture does not prove actual
+SMTP, Slack, provider billing permissions or the target's PostgreSQL TLS setup.
+
 ## Configure components, credentials and grants
 
 Open **Manage** inside the installed app. First save a credential of the matching

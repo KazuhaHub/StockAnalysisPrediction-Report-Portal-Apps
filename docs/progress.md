@@ -428,3 +428,64 @@ unpaired, with probes/publication paused and no gateway change. The existing
 server candidate is a4ffec6; these later UI fixes remain in the PR until a new
 candidate is verified. No dependency PR merge, release or Portal restart was
 performed.
+
+
+## PostgreSQL destination and end-to-end notification drills (2026-10-23)
+
+Driver-source inspection found a real hostname incompatibility: pgx resolved the
+configured hostname before calling the guarded dialer, which then refused the
+resolved address because it no longer matched the configured host. A failing
+binding test preceded the fix. PostgreSQL's driver lookup now preserves only the
+configured hostname, leaving all DNS resolution, full-answer validation and pinned
+IP dialing in the existing guard. Certificate identity still uses that original
+hostname, TLS verification stays enabled and plaintext fallbacks stay absent.
+No storage shape or feature configuration changed.
+
+A real pgx SSL/extended-query fixture over in-memory sockets verifies the guarded
+hostname can execute only SELECT 1. Additional cases refuse TLS-disabled peers,
+untrusted roots and wrong certificate names before startup reaches the peer,
+and bound stalled SSL negotiation, authentication and query work to the caller's
+deadline. HTTP fixtures exercise bounded header/body waits, same-target redirect
+refusal without forwarding credentials, and repeated DNS lookup with an initially
+allowed address rebinding to a mixed metadata answer. No system DNS or external
+database/provider is used by these fixtures.
+
+An optional PORTAL_BINARY integration now drives a real isolated Portal process
+and Status's independent reducer/outbox/publisher. It parses a low-balance fixture,
+confirms the incident, loads the saved dedicated publisher credential, observes
+source HTTP 429 cooldown, then loses a capture acknowledgement after Portal has
+committed the event. The retry retains its occurrence/payload and obtains the
+same event ID. Portal routes one signed channel delivery; a local receiver's 429
+is retried after at least its seven-second Retry-After with the same event and
+delivery IDs. Durable history records two attempts and one accepted delivery.
+Payloads exclude the private financial amount/currency, account alias, label and
+both model/publication credentials. All receivers and credentials are fixtures.
+
+CI now pins the already-verified b23f43ce platform integration and runs this real
+capture/channel drill before the browser suite. Full service race tests (including
+the optional integration), vet, build and workflow lint passed locally. Full Apps
+CI passed at 47824bb before these further changes. The deployment hold is
+unchanged: no dependency merge, Portal upgrade, service activation or gateway edit.
+
+
+The real-Portal and browser fixture launchers now discard inherited RP_* settings
+before supplying their temporary configuration. Regression runs deliberately set
+invalid caller DB/listen overrides: both harnesses failed before the isolation fix
+and passed afterward. This prevents an operator's shell infrastructure overrides
+from redirecting acceptance tests into a different database or listen address.
+Seven browser workflows passed with those hostile fixture-only environment values.
+
+
+A stricter stalled-peer variant exposed a second real driver interaction: query
+cleanup could retain the wire asynchronously, and stalled authentication cleanup
+could add roughly five seconds of TLS close-notify after a 100 ms probe deadline.
+The connection now owns a cancellation scope from guarded dial through setup,
+query and teardown. Every raw wire closes at the probe deadline, graceful cleanup
+has a bounded child context, and late driver cleanup cannot open a new connection
+after that scope ends. Tests prove authentication, query and stalled teardown
+release the fixture peer within the configured probe budget. The earlier five-
+second failure now completes at approximately 100 ms. No TLS verification or
+private-address policy was relaxed.
+
+Browser CI deliberately supplies invalid inherited database/listen overrides so
+fixture isolation remains a regression gate rather than only a one-time check.
