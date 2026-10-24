@@ -489,3 +489,40 @@ private-address policy was relaxed.
 
 Browser CI deliberately supplies invalid inherited database/listen overrides so
 fixture isolation remains a regression gate rather than only a one-time check.
+
+
+## Released-platform and publication workflow verification (2026-10-23)
+
+Portal notification/platform PRs #141/#142 and Apps protocol PR #1 are merged.
+Portal v2026.43.2 Beta is published and deployed, superseding the earlier hold.
+The protected production record preserves backup/restore, PostgreSQL and released
+image upgrade, ledger verification, business-count and forecast-setting continuity,
+health and all referenced SPA asset checks.
+
+Status commits 98073f0 and 720b1bc add the guarded manual publication workflow,
+source/CI/acceptance admission, six-platform artifact verification, digest-bound
+prebuilt images, immutable draft/public asset checks and failure ordering. Sixteen
+publication policy tests pass (twenty-five Python tests in total). Native prebuilt
+container byte identity and non-root execution are now checked without publishing.
+Both full twelve-job CI runs at 720b1bc passed: 40052345575 and 40052352451.
+The real notification quota/lost-acknowledgement drill and seven browser/accessibility
+scenarios pass against checksum-verified published Portal v2026.43.2. Fixture
+accounts record prior release use through the normal API, and packaging uses the
+manifest version instead of a hard-coded development path.
+
+The matching Linux CI artifact is staged in a separate current candidate directory
+on the authorized host. The image executable matches its CI bytes. Copying the
+stopped old store/key, backing up, restoring separately, integrity and operational
+pause checks all passed. An isolated internal-network, non-root/read-only container
+passed start/restart, readiness, private unauthorized denial, closed website and
+empty public projection; its fixture was removed. No port or gateway was exposed.
+The older a4ffec6 candidate is retained for recovery. Formal Status is still paused,
+stopped and unpaired; no provider success or production notification is inferred.
+
+The existing browser administrator session is usable, avoiding a temporary admin
+account or password reset. Candidate upload was attempted only as a non-persisting
+preview, but the browser extension refused local file access before it could send
+the ZIP. Its permissions were not changed. The verified ZIP and app management
+page are ready for the actual operator upload/install confirmation. Remaining
+provider, PostgreSQL TLS/read-only identity, manual/operator, paired rollout and
+immutable distribution/catalogue gates are preserved in the acceptance ledger.

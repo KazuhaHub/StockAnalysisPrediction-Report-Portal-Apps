@@ -49,7 +49,20 @@ The protected deployment evidence records an isolated old-image PostgreSQL resto
 0007/0008 upgrade rehearsal, published-image verification, stopped-writer final
 backup, prepared clean rollback target, production migrations, unchanged business
 counts and forecast settings, and offline post-upgrade backup restore. Public SPA
-and all 65 referenced assets returned successfully. The prior candidate remains
-a4ffec6; replace it with a verified current artifact before pairing/activation.
+and all 65 referenced assets returned successfully. The current verified native candidate is 720b1bc, staged separately on the target
+from its successful CI artifact. Its image executable matches that artifact. The
+stopped old database/key were copied, backed up and restored with integrity and
+operating-pause checks. A non-root/read-only internal-network container passed
+startup/restart, health/readiness, private 401, closed website and empty public
+projection checks, then its fixture pairing/container/network were removed. The
+a4ffec6 candidate is retained for recovery; do not use its older ZIP or binary.
 No Status release, gateway, provider validation or marketplace rollout is inferred
 from the completed Portal upgrade.
+
+An existing production browser administrator session was confirmed without a new
+account or credential reset. The application management page shows no installed
+apps. Automatic upload of the verified candidate ZIP was stopped before preview
+or installation because the browser extension lacks local file-URL access. No
+extension permission, app permission or backend registration was changed. The
+actual upload/install confirmation is pending; the formal candidate remains
+stopped, paused and unpaired. This does not block independent remaining audits.
