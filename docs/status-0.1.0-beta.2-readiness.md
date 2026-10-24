@@ -123,3 +123,24 @@ executables must still match their archives before a Release is created. Focused
 tests reject missing/duplicate platforms, invalid or reused digests and incorrect
 media types. Index and platform selection are retained with publication evidence.
 The next publication uses the new version `0.1.0-beta.2`.
+
+## Verified publication
+
+Status `0.1.0-beta.2` was published at 2026-10-24T09:57:23Z by
+[run 40083603968](https://github.com/KazuhaHub/StockAnalysisPrediction-Report-Portal-Apps/actions/runs/40083603968).
+The immutable tag points to source `00dd5d228bad00e983b7a7aff82ddf36e4dee215`,
+with full exact-main CI `40083339930`. Both architecture executables and every
+public asset passed verification before the workflow completed successfully.
+
+Image index:
+`ghcr.io/kazuhahub/stockanalysisprediction-report-portal-apps/status@sha256:d846c4f0ba00d9d3642c94a7cab231ee8dc1380fa84cddfdb905ca529423407e`.
+The Linux amd64 executable SHA-256 is
+`356e9a27123f00cc1e5ef6f95a2a1aeabe9a14645b046150dad5950e41bfc56a`.
+The target independently verified its downloaded archive, matching CI executable
+and image bytes. Fresh storage and isolated snapshot restore passed integrity,
+empty-business-table and paused/private-default checks. Protected receipts are
+under `/data/report-portal/status-release-0.1.0-beta.2/`.
+
+The canonical catalogue validator passed with both entries and verified downloads.
+Marketplace listing, installation and pairing are a separate rollout step; these
+publication receipts do not claim credentials or recipients have been configured.
