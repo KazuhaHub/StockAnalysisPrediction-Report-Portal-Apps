@@ -196,6 +196,23 @@ component data or management controls. Portal's normal read/auth/queue APIs and
 the independent service remain available. The local fixture is removed afterward;
 none of these tests changes production installation or stops production services.
 
+## Canonical marketplace installation acceptance
+
+All fourteen browser scenarios passed against published Portal v2026.43.2. The
+additional scenario fetches the actual shared repository's public catalogue and
+immutable demo ZIP, previews its query permission, cancels without an installation
+request, then explicitly confirms installation. It checks the installed scopes
+and a real sandbox bridge query in the demo frame. This uses a disposable local
+Portal database and removes the demo afterward. It neither installs Status through
+the market nor grants production permissions. The earlier development-upload
+observation is historical; a manual ZIP upload is not required for formal rollout.
+
+The legacy catalogue exporter has four additional tests (34 shared Python tests
+total). They cover canonical metadata with preserved selection/path/archive bytes,
+refusal of changed bytes and path escape, unsupported capabilities and symlinked
+archives. The canonical catalogue's real download verification also passed. Its
+single published entry remains the demo; Status publication gates remain open.
+
 Unit evidence now explicitly covers zero/negative fractional/large balances for
 both provider families, typed authentication/permission failures without balances,
 and private/public last-success expiry at and immediately after TTL without

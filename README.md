@@ -66,6 +66,19 @@ checks do not add that runtime behavior. Verify permission preview and installat
 on the supported Portal release before rollout. See implementation plan section
 14.2 for the migration and rollback requirements.
 
+The retained Portal catalogue can be refreshed from this canonical source without
+adding new app IDs or changing its archive paths:
+
+```sh
+python3 scripts/catalogue.py export-legacy --portal-root /absolute/path/to/StockAnalysisPrediction-Report-Portal
+```
+
+The command verifies published downloads and requires byte-identical local ZIPs.
+It refuses new notification/extension capabilities, unsafe paths and concurrent
+catalogue changes. Review and commit the resulting Portal JSON separately; the
+command never replaces archives or expands the legacy selection. See the Portal
+`docs/app-market-migration.md` runbook for configuration and rollback behavior.
+
 ## Boundaries
 
 Installing a ZIP executes no server code. Status monitoring requires its separate

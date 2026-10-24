@@ -170,3 +170,66 @@ class CatalogueTests(unittest.TestCase):
             (self.root / "apps/sample/app.json").write_text(json.dumps(self.manifest))
             self.save([{**self.entry, "version": version, "url": "https://github.com/example/apps/releases/download/sample%2Fv" + version + "/sample.zip"}])
             with self.assertRaises(ValueError): c.check(self.root)
+
+    def legacy_fixture(self):
+        self.portal = self.root / 'portal-checkout'
+        (self.portal / 'apps').mkdir(parents=True)
+        self.archive = c.package('sample', self.root).read_bytes()
+        (self.portal / 'apps/sample.zip').write_bytes(self.archive)
+        self.legacy = {'apps': [{'id': 'sample', 'name': 'Old label', 'version': '1.0.0', 'scopes': [], 'path': 'sample.zip'}]}
+        self.legacy_path = self.portal / 'apps/index.json'
+        self.legacy_path.write_text(json.dumps(self.legacy))
+
+    def test_legacy_export_uses_canonical_metadata_and_preserves_selection_and_paths(self):
+        self.legacy_fixture()
+        future = self.root / 'apps/future'
+        (future / 'frontend').mkdir(parents=True)
+        (future / 'frontend/index.html').write_text('<title>Future</title>')
+        (future / 'app.json').write_text(json.dumps({**self.manifest, 'id': 'future'}))
+        entry = {**self.entry, 'id': 'future', 'url': 'https://github.com/example/apps/releases/download/future%2Fv1.0.0/future.zip'}
+        self.save([self.entry, entry])
+        responses = {self.entry['url']: self.archive, entry['url']: c.package('future', self.root).read_bytes()}
+        result = c.export_legacy(self.portal, self.root, fetch=lambda url, limit: responses[url])
+        self.assertEqual(result, self.legacy_path.resolve())
+        output = json.loads(result.read_text())['apps']
+        self.assertEqual(len(output), 1)
+        self.assertEqual(output[0]['name'], 'Sample')
+        self.assertEqual(output[0]['path'], 'sample.zip')
+        self.assertNotIn('url', output[0])
+        self.assertEqual((self.portal / 'apps/sample.zip').read_bytes(), self.archive)
+
+    def test_legacy_export_refuses_different_bytes_and_path_escape_without_writing(self):
+        self.legacy_fixture()
+        before = self.legacy_path.read_bytes()
+        with self.assertRaises(ValueError):
+            c.export_legacy(self.portal, self.root, fetch=lambda url, limit: self.archive + b'extra')
+        self.assertEqual(self.legacy_path.read_bytes(), before)
+        self.legacy['apps'][0]['path'] = '../outside.zip'
+        self.legacy_path.write_text(json.dumps(self.legacy))
+        before = self.legacy_path.read_bytes()
+        with self.assertRaises(ValueError):
+            c.export_legacy(self.portal, self.root, fetch=lambda url, limit: self.archive)
+        self.assertEqual(self.legacy_path.read_bytes(), before)
+
+    def test_legacy_export_does_not_add_new_capabilities_to_old_hosts(self):
+        self.manifest['scopes'] = ['notify']
+        self.entry['scopes'] = ['notify']
+        (self.root / 'apps/sample/app.json').write_text(json.dumps(self.manifest))
+        self.save([self.entry])
+        self.legacy_fixture()
+        before = self.legacy_path.read_bytes()
+        with self.assertRaises(ValueError):
+            c.export_legacy(self.portal, self.root, fetch=lambda url, limit: self.archive)
+        self.assertEqual(self.legacy_path.read_bytes(), before)
+
+    def test_legacy_export_rejects_symlinked_archives_without_writing(self):
+        self.legacy_fixture()
+        archive = self.portal / 'apps/sample.zip'
+        archive.unlink()
+        outside = self.portal / 'outside.zip'
+        outside.write_bytes(self.archive)
+        archive.symlink_to(outside)
+        before = self.legacy_path.read_bytes()
+        with self.assertRaises(ValueError):
+            c.export_legacy(self.portal, self.root, fetch=lambda url, limit: self.archive)
+        self.assertEqual(self.legacy_path.read_bytes(), before)

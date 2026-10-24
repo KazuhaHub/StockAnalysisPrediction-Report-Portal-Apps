@@ -3,9 +3,11 @@ import argparse
 import hashlib
 import io
 import json
+import os
 import re
 import stat
 import sys
+import tempfile
 import zipfile
 from pathlib import Path
 from urllib.parse import urlsplit, unquote, quote
@@ -153,6 +155,69 @@ def check(root=ROOT, verify_downloads=False, fetch=download):
     return len(ids)
 
 
+def export_legacy(portal_root, root=ROOT, fetch=download):
+    """Refresh retained legacy entries without changing selection or archive bytes."""
+    canonical_before = (root / "index.json").read_bytes()
+    cache = {}
+
+    def cached_fetch(url, limit):
+        if url not in cache:
+            cache[url] = fetch(url, limit)
+        if len(cache[url]) > limit:
+            raise ValueError("remote artifact exceeded its bound")
+        return cache[url]
+
+    check(root, verify_downloads=True, fetch=cached_fetch)
+    if (root / "index.json").read_bytes() != canonical_before:
+        raise ValueError("canonical catalogue changed during verification")
+    canonical = {entry["id"]: entry for entry in json.loads(canonical_before)["apps"]}
+    apps = Path(portal_root).resolve() / "apps"
+    target = apps / "index.json"
+    if apps.is_symlink() or target.is_symlink():
+        raise ValueError("symlinked legacy catalogue is forbidden")
+    before = target.read_bytes()
+    legacy = json.loads(before)
+    if set(legacy) != {"apps"} or not isinstance(legacy["apps"], list):
+        raise ValueError("invalid legacy catalogue")
+    output, seen = [], set()
+    for entry in legacy["apps"]:
+        app_id = entry.get("id")
+        if app_id in seen or app_id not in canonical:
+            raise ValueError("duplicate or missing canonical legacy identity")
+        seen.add(app_id)
+        source = canonical[app_id]
+        if not set(source["scopes"]).issubset({"query", "ingest"}):
+            raise ValueError("new capabilities cannot be exported to the legacy catalogue")
+        relative = entry.get("path", "")
+        if entry.get("url") or not isinstance(relative, str) or not relative:
+            raise ValueError("legacy entries must retain their local ZIP paths")
+        archive = apps / relative
+        if archive.is_symlink() or not archive.resolve().is_relative_to(apps) or not archive.is_file() or archive.stat().st_size > 10 * 1024 * 1024:
+            raise ValueError("unsafe or missing legacy ZIP")
+        published = cached_fetch(source["url"], 10 * 1024 * 1024)
+        if hashlib.sha256(archive.read_bytes()).digest() != hashlib.sha256(published).digest():
+            raise ValueError("legacy ZIP differs from the verified canonical download; review its sources and compatibility first")
+        projected = {key: source[key] for key in ["id", "name", "icon", "version", "description", "scopes"] if key in source}
+        projected["path"] = relative
+        output.append(projected)
+    rendered = (json.dumps({"apps": output}, indent=2, ensure_ascii=False) + "\n").encode()
+    if target.is_symlink() or target.read_bytes() != before:
+        raise ValueError("legacy catalogue changed during verification")
+    if rendered == before:
+        return target
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(dir=apps, prefix=".legacy-index-", delete=False) as file:
+            temporary = Path(file.name)
+            file.write(rendered)
+            os.fchmod(file.fileno(), stat.S_IMODE(target.stat().st_mode))
+        os.replace(temporary, target)
+    finally:
+        if temporary is not None and temporary.exists():
+            temporary.unlink()
+    return target
+
+
 def package(app_id, root=ROOT):
     m = manifest(root, app_id)
     folder = root / "apps" / app_id
@@ -196,13 +261,18 @@ def package(app_id, root=ROOT):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=["check", "package"])
+    parser.add_argument("command", choices=["check", "package", "export-legacy"])
     parser.add_argument("app_id", nargs="?")
     parser.add_argument("--verify-downloads", action="store_true", help="verify published archives and extension release provenance")
+    parser.add_argument("--portal-root", type=Path, help="Portal checkout for explicit legacy catalogue maintenance")
     args = parser.parse_args()
     try:
         if args.command == "check":
             print(f"Validated {check(verify_downloads=args.verify_downloads)} catalogue entries")
+        elif args.command == "export-legacy":
+            if args.portal_root is None:
+                parser.error("export-legacy requires --portal-root")
+            print(export_legacy(args.portal_root))
         elif not args.app_id:
             parser.error("package requires an application ID")
         else:
