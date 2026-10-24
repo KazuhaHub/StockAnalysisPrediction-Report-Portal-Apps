@@ -593,3 +593,18 @@ or account administrator will provision Qwen billing RAM credentials and notify
 the operator. Actual Qwen validation, final operator/version acceptance, immutable
 Status release, market installation/pairing and deliberate activation remain
 open. A manual development ZIP upload is optional, not a rollout prerequisite.
+
+## Extra PostgreSQL gateway removed (2026-10-24)
+
+The owner requested removal of the extra Status PostgreSQL container. The unused
+TLS gateway container was stopped and removed after verifying that Status was
+unpaired and inactive. Portal and Dify remained healthy. Native PostgreSQL,
+database configuration and existing application credentials were unchanged.
+Protected recovery files remain in `/data/report-portal/status-postgres`, with
+`gateway-removal-verification.json` recording removal and subsequent health.
+
+The former gateway check remains historical evidence, not current PostgreSQL
+monitor readiness. A replacement connection must be validated before activation;
+the normal rollout must not silently recreate the removed helper container or
+downgrade network TLS. Qwen credential provisioning and the remaining immutable
+Status release/installation gates also remain open.

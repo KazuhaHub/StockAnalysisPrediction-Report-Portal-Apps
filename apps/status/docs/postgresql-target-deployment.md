@@ -1,5 +1,20 @@
 # Target PostgreSQL connection deployment
 
+## Current state: gateway removed
+
+On 2026-10-24 UTC the owner requested removal of the extra Status PostgreSQL
+container. The unused `report-portal-status-postgres-status-postgres-tls-1`
+container was stopped and removed. Portal and Dify remained healthy; the native
+PostgreSQL service and its configuration were not changed. Protected deployment
+files were retained for recovery, with `gateway-removal-verification.json` under
+the directory below. Status remains stopped and unpaired.
+
+The gateway path documented below is historical verification evidence, not a
+currently available monitor destination. PostgreSQL monitoring needs a reviewed
+replacement connection before activation. Do not weaken verified network TLS or
+automatically recreate this gateway as a normal Status rollout step. Retained
+start commands are recovery reference only.
+
 This records the authorized target deployment on 2026-10-23 Pacific. It is an
 infrastructure runbook, not a new Portal migration or a completed Status rollout.
 The server directory is `/data/report-portal/status-postgres`. It is owner-only;
