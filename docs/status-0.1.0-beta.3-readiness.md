@@ -59,7 +59,7 @@ light/dark automated WCAG checks, keyboard controls, a 320-pixel view, enlarged
 text and long labels. Public history drawer reflow was corrected after a failing
 narrow-screen check. Dialog save errors retain the draft and remain visible inside
 the dialog. The shared template is generated, typechecked, tested and built in CI.
-Source preflight also passed 43 Python tooling tests, ten SDK tests, eight
+Source preflight also passed 43 Python tooling tests, eleven SDK tests, eight
 Status React tests and two demo UI tests; exact-source CI remains a publication
 requirement rather than being inferred from these local results.
 Manual screen-reader and full native zoom certification remain explicit Beta
