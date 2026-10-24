@@ -10,6 +10,18 @@
         "query"
       ],
       "url": "https://raw.githubusercontent.com/KazuhaHub/StockAnalysisPrediction-Report-Portal/8abb5b1216180a372d236625b7d332582d83f574/apps/demo-symbols.zip"
+    },
+    {
+      "id": "status",
+      "name": "Status",
+      "icon": "🟢",
+      "version": "0.1.0-beta.2",
+      "description": "Service status, uptime history and incidents with OU visibility. Install first, then configure monitors, provider credentials and notifications.",
+      "scopes": [
+        "extension.read",
+        "extension.manage"
+      ],
+      "url": "https://github.com/KazuhaHub/StockAnalysisPrediction-Report-Portal-Apps/releases/download/status/v0.1.0-beta.2/status.zip"
     }
   ]
 }

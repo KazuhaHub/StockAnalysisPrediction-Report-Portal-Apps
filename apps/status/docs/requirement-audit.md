@@ -6,7 +6,7 @@ evidence proves the named behavior, not production configuration or provider acc
 The [acceptance ledger](acceptance.md) records current source and deployment state.
 
 For the initial Beta, the owner's 2026-10-24 install-first decision is recorded in
-[release readiness](../../../docs/status-0.1.0-beta.1-readiness.md). Optional live
+[release readiness](../../../docs/status-0.1.0-beta.2-readiness.md). Optional live
 credentials and recipients are configured after installation. The matrix below
 preserves the larger plan and its historical observations rather than presenting
 those optional configuration tasks as distribution blockers.

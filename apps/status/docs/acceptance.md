@@ -5,7 +5,7 @@ This ledger preserves the complete S00–S11 scope in
 or browser test is evidence for its own behavior, not a claim of full acceptance.
 
 The owner subsequently approved an install-first Beta on 2026-10-24 Pacific.
-The [version-specific readiness decision](../../../docs/status-0.1.0-beta.1-readiness.md)
+The [version-specific readiness decision](../../../docs/status-0.1.0-beta.2-readiness.md)
 supersedes historical prerequisites that coupled distribution to optional live
 provider credentials. The remaining configuration and manual audits below are
 retained honestly; they do not prevent installing the scoped Beta.
