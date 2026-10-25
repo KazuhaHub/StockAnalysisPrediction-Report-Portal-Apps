@@ -50,6 +50,29 @@ Nesting and input size are bounded before typed validation. SDK field validation
 does not freeze the future schema: D3 review and broader generated-schema parity
 are still required.
 
+## Shared source contract
+
+The structure, types, fields, capability/locale/platform/layout domains and limits
+now derive from Portal's single
+`internal/appplatform/contract/descriptor-v2.schema.json`. The generated products
+carry its exact SHA-256. Follow the
+[generation workflow](https://github.com/KazuhaHub/StockAnalysisPrediction-Report-Portal/blob/kazuha/app-descriptor-schema/docs/app-platform/21-descriptor-schema-implementation.md)
+for paired changes. Edit the Portal source, regenerate both checkouts, and submit
+both changes together; do not author a second schema or permission enum here.
+
+From Apps root, `python3 scripts/generate_app_contract.py --check` verifies the
+SDK products offline without Go or network access. CI runs this before frontend
+checks. A source change that introduces unsupported schema constructs refuses;
+extend tooling and validators with tests rather than manually editing products.
+
+The SDK exports `@portal-app/sdk/descriptor-v2.schema.json` for editor association.
+Do not apply it to legacy `app.json`, add `$schema` inside signed descriptor bytes,
+or use editor validation as installation approval. JSON Schema validates decoded
+structure; strict byte scanning and semantic checks remain mandatory. Tests
+demonstrate the distinction for traversal, capability dependencies, route identity,
+data compatibility and integer lexical forms. Ajv is a test-only dev dependency,
+not a new runtime requirement or admission authority.
+
 ## Development verification
 
 From the Apps repository root:
