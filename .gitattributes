@@ -1,0 +1,2 @@
+# The cross-language descriptor corpus is compared by exact byte digest.
+packages/app-sdk/tests/fixtures/descriptor-v2.json text eol=lf
