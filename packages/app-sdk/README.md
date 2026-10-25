@@ -3,6 +3,11 @@
 Use this workspace package in every maintained React application. It bundles
 locally into each app ZIP; it does not load scripts from Portal or a CDN.
 
+The experimental `@portal-app/sdk/descriptor-v2` subpath validates v2 descriptor
+declarations against the shared Go/TypeScript corpus. It grants no authority and
+does not verify signatures, artifacts or compatibility. See
+[the contract limits and verification guide](../../docs/descriptor-v2.md).
+
 `PortalClient(appId)` accepts requests only through the trusted parent-window
 bridge. `request(method, relativePath, body)` wraps a viewer-bound independent
 backend call. `directory(kind, offset)` reads that app's administrator principal
