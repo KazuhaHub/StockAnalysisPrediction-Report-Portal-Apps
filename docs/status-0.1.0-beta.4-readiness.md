@@ -48,7 +48,7 @@ projection. All publication gates continue to require the shared frontend job.
 
 ## Source and browser acceptance
 
-The shared-foundation source checks passed seventeen SDK tests, nine Status React
+The shared-foundation source checks passed eighteen SDK tests, nine Status React
 tests, two demo UI tests, workspace typechecks, 47 Python tooling tests and the
 actual generated-template typecheck/test/build. The source PR's complete CI passed,
 including the installed Status browser/accessibility matrix. The version-specific

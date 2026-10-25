@@ -454,6 +454,13 @@ export function PortalAppProvider({
   children: ReactNode;
 }) {
   const snapshot = usePortalTheme(client);
+  const waitingForPresentation = Boolean(client.getTheme && snapshot === initialTheme);
+  const [presentationTimedOut, setPresentationTimedOut] = useState(false);
+  useEffect(() => {
+    if (!waitingForPresentation) { setPresentationTimedOut(false); return; }
+    const timer = setTimeout(() => setPresentationTimedOut(true), 25000);
+    return () => clearTimeout(timer);
+  }, [waitingForPresentation]);
   useLayoutEffect(() => {
     document.documentElement.lang = locale;
     // Keep the initial iframe surface transparent until the host supplies its theme.
@@ -517,7 +524,10 @@ export function PortalAppProvider({
       theme={config}
       getPopupContainer={() => document.body}
     >
-      <PortalErrorBoundary locale={locale}>{children}</PortalErrorBoundary>
+      {waitingForPresentation && presentationTimedOut && <PortalState kind="error" title={languageCopy[locale].renderError} />}
+      <div style={{ display: "contents", visibility: waitingForPresentation ? "hidden" : undefined }}>
+        <PortalErrorBoundary locale={locale}>{children}</PortalErrorBoundary>
+      </div>
     </ConfigProvider>
   );
 }

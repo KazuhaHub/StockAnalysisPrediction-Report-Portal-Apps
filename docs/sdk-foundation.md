@@ -105,6 +105,11 @@ pages or mandatory global state library is not required to achieve consistent UI
 
 The SDK keeps the document surface transparent before the first trusted theme
 message and applies the received surface in a layout effect before the next paint.
+For theme-aware clients, initial application contents remain hidden until that
+trusted presentation snapshot arrives, preventing default light cards from flashing.
+Clients without theme support retain the documented standalone fallback. A missing
+handshake produces a visible localized error after 25 seconds instead of leaving
+an indefinitely empty frame; a later trusted presentation snapshot recovers in place.
 The Portal iframe must also set its CSS color scheme from the panel theme so its
 initial empty document does not use a light canvas inside a dark panel. Neither
 mechanism reads the parent DOM, persists theme guesses or reloads the iframe.
