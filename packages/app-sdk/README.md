@@ -19,8 +19,8 @@ and bounded HTTP status metadata, rather than untrusted upstream error text.
 `PortalAppProvider` supplies Ant Design theme tokens and component localization.
 `usePortalTheme` follows the trusted host snapshot. `usePortalLocale` follows the
 panel by default, falls back to browser language on older hosts and supports an
-explicit override that can return to following the panel. Use `PortalLocaleSelect`
-for that optional control rather than keeping another locale state machine.
+explicit override for compatibility with existing consumers. Maintained embedded
+apps follow the panel automatically and omit duplicate language controls.
 Application forms must retain drafts across theme/locale changes and failed saves.
 
 SDK 0.2 also supplies `PortalPage`, `PortalState`, `PortalErrorBoundary`, labelled

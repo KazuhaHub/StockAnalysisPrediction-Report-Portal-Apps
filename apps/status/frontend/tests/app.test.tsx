@@ -62,6 +62,7 @@ test("the trusted panel locale arrives after startup and changes without losing 
   f.client.subscribeTheme = bridge.subscribeTheme;
   try {
     render(<StatusApp client={f.client} />);
+    act(() => window.dispatchEvent(new MessageEvent("message", { source: parent, data: { type: "rp:init", locale: "en-US" } })));
     const user = userEvent.setup();
     await user.click(await screen.findByRole("button", { name: "Manage", exact: true }));
     await user.click(await screen.findByRole("button", { name: "New component", exact: true }));
@@ -82,6 +83,7 @@ test("the initial overview stays compact and ordinary viewers have no management
   const f = fixture(false);
   render(<StatusApp client={f.client} />);
   await screen.findByText(/No visible components/);
+  expect(screen.queryByRole("combobox")).toBeNull();
   expect(
     screen.queryByRole("button", { name: "Manage", exact: true }),
   ).toBeNull();
