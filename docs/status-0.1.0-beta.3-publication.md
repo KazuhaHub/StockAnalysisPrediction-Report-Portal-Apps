@@ -1,5 +1,9 @@
 # Status 0.1.0-beta.3 publication checkpoint
 
+The subsequent [production rollout](../apps/status/docs/react-ui-production-rollout.md)
+records the actual market installation and independently deployed Beta.3 runtime.
+The publication-time deployment boundary below remains a historical checkpoint.
+
 Status Beta.3 was published at 2026-10-24T23:37:19Z as a non-draft prerelease:
 [immutable release](https://github.com/KazuhaHub/StockAnalysisPrediction-Report-Portal-Apps/releases/tag/status/v0.1.0-beta.3).
 The source is `d80858feedaec23cb68ab51f120555c0ded31e93`.

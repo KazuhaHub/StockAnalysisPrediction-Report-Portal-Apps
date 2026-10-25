@@ -1,5 +1,9 @@
 # Status 0.1.0-beta.2 production rollout audit
 
+This is the historical Beta.2 checkpoint. The subsequent
+[Beta.3 React UI rollout](react-ui-production-rollout.md) records the installed
+market update, preserved configured data and current operational boundaries.
+
 Checked on 2026-10-24 UTC against GitHub release/PR state, the deployed service,
 protected receipts and the existing administrator's native Chrome session.
 This supplements the [original S00-S11 plan](../../../docs/implementation-plan.md)
