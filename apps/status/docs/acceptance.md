@@ -16,6 +16,17 @@ It records the actual 0.1.0-beta.2 marketplace installation, pairing, private ro
 native browser acceptance, restart and protected recovery verification. Remaining
 provider/recipient configuration is distinguished from implementation evidence.
 
+The subsequent [Beta.3 React UI rollout](react-ui-production-rollout.md) records
+the actual market upgrade and retained configured store. At
+`2026-10-25T00:15:08Z`, all four production monitor kinds had at least three
+successful scheduled samples after the upgrade. The separate
+[released lifecycle drill](released-lifecycle-drill.md) verifies an actual
+Beta.2-to-Beta.3-to-Beta.2 installation and deliberate re-pairing sequence in a
+disposable API fixture, with immutable frontend bytes, monitor configuration and
+sealed credential continuity. Historical pending statements below do not negate
+these later checks. Qwen authorization, recipient/grant choices and manual
+assistive-technology sign-off remain explicitly unverified.
+
 ## Target PostgreSQL checks, 2026-10-23 Pacific
 
 Prepared an independent PostgreSQL-aware stunnel TLS gateway, private CA and

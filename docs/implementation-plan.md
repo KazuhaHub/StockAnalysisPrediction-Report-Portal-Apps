@@ -2,12 +2,20 @@
 
 Status: the install-first Beta is published, listed in the canonical marketplace,
 installed, privately paired and running. See the
-[current rollout audit](../apps/status/docs/production-rollout.md) for verified
+[current rollout audit](../apps/status/docs/react-ui-production-rollout.md) for verified
 release, runtime, browser and recovery evidence. Optional provider credentials,
 OU grants and notification recipients remain post-install configuration under
 the owner's decision. The larger acceptance scope below remains intact; manual
 assistive-technology review and deployment-specific integration checks are not
 claimed complete. Historical inventory statements describe the planning baseline.
+
+Current frontend direction: the owner's subsequent unified-plugin requirement
+supersedes the earlier framework-neutral proposal. Every maintained frontend uses
+the shared React/TypeScript/Ant Design foundation, SDK and generator under the
+[plugin development standard](plugin-development-standard.md). Status Beta.3 is
+installed through the canonical Apps market with its configured monitors retained.
+The original inventory below is historical; the canonical catalogue is now
+`KazuhaHub/StockAnalysisPrediction-Report-Portal-Apps/main/index.json`.
 
 Prepared: 2026-10-21. Baseline: notification consolidation PR #141, commit
 `b4741355118c28d95dcf3c096115963ce5936f01`. Verify that PR's merge and deployed
@@ -490,8 +498,10 @@ and built frontend assets at its root. Service executables/images are separate
 artifacts, never files the Portal attempts to execute after installing a ZIP.
 
 Give each app its own package metadata and test/build commands. Shared tooling
-must not import app business logic. Add shared UI only after there is a real
-second consumer; do not force every app to use one frontend framework. Do not
+must not import app business logic. Status and the maintained demo now use the
+shared React/TypeScript/Ant Design SDK; new applications start from its template
+and pass the standards gate. Independent app versions and backends remain separate.
+Do not
 create a single cross-app Go module, database, runtime or version solely because
 source shares a repository.
 
@@ -506,18 +516,20 @@ invented `min_portal_version` field.
 ### 11.2 Test and packaging procedure
 
 Use the Portal's existing backend/frontend gates for S01 and host market changes.
-Run this proposed service loop from `apps/status/service` in the new monorepo
-once its scaffolding is implemented:
+Run this service loop from `apps/status/service` in the application monorepo:
 
 ```sh
 go build ./...
 go vet ./...
 go test ./...
-go test -race ./internal/auth ./internal/probe ./internal/incidents ./internal/notify
+go test -race ./...
 ```
 
-Create documented frontend scripts for typecheck, test and production build in
-`apps/status/frontend`; do not claim those commands exist before scaffolding. Fixture
+The root npm workspaces provide `npm run typecheck`, `npm run test:sdk` and
+`npm run test:status-ui`. Build Status with
+`python3 scripts/build-status-frontend.py`, then package it with
+`python3 scripts/catalogue.py package status`. The shared generator is tested by
+`python3 scripts/test-app-template.py`. Fixture
 upstreams must simulate unauthorized credentials, malformed payloads, 429 with
 Retry-After, TLS errors, slow headers/bodies, connection loss and provider format
 drift. Real provider/DB tests require explicit test credentials and never default
