@@ -19,7 +19,9 @@ The subpath is experimental and is not re-exported through the legacy SDK entry.
 
 Required later gates remain separate:
 
-- Trusted publisher/signature/namespace and revocation verification.
+- Host-authoritative publisher trust and revocation at commit. An independent
+  [experimental verification helper](publisher-v2.md) now checks signatures and
+  namespace/validity policy against an explicit snapshot.
 - Exact artifact checksum and image-platform verification.
 - Actual compatibility range evaluation, rather than bounded range text.
 - Current administrator review and effective capability/resource admission.

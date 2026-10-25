@@ -7,7 +7,9 @@
     ".": "./src/index.tsx",
     "./descriptor-v2": "./src/descriptor-v2.ts",
     "./descriptor-v2.schema.json": "./schema/descriptor-v2.schema.json",
-    "./bridge-v2": "./src/bridge-v2.ts"
+    "./bridge-v2": "./src/bridge-v2.ts",
+    "./publisher-v2": "./src/publisher-v2.ts",
+    "./publisher-signature-v1.schema.json": "./schema/publisher-signature-v1.schema.json"
   },
   "peerDependencies": {
     "react": "19.3.0",

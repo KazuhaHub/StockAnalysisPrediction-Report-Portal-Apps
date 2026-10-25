@@ -6,3 +6,5 @@ scripts/generate_app_contract.py text eol=lf
 packages/app-sdk/src/bridge-v2.ts text eol=lf
 packages/app-sdk/tests/bridge-v2.test.ts text eol=lf
 packages/app-sdk/tests/fixtures/bridge-v2-source.json text eol=lf
+packages/app-sdk/tests/fixtures/publisher-signatures.json text eol=lf
+packages/app-sdk/schema/publisher-signature-v1.schema.json text eol=lf
