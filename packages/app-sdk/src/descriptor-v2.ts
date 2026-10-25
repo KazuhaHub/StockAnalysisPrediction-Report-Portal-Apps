@@ -1,6 +1,6 @@
 // Experimental declaration validation only. This does not verify signatures,
 // compatibility, artifact bytes, effective permissions or runtime admission.
-export const MAX_DESCRIPTOR_BYTES = 128 << 10;
+export const MAX_DESCRIPTOR_BYTES = DESCRIPTOR_LIMITS.MaxDescriptorBytes;
 
 export class DescriptorError extends Error {
   constructor() {
@@ -9,61 +9,35 @@ export class DescriptorError extends Error {
   }
 }
 
-export interface Descriptor {
-  format: "portal.app/v2";
-  id: string;
-  version: string;
-  publisher: string;
-  compatibility: { platform_api: string; runner_protocol: string };
-  presentation: {
-    name_key: string;
-    description_key: string;
-    entry: string;
-    locales: string[];
-    routes: { id: string; path: string; layout: "document" | "viewport" }[];
-  };
-  frontend: { artifact: string; sha256: string };
-  backend?: {
-    kind: "oci";
-    image: string;
-    platforms: string[];
-    protocol: "portal.backend/1";
-    resources: { memory_mib: number; cpu_millis: number; pids: number };
-  } | null;
-  capabilities?: {
-    required?: string[] | null;
-    optional?: string[] | null;
-  } | null;
-  data: {
-    schema: number;
-    readable_schemas: number[];
-    writes_on_startup?: false | null;
-  };
-}
+import {
+  DESCRIPTOR_LIMITS,
+  DESCRIPTOR_PATTERNS,
+  DESCRIPTOR_CAPABILITIES,
+  DESCRIPTOR_LOCALES,
+  DESCRIPTOR_PLATFORMS,
+  DESCRIPTOR_LAYOUTS,
+  DESCRIPTOR_FIELDS,
+  DESCRIPTOR_CONSTANTS,
+} from "./descriptor-contract.generated";
+import type { Descriptor } from "./descriptor-contract.generated";
+export type { Descriptor } from "./descriptor-contract.generated";
 
-const slug = /^[a-z][a-z0-9-]{0,63}$/;
-const copyKey = /^[a-z][a-z0-9_.-]{0,95}$/;
-const digest = /^[a-f0-9]{64}$/;
-const range = /^[0-9A-Za-z.*+<>=~^| -]{1,96}$/;
-const version =
-  /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?(\+[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$/;
-const image =
-  /^[a-z0-9][a-z0-9.-]*(:[0-9]{1,5})?\/[a-z0-9][a-z0-9._/-]*@sha256:[a-f0-9]{64}$/;
-const known = new Set([
-  "reports.read",
-  "storage.files",
-  "tasks.schedule",
-  "events.subscribe",
-  "notifications.publish",
-  "network.http",
-  "network.stream",
-  "secrets.use",
-  "secrets.read",
-  "background.run",
-  "files.export",
-]);
+const slug = new RegExp(DESCRIPTOR_PATTERNS.slug);
+const copyKey = new RegExp(DESCRIPTOR_PATTERNS.copyKey);
+const digest = new RegExp(DESCRIPTOR_PATTERNS.digest);
+const range = new RegExp(DESCRIPTOR_PATTERNS.range);
+const version = new RegExp(DESCRIPTOR_PATTERNS.version);
+const image = new RegExp(DESCRIPTOR_PATTERNS.image);
+const pathPattern = new RegExp(DESCRIPTOR_PATTERNS.path);
+const keyPattern = new RegExp(DESCRIPTOR_PATTERNS.key);
+const known = new Set<string>(DESCRIPTOR_CAPABILITIES);
+const layouts = new Set<string>(DESCRIPTOR_LAYOUTS);
 
-function match(value: unknown, pattern: RegExp, max = 512): value is string {
+function match(
+  value: unknown,
+  pattern: RegExp,
+  max: number = DESCRIPTOR_LIMITS.maxBackendImageBytes,
+): value is string {
   return (
     typeof value === "string" &&
     value.length <= max &&
@@ -72,7 +46,7 @@ function match(value: unknown, pattern: RegExp, max = 512): value is string {
 }
 function record(
   value: unknown,
-  keys: string[],
+  keys: readonly string[],
 ): value is Record<string, unknown> {
   return (
     value !== null &&
@@ -89,7 +63,10 @@ function integer(value: unknown, min: number, max: number): value is number {
     value <= max
   );
 }
-function unique(values: unknown, allowed: string[]): values is string[] {
+function unique(
+  values: unknown,
+  allowed: readonly string[],
+): values is string[] {
   return (
     Array.isArray(values) &&
     values.length > 0 &&
@@ -100,14 +77,15 @@ function unique(values: unknown, allowed: string[]): values is string[] {
 }
 function safePath(value: unknown): value is string {
   return (
-    match(value, /^[a-zA-Z0-9._/-]+$/, 256) &&
+    match(value, pathPattern, DESCRIPTOR_LIMITS.maxDescriptorPathBytes) &&
     !value.startsWith("/") &&
     !value.includes("..") &&
     value.split("/").every((segment) => segment !== "" && segment !== ".")
   );
 }
 function validVersion(value: unknown): boolean {
-  if (!match(value, version, 128)) return false;
+  if (!match(value, version, DESCRIPTOR_LIMITS.maxDescriptorVersionBytes))
+    return false;
   const withoutBuild = value.split("+", 1)[0];
   const separator = withoutBuild.indexOf("-");
   return (
@@ -123,26 +101,38 @@ function validVersion(value: unknown): boolean {
 }
 function validBackend(value: unknown): boolean {
   if (
-    !record(value, ["kind", "image", "platforms", "protocol", "resources"]) ||
-    value.kind !== "oci" ||
-    value.protocol !== "portal.backend/1" ||
+    !record(value, DESCRIPTOR_FIELDS.Backend) ||
+    value.kind !== DESCRIPTOR_CONSTANTS.descriptorBackendKind ||
+    value.protocol !== DESCRIPTOR_CONSTANTS.descriptorBackendProtocol ||
     !match(value.image, image) ||
     value.image.includes("..") ||
     value.image.includes("//") ||
-    !unique(value.platforms, ["linux/amd64", "linux/arm64"])
+    !unique(value.platforms, DESCRIPTOR_PLATFORMS)
   )
     return false;
   const r = value.resources;
   return (
-    record(r, ["memory_mib", "cpu_millis", "pids"]) &&
-    integer(r.memory_mib, 16, 4096) &&
-    integer(r.cpu_millis, 25, 4000) &&
-    integer(r.pids, 16, 1024)
+    record(r, DESCRIPTOR_FIELDS.Resources) &&
+    integer(
+      r.memory_mib,
+      DESCRIPTOR_LIMITS.minBackendMemoryMiB,
+      DESCRIPTOR_LIMITS.maxBackendMemoryMiB,
+    ) &&
+    integer(
+      r.cpu_millis,
+      DESCRIPTOR_LIMITS.minBackendCPUMillis,
+      DESCRIPTOR_LIMITS.maxBackendCPUMillis,
+    ) &&
+    integer(
+      r.pids,
+      DESCRIPTOR_LIMITS.minBackendPIDs,
+      DESCRIPTOR_LIMITS.maxBackendPIDs,
+    )
   );
 }
 function validCapabilities(value: unknown, backend: boolean): boolean {
   if (value === undefined || value === null) value = {};
-  if (!record(value, ["required", "optional"])) return false;
+  if (!record(value, DESCRIPTOR_FIELDS.Capabilities)) return false;
   const required = value.required ?? [],
     optional = value.optional ?? [];
   if (!Array.isArray(required) || !Array.isArray(optional)) return false;
@@ -163,19 +153,8 @@ function validCapabilities(value: unknown, backend: boolean): boolean {
 }
 function validManifest(value: unknown): value is Descriptor {
   if (
-    !record(value, [
-      "format",
-      "id",
-      "version",
-      "publisher",
-      "compatibility",
-      "presentation",
-      "frontend",
-      "backend",
-      "capabilities",
-      "data",
-    ]) ||
-    value.format !== "portal.app/v2" ||
+    !record(value, DESCRIPTOR_FIELDS.Manifest) ||
+    value.format !== DESCRIPTOR_CONSTANTS.descriptorFormat ||
     !match(value.id, slug) ||
     !match(value.publisher, slug) ||
     !validVersion(value.version)
@@ -183,7 +162,7 @@ function validManifest(value: unknown): value is Descriptor {
     return false;
   const c = value.compatibility;
   if (
-    !record(c, ["platform_api", "runner_protocol"]) ||
+    !record(c, DESCRIPTOR_FIELDS.Compatibility) ||
     !match(c.platform_api, range) ||
     !match(c.runner_protocol, range) ||
     !c.platform_api.trim() ||
@@ -192,22 +171,22 @@ function validManifest(value: unknown): value is Descriptor {
     return false;
   const p = value.presentation;
   if (
-    !record(p, ["name_key", "description_key", "entry", "locales", "routes"]) ||
+    !record(p, DESCRIPTOR_FIELDS.Presentation) ||
     !match(p.name_key, copyKey) ||
     !match(p.description_key, copyKey) ||
     !safePath(p.entry) ||
-    !unique(p.locales, ["en-US", "zh-CN", "zh-TW"]) ||
-    p.locales.length !== 3 ||
+    !unique(p.locales, DESCRIPTOR_LOCALES) ||
+    p.locales.length !== DESCRIPTOR_LOCALES.length ||
     !Array.isArray(p.routes) ||
     p.routes.length === 0 ||
-    p.routes.length > 32
+    p.routes.length > DESCRIPTOR_LIMITS.maxDescriptorRoutes
   )
     return false;
   const ids = new Set(),
     paths = new Set();
   for (const route of p.routes) {
     if (
-      !record(route, ["id", "path", "layout"]) ||
+      !record(route, DESCRIPTOR_FIELDS.Route) ||
       !match(route.id, slug) ||
       typeof route.path !== "string" ||
       !(
@@ -217,7 +196,7 @@ function validManifest(value: unknown): value is Descriptor {
       ids.has(route.id) ||
       paths.has(route.path) ||
       typeof route.layout !== "string" ||
-      !["document", "viewport"].includes(route.layout)
+      !layouts.has(route.layout)
     )
       return false;
     ids.add(route.id);
@@ -227,7 +206,7 @@ function validManifest(value: unknown): value is Descriptor {
     d = value.data;
   if (
     !paths.has("/") ||
-    !record(f, ["artifact", "sha256"]) ||
+    !record(f, DESCRIPTOR_FIELDS.Artifact) ||
     !safePath(f.artifact) ||
     !match(f.sha256, digest) ||
     !validCapabilities(value.capabilities, value.backend != null) ||
@@ -235,14 +214,25 @@ function validManifest(value: unknown): value is Descriptor {
   )
     return false;
   if (
-    !record(d, ["schema", "readable_schemas", "writes_on_startup"]) ||
-    !integer(d.schema, 1, 1_000_000) ||
+    !record(d, DESCRIPTOR_FIELDS.DataCompatibility) ||
+    !integer(
+      d.schema,
+      DESCRIPTOR_LIMITS.minDescriptorDataSchema,
+      DESCRIPTOR_LIMITS.maxDescriptorDataSchema,
+    ) ||
     !(d.writes_on_startup == null || d.writes_on_startup === false) ||
     !Array.isArray(d.readable_schemas) ||
     d.readable_schemas.length === 0 ||
-    d.readable_schemas.length > 32 ||
+    d.readable_schemas.length >
+      DESCRIPTOR_LIMITS.maxDescriptorReadableSchemas ||
     new Set(d.readable_schemas).size !== d.readable_schemas.length ||
-    !d.readable_schemas.every((v) => integer(v, 1, 1_000_000)) ||
+    !d.readable_schemas.every((v) =>
+      integer(
+        v,
+        DESCRIPTOR_LIMITS.minDescriptorDataSchema,
+        DESCRIPTOR_LIMITS.maxDescriptorDataSchema,
+      ),
+    ) ||
     !d.readable_schemas.includes(d.schema)
   )
     return false;
@@ -270,7 +260,7 @@ function inspectJSON(text: string): void {
     return fail();
   }
   function value(depth: number): void {
-    if (depth > 24) fail();
+    if (depth > DESCRIPTOR_LIMITS.maxDescriptorDepth) fail();
     skip();
     const first = text[at];
     if (first === "{") {
@@ -284,7 +274,7 @@ function inspectJSON(text: string): void {
       while (true) {
         skip();
         const key = string();
-        if (!match(key, /^[a-z][a-z0-9_]*$/) || seen.has(key)) fail();
+        if (!match(key, keyPattern) || seen.has(key)) fail();
         seen.add(key);
         skip();
         if (text[at++] !== ":") fail();

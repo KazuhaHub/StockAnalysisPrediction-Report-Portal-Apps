@@ -8,6 +8,12 @@ bundle this stack completely; sandbox isolation does not require handwritten DOM
 
 ## Shared frontend foundation
 
+Experimental v2 package declarations use the [shared descriptor source and
+generation workflow](descriptor-v2.md#shared-source-contract). Do not duplicate
+capability enums, edit generated products or substitute editor schema validation
+for strict parsing and admission. Existing releases still use their legacy format
+until the v2 platform is accepted and released.
+
 The executable presentation foundation is SDK 0.2. Maintained applications use
 `PortalAppProvider`, `PortalPage` and `usePortalLocale`; declaring the SDK as a
 dependency alone is insufficient. The checked template and both maintained
