@@ -10,18 +10,16 @@ import {
   Flex,
   Form,
   Input,
-  Select,
   Skeleton,
   Space,
   Table,
   Tabs,
   Tag,
   Typography,
-  theme,
 } from "antd";
 import { ReloadOutlined, SettingOutlined } from "@ant-design/icons";
-import { PortalAppProvider, localeOf, usePortalTheme } from "@portal-app/sdk";
-import type { Client, Component, Incident, Locale, Page } from "./client";
+import { PortalAppProvider, PortalPage, PortalLocaleSelect, usePortalLocale, type LocaleSelection } from "@portal-app/sdk";
+import type { Client, Component, Incident, Page } from "./client";
 import {
   Check,
   date,
@@ -36,11 +34,7 @@ import contracts from "./contracts.cjs";
 
 const { compatibleBackend, safeState, percentage, monitorHint } = contracts;
 export function StatusApp({ client }: { client: Client }) {
-  const hostTheme = usePortalTheme(client),
-    [locale, setLocale] = useState<Locale>(
-      () => hostTheme.locale ?? localeOf(navigator.language),
-    ),
-    overrideLocale = useRef(false);
+  const { locale, selection, setSelection } = usePortalLocale(client);
   const [ready, setReady] = useState(false),
     [admin, setAdmin] = useState(false),
     [error, setError] = useState(""),
@@ -50,13 +44,6 @@ export function StatusApp({ client }: { client: Client }) {
     busyRef = useRef(false);
   const dictionary = locales[locale] as Record<string, string>,
     t = (key: string) => dictionary[key] ?? key;
-  useEffect(() => {
-    if (!overrideLocale.current && hostTheme.locale)
-      setLocale(hostTheme.locale);
-  }, [hostTheme.locale]);
-  useEffect(() => {
-    document.documentElement.lang = locale;
-  }, [locale]);
   const connect = useCallback(async () => {
     setReady(false);
     setAdmin(false);
@@ -122,10 +109,8 @@ export function StatusApp({ client }: { client: Client }) {
           ready={ready}
           error={error}
           notice={notice}
-          localeChanged={(locale) => {
-            overrideLocale.current = true;
-            setLocale(locale);
-          }}
+          selection={selection}
+          localeChanged={setSelection}
           refresh={() => {
             if (ready) setRevision((value) => value + 1);
             else void connect();
@@ -141,47 +126,22 @@ function StatusSurface({
   error,
   notice,
   localeChanged,
+  selection,
   refresh,
 }: {
   admin: boolean;
   ready: boolean;
   error: string;
   notice: string;
-  localeChanged(locale: Locale): void;
+  selection: LocaleSelection;
+  localeChanged(locale: LocaleSelection): void;
   refresh(): void;
 }) {
-  const { t, locale, busy } = useUI(),
-    [tab, setTab] = useState("overview"),
-    { token } = theme.useToken();
-  useEffect(() => {
-    document.body.style.background = token.colorBgLayout;
-    document.body.style.color = token.colorText;
-  }, [token.colorBgLayout, token.colorText]);
+  const { t, locale, busy } = useUI(), [tab, setTab] = useState("overview");
   return (
-    <main
-      className="status-app"
-      aria-busy={busy}
-      style={{ color: token.colorText }}
-    >
-      <header className="app-header">
-        <div>
-          <Typography.Title level={3} style={{ margin: 0 }}>
-            {t("title")}
-          </Typography.Title>
-          <Typography.Text type="secondary">{t("subtitle")}</Typography.Text>
-        </div>
+    <PortalPage title={t("title")} description={t("subtitle")} className="status-app" busy={busy} actions={
         <Space wrap>
-          <Select
-            virtual={false}
-            aria-label={t("language")}
-            value={locale}
-            onChange={localeChanged}
-            options={Object.entries(locales).map(([value, dictionary]) => ({
-              value,
-              label: dictionary.languageName,
-            }))}
-            style={{ minWidth: 132 }}
-          />
+          <PortalLocaleSelect locale={locale} selection={selection} onChange={localeChanged} />
           <Button
             aria-label={t("refresh")}
             icon={<ReloadOutlined />}
@@ -202,7 +162,7 @@ function StatusSurface({
             </Button>
           )}
         </Space>
-      </header>
+      }>
       {error && (
         <div data-app-error tabIndex={-1} className="section-gap">
           <Alert
@@ -246,7 +206,7 @@ function StatusSurface({
           )}
         </>
       )}
-    </main>
+    </PortalPage>
   );
 }
 const stateColors: Record<string, string> = {

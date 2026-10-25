@@ -105,6 +105,10 @@ are completed. The Portal platform dependency is tracked in PR #142.
 ## Shared plugin development standard
 
 See [the common frontend and interaction standard](docs/plugin-development-standard.md).
+The [SDK foundation contract](docs/sdk-foundation.md) documents the shared page,
+panel-language following, labelled fields, safe async resource states and bounded
+render-error handling. These are used by the maintained apps and generated template,
+not merely listed as optional dependencies.
 Start a new unlisted application with `python3 scripts/create-app.py my-app --name "My app"`,
 then run `npm install` at the repository root. Use `@portal-app/sdk`, React, TypeScript
 and Ant Design for theme, locale and sandbox bridge integration. CI validates the

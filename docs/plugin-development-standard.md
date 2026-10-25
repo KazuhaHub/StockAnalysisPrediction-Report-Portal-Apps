@@ -8,6 +8,13 @@ bundle this stack completely; sandbox isolation does not require handwritten DOM
 
 ## Shared frontend foundation
 
+The executable presentation foundation is SDK 0.2. Maintained applications use
+`PortalAppProvider`, `PortalPage` and `usePortalLocale`; declaring the SDK as a
+dependency alone is insufficient. The checked template and both maintained
+consumers demonstrate the same composition. Read the
+[SDK API and ownership contract](sdk-foundation.md) before creating another
+layout, language state machine, field wrapper or request-state hook.
+
 - Use `@portal-app/sdk` for parent-window identity checks, scoped request/reply
   handling, timeouts, theme snapshots and supported locales. Do not copy a bridge
   implementation into a plugin or call session-authenticated admin endpoints.
@@ -26,6 +33,33 @@ bundle this stack completely; sandbox isolation does not require handwritten DOM
 - Language resources cover en-US, zh-CN and zh-TW with identical keys. Prefer an
   optional trusted host locale; fall back to browser locale on older Portal versions.
   Runtime locale changes must preserve unsaved form drafts.
+  `usePortalLocale` owns the default-follow/explicit-override behavior. If an app
+  needs a language selector, use `PortalLocaleSelect`, including its return-to-panel
+  option. Do not initialize a separate language state only once on mount.
+  The host's optional top-level `locale` travels on `rp:init` and `rp:theme`;
+  a host update supplying this field does not require an app-specific host hook.
+
+Use `PortalPage` for the initial/private application surface: one labelled main
+region, a level-three title, optional description and a wrapping action area.
+The SDK supplies the 1200-pixel content bound, 24-pixel desktop padding,
+16-by-12-pixel narrow padding, system typography and control sizing/reflow fixes.
+Applications supply business content and visualization layout, rather than
+redeclaring page, body or typography defaults. Do not add a second Portal header,
+account menu or global navigation inside the iframe.
+
+Use shared `PortalTextField`, `PortalNumberField`, `PortalChoice` and `PortalCheck`
+for ordinary configuration fields; they preserve real labels, unique IDs and
+consistent widths. Secret fields have no reveal toggle and use new-password
+autocompletion. These controls never persist secrets; backend sealing remains
+the service's responsibility. Business-specific controls may compose Ant Design
+components when they have their own accessibility/behavior tests.
+
+Use `PortalState` for standalone loading, empty, forbidden, incompatible and
+recoverable-error surfaces. Provider render failures use a bounded localized
+`PortalErrorBoundary` fallback without printing exception contents. The boundary
+does not retry a failed write. `usePortalResource` ignores obsolete async replies
+and clears data on a failed current load; applications still own authority checks,
+freshness semantics and safe error dictionaries.
 
 ## Interaction and information architecture
 
@@ -82,6 +116,14 @@ Integration checks retain sandbox isolation, theme/locale changes, current viewe
 authority, error/draft handling, keyboard navigation, narrow layouts, accessibility
 and installation lifecycle. Tests must follow the intended user flow; do not retain
 a simpler hidden test-only UI or weaken a gate to make a rewrite pass.
+
+The foundation validator checks dependencies, required common entry points, locale
+parity and forbidden copied authority/bridge access. These structural checks are
+not a JavaScript security proof or a visual acceptance certificate. The generated
+template is also compiled and exercised, SDK behavior tests cover stale replies,
+parent-only locale updates and bounded failure UI, and the Status browser suite
+exercises the actual composition. Reviewers must still inspect the application
+flow and business-specific controls.
 
 Published versions remain immutable. Migrate maintained source and publish a new
 app-qualified release; never overwrite an older ZIP/image to retrofit this standard.

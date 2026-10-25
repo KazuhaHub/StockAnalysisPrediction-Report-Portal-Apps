@@ -1,5 +1,6 @@
-import { useEffect, useSyncExternalStore, type ReactNode } from "react";
-import { ConfigProvider, theme, type ThemeConfig } from "antd";
+import { Component as ReactComponent, useEffect, useId, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { Alert, Button, ConfigProvider, Empty, Form, Input, InputNumber, Select, Skeleton, Typography, Checkbox, theme, type ThemeConfig } from "antd";
+import "./foundation.css";
 import enUS from "antd/locale/en_US";
 import zhCN from "antd/locale/zh_CN";
 import zhTW from "antd/locale/zh_TW";
@@ -338,6 +339,111 @@ export function usePortalTheme(client: AppClient) {
     client.getTheme ?? defaultSnapshot,
   );
 }
+export type LocaleSelection = Locale | "panel";
+export function usePortalLocale(client: AppClient) {
+  const snapshot = usePortalTheme(client);
+  const [selection, setSelection] = useState<LocaleSelection>("panel");
+  const fallback = localeOf(typeof navigator === "undefined" ? "en-US" : navigator.language);
+  const locale = selection === "panel" ? snapshot.locale ?? fallback : selection;
+  return { locale, selection, setSelection };
+}
+const languageCopy = {
+  "en-US": { language: "Language", panel: "Follow panel", renderError: "This application could not be displayed.", retry: "Try again" },
+  "zh-CN": { language: "语言", panel: "跟随面板", renderError: "应用暂时无法显示。", retry: "重试" },
+  "zh-TW": { language: "語言", panel: "跟隨面板", renderError: "應用暫時無法顯示。", retry: "重試" },
+};
+export class PortalErrorBoundary extends ReactComponent<{ locale: Locale; children: ReactNode }, { failed: boolean }> {
+  state = { failed: false };
+  static getDerivedStateFromError() { return { failed: true }; }
+  render() {
+    const copy = languageCopy[this.props.locale];
+    return this.state.failed ? <PortalState kind="error" title={copy.renderError} retryLabel={copy.retry}
+      onRetry={() => this.setState({ failed: false })} /> : this.props.children;
+  }
+}
+export function PortalLocaleSelect({ locale, selection, onChange }: {
+  locale: Locale; selection: LocaleSelection; onChange(value: LocaleSelection): void;
+}) {
+  const copy = languageCopy[locale];
+  return <Select virtual={false} aria-label={copy.language} value={selection} onChange={onChange}
+    style={{ minWidth: 140 }} options={[
+      { value: "panel", label: copy.panel },
+      { value: "en-US", label: "English" },
+      { value: "zh-CN", label: "简体中文" },
+      { value: "zh-TW", label: "繁體中文" },
+    ]} />;
+}
+export function PortalPage({ title, description, actions, children, className = "", busy = false }: {
+  title: string; description?: ReactNode; actions?: ReactNode; children: ReactNode;
+  className?: string; busy?: boolean;
+}) {
+  const id = useId();
+  return <main className={`portal-app-page ${className}`} aria-labelledby={id} aria-busy={busy}>
+    <header className="portal-app-page-header">
+      <div><Typography.Title id={id} level={3} style={{ margin: 0 }}>{title}</Typography.Title>
+        {description && <Typography.Text type="secondary">{description}</Typography.Text>}</div>
+      {actions && <div className="portal-app-page-actions">{actions}</div>}
+    </header>
+    {children}
+  </main>;
+}
+export function PortalState({ kind, title, description, onRetry, retryLabel }: {
+  kind: "loading" | "empty" | "error" | "forbidden" | "incompatible";
+  title: string; description?: ReactNode; onRetry?(): void; retryLabel?: string;
+}) {
+  if (kind === "loading") return <div role="status" aria-label={title} aria-busy="true"><Skeleton active title paragraph={{ rows: 3 }} /></div>;
+  if (kind === "empty") return <Empty description={<><strong>{title}</strong>{description && <div>{description}</div>}</>} />;
+  return <Alert role="alert" type={kind === "incompatible" ? "warning" : "error"} showIcon title={title}
+    description={description} action={onRetry && retryLabel ? <Button onClick={onRetry}>{retryLabel}</Button> : undefined} />;
+}
+export function usePortalResource<T>(load: () => Promise<T>, initialData: T) {
+  const initial = useRef(initialData);
+  const [data, setData] = useState(initialData), [loading, setLoading] = useState(true), [errorKey, setErrorKey] = useState("");
+  useEffect(() => {
+    let current = true;
+    setLoading(true); setErrorKey("");
+    Promise.resolve().then(load).then(value => { if (current) setData(value); }).catch(error => {
+      if (current) {
+        setData(initial.current);
+        const key = error && typeof error === "object" && "key" in error ? error.key : undefined;
+        setErrorKey(typeof key === "string" ? key : "unavailable");
+      }
+    }).finally(() => { if (current) setLoading(false); });
+    return () => { current = false; };
+  }, [load]);
+  return { data, loading, errorKey };
+}
+
+export function PortalTextField({ label, value, onChange, secret = false, multiline = false, help }: {
+  label: string; value?: string; onChange(value: string): void; secret?: boolean; multiline?: boolean; help?: ReactNode;
+}) {
+  const id = useId(), props = { id, value: value ?? "", autoComplete: secret ? "new-password" : "off",
+    onChange: (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => onChange(event.target.value) };
+  return <Form.Item label={label} htmlFor={id} extra={help}>
+    {secret ? <Input.Password {...props} visibilityToggle={false} /> : multiline ? <Input.TextArea {...props} autoSize={{ minRows: 2, maxRows: 6 }} /> : <Input {...props} />}
+  </Form.Item>;
+}
+export function PortalNumberField({ label, value, onChange, min, max }: {
+  label: string; value: number; onChange(value: number): void; min: number; max: number;
+}) {
+  const id = useId();
+  return <Form.Item label={label} htmlFor={id}><InputNumber id={id} value={value} min={min} max={max} precision={0}
+    onChange={value => onChange(value ?? min)} style={{ width: "100%" }} /></Form.Item>;
+}
+export function PortalChoice({ label, value, options, onChange, multiple = false, disabled = false, help }: {
+  label: string; value: string | string[]; options: { value: string; label: string }[];
+  onChange(value: string | string[]): void; multiple?: boolean; disabled?: boolean; help?: ReactNode;
+}) {
+  const id = useId();
+  return <Form.Item label={label} htmlFor={id} extra={help}><Select virtual={false} id={id} aria-label={label} value={value}
+    options={options} onChange={onChange} mode={multiple ? "multiple" : undefined} disabled={disabled}
+    showSearch={{ optionFilterProp: "label" }} style={{ width: "100%" }} /></Form.Item>;
+}
+export function PortalCheck({ children, checked, onChange }: {
+  children: ReactNode; checked: boolean; onChange(value: boolean): void;
+}) {
+  return <Form.Item><Checkbox checked={checked} onChange={event => onChange(event.target.checked)}>{children}</Checkbox></Form.Item>;
+}
 export function PortalAppProvider({
   client,
   locale,
@@ -352,7 +458,10 @@ export function PortalAppProvider({
     document.documentElement.style.colorScheme = snapshot.dark
       ? "dark"
       : "light";
-  }, [snapshot.dark]);
+    document.documentElement.lang = locale;
+    document.body.style.background = snapshot.colorBgLayout;
+    document.body.style.color = snapshot.colorText;
+  }, [snapshot.dark, snapshot.colorBgLayout, snapshot.colorText, locale]);
   const algorithm = snapshot.dark
     ? theme.darkAlgorithm
     : theme.defaultAlgorithm;
@@ -405,7 +514,7 @@ export function PortalAppProvider({
       theme={config}
       getPopupContainer={() => document.body}
     >
-      {children}
+      <PortalErrorBoundary locale={locale}>{children}</PortalErrorBoundary>
     </ConfigProvider>
   );
 }

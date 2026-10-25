@@ -10,6 +10,25 @@ spec.loader.exec_module(standard)
 
 
 class PluginStandardTests(unittest.TestCase):
+    def test_sdk_dependency_alone_cannot_replace_the_shared_page_and_locale_foundation(self):
+        import shutil
+        creator_spec = importlib.util.spec_from_file_location("create_foundation_fixture", Path(__file__).parents[1] / "create-app.py")
+        creator = importlib.util.module_from_spec(creator_spec)
+        creator_spec.loader.exec_module(creator)
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            shutil.copytree(Path(__file__).parents[2] / "templates", root / "templates")
+            creator.ROOT = root
+            creator.create("foundation-fixture", "Fixture")
+            source = root / "apps/foundation-fixture/frontend/src/App.tsx"
+            original = source.read_text()
+            for name in ["PortalAppProvider", "PortalPage", "usePortalLocale"]:
+                source.write_text(original.replace(name, "CustomFoundation"))
+                with self.assertRaisesRegex(ValueError, name):
+                    standard.check(root)
+            source.write_text(original)
+            self.assertTrue(standard.check(root))
+
     def test_generator_creates_an_unlisted_standard_workspace_and_refuses_overwrite(self):
         creator_spec = importlib.util.spec_from_file_location("create_app", Path(__file__).parents[1] / "create-app.py")
         creator = importlib.util.module_from_spec(creator_spec)
