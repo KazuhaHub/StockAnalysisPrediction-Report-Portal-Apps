@@ -96,3 +96,9 @@ remained paused with public projection disabled. This demonstrates released stor
 compatibility; it does not claim that a production market downgrade was performed.
 The retained immutable Beta.2 artifacts and deliberate re-pairing procedure remain
 the rollback path.
+
+The subsequent [released lifecycle drill](released-lifecycle-drill.md) exercised
+the normal installer with both actual immutable ZIPs and native service archives
+in an isolated Portal v2026.43.2 fixture. Upgrade and rollback preserved a saved
+component, disabled monitor and sealed credential, required distinct pairing
+identities and rejected stale tokens. Production remained on Beta.3 throughout.
