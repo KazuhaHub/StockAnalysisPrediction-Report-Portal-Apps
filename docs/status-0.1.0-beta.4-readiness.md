@@ -2,7 +2,7 @@
 
 This candidate adopts shared SDK 0.2, reviewed and merged in
 [Apps #19](https://github.com/KazuhaHub/StockAnalysisPrediction-Report-Portal-Apps/pull/19).
-The common page shell, panel-follow locale and return-to-panel choice, labelled
+The common page shell, automatic panel-follow locale without a duplicate selector, labelled
 fields, async resource lifecycle and bounded render-error fallback replace
 duplicated Status implementations. The maintained demo and generated template
 exercise the same presentation foundation; see the
@@ -34,8 +34,11 @@ normal management flow is verified; release source does not write such policy.
 The minimum verified Portal remains published v2026.43.2. Hosts before the optional
 locale field use the documented browser-language fallback. Portal v2026.43.7
 supplies its selected language on the existing trusted `rp:init`/`rp:theme` bridge;
-the SDK follows live updates and an explicit override can return to following the
-panel. Language changes preserve active form drafts.
+the SDK follows live updates automatically. Status has no independent language
+selector. Language changes preserve active form drafts. The companion Portal
+iframe color-scheme change and the SDK transparent startup surface address the
+initial light canvas in a dark panel; production refresh verification remains a
+rollout check.
 
 The null-origin `allow-scripts` sandbox, host-only ephemeral tokens, bounded
 parent/reply matching and current server authority remain unchanged. SDK 0.2
@@ -45,7 +48,7 @@ projection. All publication gates continue to require the shared frontend job.
 
 ## Source and browser acceptance
 
-The shared-foundation source checks passed sixteen SDK tests, nine Status React
+The shared-foundation source checks passed seventeen SDK tests, nine Status React
 tests, two demo UI tests, workspace typechecks, 47 Python tooling tests and the
 actual generated-template typecheck/test/build. The source PR's complete CI passed,
 including the installed Status browser/accessibility matrix. The version-specific
@@ -78,3 +81,20 @@ The guarded release must verify public metadata, every archive/ZIP and both imag
 executables before any catalogue update. Old release bytes remain immutable.
 Production installation, exact bytes, pairing, data continuity and scheduled
 samples must be recorded after publication; this document does not claim them.
+
+## Current deployment constraints
+
+The owner requires the server version configuration to remain unchanged and the
+Portal deployment to use the beta channel consistently. This candidate does not
+authorize changing a running server from its configured channel to a version pin,
+changing the backend image reference or restarting it as part of a UI review.
+Immutable release digests remain artifact-verification and recovery evidence;
+they are not an instruction to rewrite the live deployment configuration.
+
+The internal visibility decision is the existing OU named Anchan Internal
+(`安禅内部` in user-facing directory data), for coarse component state/history and
+incidents only. Resolve its actual opaque principal through the app directory.
+Finance remains administrator-only, the public projection stays disabled and
+notification publication stays paused. The owner accepts browser-based acceptance
+for this Beta; a separate screen-reader sign-off is not a release prerequisite,
+and no screen-reader certification is claimed.
