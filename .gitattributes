@@ -3,3 +3,6 @@ packages/app-sdk/tests/fixtures/descriptor-v2.json text eol=lf
 packages/app-sdk/schema/descriptor-v2.schema.json text eol=lf
 packages/app-sdk/src/descriptor-contract.generated.ts text eol=lf
 scripts/generate_app_contract.py text eol=lf
+packages/app-sdk/src/bridge-v2.ts text eol=lf
+packages/app-sdk/tests/bridge-v2.test.ts text eol=lf
+packages/app-sdk/tests/fixtures/bridge-v2-source.json text eol=lf
