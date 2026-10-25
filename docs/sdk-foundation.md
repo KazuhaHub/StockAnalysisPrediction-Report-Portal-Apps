@@ -10,7 +10,7 @@ permission authority. React, TypeScript and Ant Design remain pinned centrally.
 ```tsx
 import {
   PortalAppProvider, PortalClient, PortalPage, PortalState,
-  PortalLocaleSelect, usePortalLocale,
+  usePortalLocale,
 } from '@portal-app/sdk';
 
 const client = new PortalClient('my-app');
@@ -19,10 +19,7 @@ export function Application() {
   const language = usePortalLocale(client);
   const copy = dictionaries[language.locale];
   return <PortalAppProvider client={client} locale={language.locale}>
-    <PortalPage title={copy.title} description={copy.description} actions={
-      <PortalLocaleSelect locale={language.locale} selection={language.selection}
-        onChange={language.setSelection} />
-    }>
+    <PortalPage title={copy.title} description={copy.description}>
       <PortalState kind="empty" title={copy.empty} />
     </PortalPage>
   </PortalAppProvider>;
@@ -30,8 +27,9 @@ export function Application() {
 ```
 
 `dictionaries` is the application's typed en-US/zh-CN/zh-TW resource mapping.
-The generated template has a complete runnable version. A language selector is
-optional; follow-panel remains the default even when no selector is shown.
+The generated template has a complete runnable version. Embedded apps follow the
+panel language automatically and do not add a duplicate language selector. The
+legacy selector export remains available for compatibility with existing bundles.
 Do not construct a new client on every render. The client owns real page-exit
 cleanup and preserves a browser back/forward-cache suspension. A separately owned
 client may be explicitly disposed when its true owner is destroyed.
@@ -45,7 +43,7 @@ client may be explicitly disposed when its true owner is destroyed.
 | `PortalClient.machine` | Reviewed query-scope GET call through the host | Request only the capabilities actually needed; no private session endpoints |
 | `usePortalTheme` | Trusted theme snapshot and live subscription | Custom chart contrast and semantics; never read parent DOM or browser storage |
 | `usePortalLocale` | `{ locale, selection, setSelection }`; `selection` starts as `panel`; host updates apply live; explicit choices remain until `panel` is selected again | Supply matching dictionary keys and retain drafts across language changes |
-| `PortalLocaleSelect` | Localized language labels and a visible follow-panel option | Include it only when an explicit override is useful; no separate custom selector |
+| `PortalLocaleSelect` | Localized language labels and a visible follow-panel option | Compatibility export; maintained embedded apps follow the panel without a selector |
 | `PortalAppProvider` | Ant Design theme/locale, document language/color scheme/surface and localized render-failure boundary | Wrap the whole maintained app once; public websites use public-only data and never add an authenticated bridge fallback |
 | `PortalPage` | Labelled main region, title, description, wrapping actions and responsive content spacing | Reader-first content, administrator entry, app-specific sections/charts |
 | `PortalState` | Explicit loading/empty/error/forbidden/incompatible presentation; bounded retry action when supplied | Select truthful state, localized explanatory text and a safe read retry; never display a backend outage as healthy |
@@ -104,3 +102,9 @@ database migration, credential vault, inferred OU policy or silent permission
 grant belongs here. Services use their own approved storage and current authority.
 Portal supplies only reviewed generic capabilities. A registry of business-specific
 pages or mandatory global state library is not required to achieve consistent UI.
+
+The SDK keeps the document surface transparent before the first trusted theme
+message and applies the received surface in a layout effect before the next paint.
+The Portal iframe must also set its CSS color scheme from the panel theme so its
+initial empty document does not use a light canvas inside a dark panel. Neither
+mechanism reads the parent DOM, persists theme guesses or reloads the iframe.

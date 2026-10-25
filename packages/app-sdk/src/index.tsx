@@ -1,4 +1,4 @@
-import { Component as ReactComponent, useEffect, useId, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { Component as ReactComponent, useEffect, useLayoutEffect, useId, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { Alert, Button, ConfigProvider, Empty, Form, Input, InputNumber, Select, Skeleton, Typography, Checkbox, theme, type ThemeConfig } from "antd";
 import "./foundation.css";
 import enUS from "antd/locale/en_US";
@@ -454,14 +454,17 @@ export function PortalAppProvider({
   children: ReactNode;
 }) {
   const snapshot = usePortalTheme(client);
-  useEffect(() => {
+  useLayoutEffect(() => {
+    document.documentElement.lang = locale;
+    // Keep the initial iframe surface transparent until the host supplies its theme.
+    // A guessed light background would override a dark embedding surface on refresh.
+    if (snapshot === initialTheme) return;
     document.documentElement.style.colorScheme = snapshot.dark
       ? "dark"
       : "light";
-    document.documentElement.lang = locale;
     document.body.style.background = snapshot.colorBgLayout;
     document.body.style.color = snapshot.colorText;
-  }, [snapshot.dark, snapshot.colorBgLayout, snapshot.colorText, locale]);
+  }, [snapshot, locale]);
   const algorithm = snapshot.dark
     ? theme.darkAlgorithm
     : theme.defaultAlgorithm;

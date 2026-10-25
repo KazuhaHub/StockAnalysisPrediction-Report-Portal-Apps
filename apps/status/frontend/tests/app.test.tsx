@@ -82,6 +82,7 @@ test("the initial overview stays compact and ordinary viewers have no management
   const f = fixture(false);
   render(<StatusApp client={f.client} />);
   await screen.findByText(/No visible components/);
+  expect(screen.queryByRole("combobox")).toBeNull();
   expect(
     screen.queryByRole("button", { name: "Manage", exact: true }),
   ).toBeNull();
