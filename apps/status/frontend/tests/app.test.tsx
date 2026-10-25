@@ -1,4 +1,5 @@
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -10,6 +11,8 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, expect, test, vi } from "vitest";
 import { StatusApp } from "../src/App";
 import type { Client } from "../src/client";
+import { PortalClient } from "@portal-app/sdk";
+import { locales } from "../src/ui";
 
 afterEach(cleanup);
 function fixture(admin = true) {
@@ -51,6 +54,30 @@ function fixture(admin = true) {
     } as unknown as Client,
   };
 }
+test("the trusted panel locale arrives after startup and changes without losing the active draft", async () => {
+  const parent = {} as Window;
+  const bridge = new PortalClient("status", { parent, current: window });
+  const f = fixture();
+  f.client.getTheme = bridge.getTheme;
+  f.client.subscribeTheme = bridge.subscribeTheme;
+  try {
+    render(<StatusApp client={f.client} />);
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: "Manage", exact: true }));
+    await user.click(await screen.findByRole("button", { name: "New component", exact: true }));
+    await user.type(screen.getByLabelText("Internal label", { exact: true }), "Keep locale draft");
+    for (const [type, locale] of [["rp:init", "zh-CN"], ["rp:theme", "zh-TW"], ["rp:theme", "en"]]) {
+      act(() => window.dispatchEvent(new MessageEvent("message", { source: parent, data: { type, locale } })));
+      const supported = locale === "en" ? "en-US" : locale as "zh-CN" | "zh-TW";
+      await screen.findByRole("heading", { name: locales[supported].title, exact: true });
+      expect(document.documentElement.lang).toBe(supported);
+      expect(screen.getByDisplayValue("Keep locale draft")).toBeTruthy();
+      expect(screen.getByRole("dialog")).toBeTruthy();
+    }
+  } finally {
+    bridge.dispose();
+  }
+});
 test("the initial overview stays compact and ordinary viewers have no management entry", async () => {
   const f = fixture(false);
   render(<StatusApp client={f.client} />);
