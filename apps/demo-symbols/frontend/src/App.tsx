@@ -4,16 +4,15 @@ import {
   Button,
   Flex,
   Input,
-  Select,
   Table,
-  Typography,
-  theme,
 } from "antd";
 import {
   PortalAppProvider,
   PortalClient,
-  localeOf,
-  usePortalTheme,
+  PortalPage,
+  PortalLocaleSelect,
+  usePortalLocale,
+  type LocaleSelection,
   type Locale,
 } from "@portal-app/sdk";
 import enUS from "../locales/en-US.json";
@@ -29,13 +28,10 @@ interface SymbolRow {
   latest: string;
 }
 export function Demo({ client }: { client: PortalClient }) {
-  const snapshot = usePortalTheme(client),
-    [locale, setLocale] = useState<Locale>(
-      () => snapshot.locale ?? localeOf(navigator.language),
-    );
+  const { locale, selection, setSelection } = usePortalLocale(client);
   return (
     <PortalAppProvider client={client} locale={locale}>
-      <Symbols client={client} locale={locale} setLocale={setLocale} />
+      <Symbols client={client} locale={locale} selection={selection} setLocale={setSelection} />
     </PortalAppProvider>
   );
 }
@@ -43,21 +39,18 @@ function Symbols({
   client,
   locale,
   setLocale,
+  selection,
 }: {
   client: PortalClient;
   locale: Locale;
-  setLocale(locale: Locale): void;
+  selection: LocaleSelection;
+  setLocale(locale: LocaleSelection): void;
 }) {
   const d = dictionaries[locale],
     [query, setQuery] = useState(""),
     [items, setItems] = useState<SymbolRow[]>([]),
     [loading, setLoading] = useState(false),
-    [error, setError] = useState(""),
-    { token } = theme.useToken();
-  useEffect(() => {
-    document.body.style.background = token.colorBgLayout;
-    document.documentElement.lang = locale;
-  }, [token.colorBgLayout, locale]);
+    [error, setError] = useState("");
   const search = useCallback(
     async (term = "") => {
       setLoading(true);
@@ -86,25 +79,9 @@ function Symbols({
     void search();
   }, [search]);
   return (
-    <main>
-      <Flex justify="space-between" gap={16} wrap>
-        <div>
-          <Typography.Title level={3}>{d.title}</Typography.Title>
-          <Typography.Paragraph type="secondary">
-            {d.description}
-          </Typography.Paragraph>
-        </div>
-        <Select
-          aria-label={d.language}
-          virtual={false}
-          value={locale}
-          onChange={setLocale}
-          options={Object.entries(dictionaries).map(([value, v]) => ({
-            value,
-            label: v.languageName,
-          }))}
-        />
-      </Flex>
+    <PortalPage title={d.title} description={d.description} actions={
+      <PortalLocaleSelect locale={locale} selection={selection} onChange={setLocale} />
+    }>
       <Flex gap={8} wrap>
         <Input
           aria-label={d.filter}
@@ -129,6 +106,6 @@ function Symbols({
           (key) => ({ title: d[key], dataIndex: key }),
         )}
       />
-    </main>
+    </PortalPage>
   );
 }

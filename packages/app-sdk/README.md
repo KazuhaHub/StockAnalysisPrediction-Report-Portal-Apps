@@ -17,9 +17,18 @@ reads a host session, token or browser store. Request errors have localized UI k
 and bounded HTTP status metadata, rather than untrusted upstream error text.
 
 `PortalAppProvider` supplies Ant Design theme tokens and component localization.
-`usePortalTheme` follows the trusted host snapshot. Older hosts do not supply a
-locale; use `localeOf(navigator.language)` as the fallback and allow a user override.
+`usePortalTheme` follows the trusted host snapshot. `usePortalLocale` follows the
+panel by default, falls back to browser language on older hosts and supports an
+explicit override that can return to following the panel. Use `PortalLocaleSelect`
+for that optional control rather than keeping another locale state machine.
 Application forms must retain drafts across theme/locale changes and failed saves.
+
+SDK 0.2 also supplies `PortalPage`, `PortalState`, `PortalErrorBoundary`, labelled
+text/number/choice/checkbox fields and `usePortalResource`. The shared CSS owns
+page spacing, typography and narrow-control reflow. Status, the maintained demo
+and the generator use this foundation. See the
+[API and ownership contract](../../docs/sdk-foundation.md) for signatures,
+examples, error/retry behavior and review/acceptance boundaries.
 
 Read [the full standard](../../docs/plugin-development-standard.md) before adding
 permissions, UI flows or publication logic. SDK usage is necessary but not sufficient

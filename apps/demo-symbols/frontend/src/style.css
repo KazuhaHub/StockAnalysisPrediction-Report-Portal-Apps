@@ -1,17 +1,1 @@
-body {
-  margin: 0;
-}
-main {
-  max-width: 1200px;
-  margin: auto;
-  padding: 24px;
-  font-family: system-ui, sans-serif;
-}
-.ant-table-wrapper {
-  margin-top: 16px;
-}
-@media (max-width: 600px) {
-  main {
-    padding: 12px;
-  }
-}
+.ant-table-wrapper { margin-top: 16px; }

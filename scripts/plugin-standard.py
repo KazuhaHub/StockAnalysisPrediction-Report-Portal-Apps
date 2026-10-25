@@ -26,6 +26,9 @@ def check(root):
         entry = "\n".join(source.read_text() for source in (frontend / "src").rglob("*") if source.suffix in {".ts", ".tsx"})
         if "@portal-app/sdk" not in entry:
             raise ValueError(f"{manifest.parent.name}: shared SDK entry is required")
+        for foundation in ["PortalAppProvider", "PortalPage", "usePortalLocale"]:
+            if foundation not in entry:
+                raise ValueError(f"{manifest.parent.name}: shared {foundation} foundation is required")
         for source in (frontend / "src").rglob("*"):
             if source.suffix in {".ts", ".tsx", ".js"}:
                 text = source.read_text()
