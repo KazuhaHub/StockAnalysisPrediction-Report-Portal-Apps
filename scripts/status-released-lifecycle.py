@@ -260,13 +260,19 @@ def main():
                        "work": "paused", "public": "disabled",
                        "uninstall": "revokes host registration and assets; independent service remains ready",
                        "scope": "disposable local API fixture; no browser, provider access or production mutation"}
-            with args.receipt.open("x", encoding="utf-8") as output:
-                os.chmod(args.receipt, 0o600)
-                json.dump(receipt, output, indent=2)
-            print(json.dumps(receipt), flush=True)
         finally:
+            cleanup_errors = []
             for process in reversed(processes):
-                stop(process)
+                try:
+                    stop(process)
+                except Exception as error:
+                    cleanup_errors.append(error)
+            if cleanup_errors:
+                raise RuntimeError("Fixture cleanup failed; no success receipt will be written") from cleanup_errors[0]
+    with args.receipt.open("x", encoding="utf-8") as output:
+        os.chmod(args.receipt, 0o600)
+        json.dump(receipt, output, indent=2)
+    print(json.dumps(receipt), flush=True)
 
 
 if __name__ == "__main__":
