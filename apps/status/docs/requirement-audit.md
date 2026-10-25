@@ -13,6 +13,11 @@ those optional configuration tasks as distribution blockers.
 
 ## Current-state supplement
 
+The [Beta.3 production rollout](react-ui-production-rollout.md) records the actual
+React/Ant Design market update, re-pairing and continuity of four monitors, three
+sealed credentials and their existing history. It supersedes the older UI/version
+checkpoint while retaining the explicit limits on optional configuration below.
+
 The [production rollout audit](production-rollout.md) records successful immutable
 publication, canonical listing, actual installation/private pairing, native Chrome
 reads, authenticated `/status`, independent-service restart and isolated backup
