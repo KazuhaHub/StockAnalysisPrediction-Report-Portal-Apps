@@ -9,7 +9,9 @@ bundle this stack completely; sandbox isolation does not require handwritten DOM
 ## Shared frontend foundation
 
 The [experimental v2 presentation transport](bridge-v2.md) belongs to the shared
-SDK/root integration. Maintained business apps must not implement their own
+SDK/root integration. The [experimental React root](root-v2.md) implements
+commit-aware presentation for isolated v2 development; it is not a released
+replacement for the legacy maintained-app template. Maintained business apps must not implement their own
 handshake or use it to bypass the legacy provider before v2 host/root acceptance.
 
 Experimental v2 package declarations use the [shared descriptor source and
