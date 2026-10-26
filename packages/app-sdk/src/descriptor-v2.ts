@@ -16,6 +16,7 @@ import {
   DESCRIPTOR_LOCALES,
   DESCRIPTOR_PLATFORMS,
   DESCRIPTOR_LAYOUTS,
+  DESCRIPTOR_DISPLAY_ICONS,
   DESCRIPTOR_FIELDS,
   DESCRIPTOR_CONSTANTS,
 } from "./descriptor-contract.generated";
@@ -151,6 +152,42 @@ function validCapabilities(value: unknown, backend: boolean): boolean {
   }
   return true;
 }
+function displayText(value: unknown, max: number): boolean {
+  return (
+    typeof value === "string" &&
+    value.length > 0 &&
+    [...value].length <= max &&
+    value.trim() === value &&
+    !/[\p{Cc}\p{Cf}\uD800-\uDFFF\uFFFD]/u.test(value)
+  );
+}
+function validDisplay(value: unknown): boolean {
+  if (
+    !record(value, DESCRIPTOR_FIELDS.AppDisplay) ||
+    typeof value.icon !== "string" ||
+    !(DESCRIPTOR_DISPLAY_ICONS as readonly string[]).includes(value.icon) ||
+    !Array.isArray(value.texts) ||
+    value.texts.length !== DESCRIPTOR_LOCALES.length
+  )
+    return false;
+  const seen = new Set<string>();
+  for (const text of value.texts) {
+    if (
+      !record(text, DESCRIPTOR_FIELDS.AppDisplayText) ||
+      typeof text.locale !== "string" ||
+      !(DESCRIPTOR_LOCALES as readonly string[]).includes(text.locale) ||
+      seen.has(text.locale) ||
+      !displayText(text.name, DESCRIPTOR_LIMITS.MaxAppNameCharacters) ||
+      !displayText(
+        text.description,
+        DESCRIPTOR_LIMITS.MaxAppDescriptionCharacters,
+      )
+    )
+      return false;
+    seen.add(text.locale);
+  }
+  return true;
+}
 function validManifest(value: unknown): value is Descriptor {
   if (
     !record(value, DESCRIPTOR_FIELDS.Manifest) ||
@@ -172,6 +209,7 @@ function validManifest(value: unknown): value is Descriptor {
   const p = value.presentation;
   if (
     !record(p, DESCRIPTOR_FIELDS.Presentation) ||
+    (p.display != null && !validDisplay(p.display)) ||
     !match(p.name_key, copyKey) ||
     !match(p.description_key, copyKey) ||
     !safePath(p.entry) ||

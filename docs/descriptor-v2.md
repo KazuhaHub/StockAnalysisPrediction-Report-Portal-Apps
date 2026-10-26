@@ -89,3 +89,36 @@ python3 scripts/test-app-template.py
 The parser adds no package dependency and does not import React. Its test-only
 Node APIs read/hash the fixed public corpus; they are not bundled into app code.
 Existing Status/demo/template regressions remain required for SDK changes.
+
+## Signed host display metadata
+
+Maintained experimental v2 packages should include `presentation.display`. The
+host uses this signed, bounded metadata for cards and launch titles; `name_key`
+and `description_key` remain app-internal translation identifiers. Do not use
+those keys as a public name or load a name/icon from an external URL.
+
+```json
+{
+  "icon": "file-text",
+  "texts": [
+    {"locale": "en-US", "name": "Notes", "description": "Personal notes"},
+    {"locale": "zh-CN", "name": "笔记", "description": "个人笔记"},
+    {"locale": "zh-TW", "name": "筆記", "description": "個人筆記"}
+  ]
+}
+```
+
+All three locales occur exactly once. Names contain 1–80 Unicode code points;
+descriptions contain 1–320. Leading/trailing whitespace, control/format characters
+and malformed/replacement Unicode characters are refused. Values are plain text,
+not HTML. Icons are the closed shared Ant set `appstore`, `file-text`, `dashboard`,
+`calendar`, `bar-chart`, `cloud`, `tool`, `experiment`. Custom raster/SVG branding
+requires a separate validated asset policy; it is not accepted as a URL here.
+
+The display object is nullable/optional only for compatibility with existing
+unpublished pre-freeze development fixtures. Such packages use an ID/generic-icon
+fallback; this is not the final publishing standard. Before D3/public publishing,
+the publisher tool must require complete metadata and its install/market path
+must be tested. Never mutate already signed descriptor bytes to add labels:
+create and sign a new app-qualified release. Current legacy catalogue packages
+are unchanged and are not v2 conversions.
