@@ -204,3 +204,9 @@ builds are development candidates and must never replace an existing public ZIP.
 Update the market only after immutable assets and compatible Portal downloads are
 verified. Upgrade through the market, preserve independent storage and keys, and
 check current installation identity and backend pairing before resuming operations.
+
+For experimental v2 host cards/titles, provide the signed
+[`presentation.display` metadata](descriptor-v2.md#signed-host-display-metadata)
+in all three panel languages. Choose its icon from the shared Ant vocabulary;
+never replace the host name with HTML or an external icon URL. This provisional
+extension does not publish or convert the existing legacy applications.
