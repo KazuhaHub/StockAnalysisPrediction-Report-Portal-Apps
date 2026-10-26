@@ -27,6 +27,7 @@ jobs:
       - run: npm run typecheck
       - run: npm run test:sdk
       - run: python3 scripts/test-app-template.py
+      - run: python3 scripts/test-app-root-v2.py
       - run: npm test --workspace=portal-symbols-demo
       - run: npm run test:status-ui
       - run: python3 scripts/build-app-frontend.py demo-symbols

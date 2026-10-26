@@ -38,3 +38,11 @@ examples, error/retry behavior and review/acceptance boundaries.
 Read [the full standard](../../docs/plugin-development-standard.md) before adding
 permissions, UI flows or publication logic. SDK usage is necessary but not sufficient
 for app security or usability: each app retains its own integration/negative tests.
+
+## Experimental v2 React root
+
+`@portal-app/sdk/root-v2` supplies `AppRoot` and `useAppPresentation` for isolated
+v2 host development. It applies host locale/theme/timezone through React/Ant and
+acknowledges only after layout commit. It grants no request API or backend
+permission and does not migrate existing apps. Read [the root contract](../../docs/root-v2.md)
+for bootstrap, host loading-cover requirements, tests and remaining browser gates.
