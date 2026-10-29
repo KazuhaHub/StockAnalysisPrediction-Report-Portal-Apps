@@ -33,9 +33,11 @@ def create(app_id, name, template="legacy", parent_origin=None, publisher="devel
         raise ValueError("Refusing to overwrite an existing application")
     source = ROOT / "templates" / ("react-app-v2" if template == "v2" else "react-app")
     shutil.copytree(source, target)
+    replacements={"APP_ID":app_id,"APP_NAME_JSON":json.dumps(name),"PARENT_ORIGIN_JSON":json.dumps(parent_origin),"PUBLISHER_JSON":json.dumps(publisher)}
+    markers=re.compile("|".join(re.escape(marker) for marker in sorted(replacements,key=len,reverse=True)))
     for path in target.rglob("*"):
         if path.is_file():
-            path.write_text(path.read_text().replace("APP_ID", app_id).replace("APP_NAME_JSON", json.dumps(name)).replace("PARENT_ORIGIN_JSON", json.dumps(parent_origin)).replace("PUBLISHER_JSON", json.dumps(publisher)))
+            path.write_text(markers.sub(lambda match:replacements[match.group(0)],path.read_text()))
     if template == "v2":
         print(f"Created development v2 {target.relative_to(ROOT)}; run npm install, checks and scripts/build-app-v2.py {app_id}. No catalogue or trust change.")
     else:

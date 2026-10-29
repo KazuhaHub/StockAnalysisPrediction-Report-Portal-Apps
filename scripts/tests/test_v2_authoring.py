@@ -61,6 +61,15 @@ class V2AuthoringTests(unittest.TestCase):
                 self.creator.create('example-app', name, template='v2', parent_origin='http://127.0.0.1:31935')
         self.assertFalse((self.root / 'apps/example-app').exists())
 
+    def test_names_containing_template_markers_remain_literal_text(self):
+        name='PARENT_ORIGIN_JSON / PUBLISHER_JSON "quoted"'
+        self.creator.create('example-app',name,template='v2',parent_origin='https://portal.example.invalid')
+        app=self.root/'apps/example-app'
+        manifest=json.loads((app/'app.v2.json').read_text())
+        self.assertEqual(manifest['presentation']['display']['texts'][0]['name'],name)
+        for locale in ['en-US','zh-CN','zh-TW']:
+            self.assertEqual(json.loads((app/'frontend/locales'/f'{locale}.json').read_text())['title'],name)
+
     def test_dual_manifests_and_a_missing_v2_workspace_cannot_bypass_standard(self):
         app = self.create()
         (app / 'app.json').write_text('{}')
