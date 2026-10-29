@@ -1,7 +1,7 @@
 # Experimental v2 React presentation root
 
 `@portal-app/sdk/root-v2` is an internal P06 development entry point built on the
-shared `portal.app.bridge/2-dev.5` transport. It is not a released stable SDK,
+shared `portal.app.bridge/2-dev.6` transport. It is not a released stable SDK,
 accepted v2 host, capability client or migration of a maintained app. Existing
 applications and the public template retain their legacy provider until the whole
 host/root/package lifecycle passes acceptance. No catalogue/release changes here.
@@ -77,8 +77,8 @@ Document layout has no SDK-owned viewport height or inner scroll. Viewport layou
 uses the iframe viewport height and hides outer overflow; the app provides its
 intended internal region. It does not resize or navigate the parent or read its
 DOM. The shared root now observes natural document content height; see the
-[document sizing contract](bridge-v2.md#document-sizing-extension). The boolean draft guard described below is available; registered static-route navigation is described below; typed query declarations
-and draft persistence remain separate P06 work.
+[document sizing contract](bridge-v2.md#document-sizing-extension). The boolean draft guard described below is available; registered navigation with typed queries is described below; draft persistence
+remains separate P06 work.
 
 ## Refresh and white-frame boundary
 
@@ -179,7 +179,7 @@ still lose data. Implement appropriate persistence separately.
 ## Registered navigation
 
 `useAppNavigation()` exposes `ready`, the host-committed `path`, readonly signed
-`routes` and `navigate(path, replace = false)`. Render route-specific business
+`routes` and `navigate(path, {replace, query} = {})`. Render route-specific business
 content from `path`. The root does not construct an inner browser router and apps
 must not read or change parent DOM/history. Changing the route preserves the
 same root/document and state in components that remain mounted. A layout change
@@ -192,10 +192,9 @@ return <Button disabled={!navigation.ready}
 ```
 
 The path must exactly equal a route in the package's signed descriptor. Routes
-are limited to 32, with unique IDs/paths and one `/` home route. No arbitrary URL,
-percent alias, dot traversal, query, fragment, dynamic route template or inferred
-permission is accepted. Current descriptors have no declared query fields, so the
-allowed query set is empty. Do not put credentials or tokens in route state.
+are limited to 32, with unique IDs/paths and one `/` home route. No arbitrary URL, dot traversal, undeclared query, fragment, dynamic route
+template or inferred permission is accepted. Query names and constraints must
+be declared in the signed descriptor as described below. Do not put credentials or tokens in route state.
 
 The return boolean means a request was sent or the path is already current; it
 is **not** a committed-navigation result. The host may decline it while another
@@ -207,6 +206,54 @@ the host rejects a channel above twenty increasing requests per second.
 
 Deep links and host browser history use the same registered path/layout. Invalid
 or undeclared deep links never mount executable content. Back/forward does not
-repeat launch requests, recreate the iframe or replay a backend write. This
-extension does not add typed query parameters, persistent drafts or full shell
-metadata/actions. The SDK and host must use the matched development protocol.
+repeat launch requests, recreate the iframe or replay a backend write. Persistent drafts and full shell metadata/actions remain separate work. The SDK and host must use the matched development protocol.
+
+
+## Typed route queries
+
+Each route can declare up to 16 query fields. No declaration means no permitted
+query fields. Supported variants are exact and do not mix constraints:
+
+```json
+"query": [
+  {"name":"page", "type":"integer", "min":0, "max":100},
+  {"name":"q", "type":"text", "max_bytes":64},
+  {"name":"active", "type":"boolean"},
+  {"name":"sort", "type":"enum", "values":["newest","oldest"]}
+]
+```
+
+Names are unique lowercase ASCII identifiers (letters/digits/underscores, max 32;
+constructor/prototype are reserved). Integer bounds lie within +/-1000000000 and
+min<=max; text max_bytes is 1..256 UTF-8 bytes; enums contain 1..16 unique bounded
+ASCII codes. Every query field is optional in a URL, allowing the app to choose
+its normal default when absent. Explicit false, zero and empty text are retained.
+There is no arbitrary regex, nested object, array-valued parameter or implicit
+string-to-number conversion in SDK requests.
+
+```tsx
+const navigation = useAppNavigation();
+const page = typeof navigation.query.page === 'number' ? navigation.query.page : 0;
+navigation.navigate(navigation.path ?? '/', {
+  query: {...navigation.query, page: page + 1},
+  replace: true,
+});
+```
+
+`query` is a readonly typed view of the host-committed search. `search` is its
+canonical encoded string. Never update a form from the send boolean; canceled
+navigation keeps the previous committed query. Omit query (or supply {}) to clear
+it. Sending replaces the full query set; spread the current query to preserve
+other filters. The experimental API now uses an options object rather than a
+positional replace boolean, and requires the matched dev.6 host/SDK.
+
+Canonical search sorts names, encodes with URLSearchParams and uses exact decimal
+integers and true/false boolean strings. Duplicate names, unknown fields, wrong
+types, out-of-range values, noncanonical encodings/order, controls, malformed
+Unicode and excess bytes are refused. The total encoded search is capped at 2048
+ASCII bytes independently of each text limit. Typed rules and pure validators
+are source-pinned into this SDK from Portal, including mirrored tests.
+
+Queries are address/history state, not a secret or draft storage mechanism.
+Declared state does not grant access: backend operations still use current server
+authorization. No database layout or legacy app protocol is changed by this step.

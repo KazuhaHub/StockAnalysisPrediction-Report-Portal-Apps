@@ -328,6 +328,7 @@ test("navigation hook follows host commits without replacing mounted form state"
   const routed = {
     ...presentation,
     navigation: {
+      search: "",
       path: "/",
       routes: [
         { id: "home", path: "/", layout: "document" as const },
@@ -367,7 +368,7 @@ test("navigation hook follows host commits without replacing mounted form state"
   act(() => screen.getByRole("button", { name: "Count 0" }).click());
   act(() => screen.getByRole("button", { name: "/" }).click());
   await waitFor(() =>
-    expect(requests).toHaveBeenCalledExactlyOnceWith("/details", false),
+    expect(requests).toHaveBeenCalledExactlyOnceWith("/details", false, ""),
   );
   expect(screen.getByRole("button", { name: "/" })).toBeTruthy();
   act(() =>
@@ -380,4 +381,75 @@ test("navigation hook follows host commits without replacing mounted form state"
     expect(screen.getByRole("button", { name: "/details" })).toBeTruthy(),
   );
   expect(screen.getByRole("button", { name: "Count 1" })).toBeTruthy();
+});
+
+test("navigation query is typed only after the host commits canonical search", async () => {
+  const w = windows(),
+    requests = vi.fn();
+  const routed = {
+    ...presentation,
+    navigation: {
+      path: "/",
+      search: "",
+      routes: [
+        {
+          id: "home",
+          path: "/",
+          layout: "document" as const,
+          query: [{ name: "page", type: "integer" as const, min: 1, max: 100 }],
+        },
+      ],
+    },
+  };
+  const host = createBridgeHost({
+    localWindow: w.host,
+    frameWindow: w.child,
+    binding,
+    presentation: routed,
+    capabilities: [],
+    onNavigate: requests,
+  });
+  disposals.push(() => host.close());
+  function QueryApp() {
+    const nav = useAppNavigation();
+    const [count, setCount] = useState(0);
+    return (
+      <>
+        <span data-testid="query-value">{JSON.stringify(nav.query)}</span>
+        <button
+          onClick={() => {
+            setCount((n) => n + 1);
+            nav.navigate("/", { query: { page: 2 } });
+          }}
+        >
+          Query {count}
+        </button>
+      </>
+    );
+  }
+  render(
+    <AppRoot
+      localWindow={w.child}
+      parentWindow={w.host}
+      parentOrigin="https://portal.example.invalid"
+    >
+      <QueryApp />
+    </AppRoot>,
+  );
+  await waitFor(() => expect(host.state()).toBe("ready"));
+  act(() => screen.getByRole("button", { name: "Query 0" }).click());
+  await waitFor(() =>
+    expect(requests).toHaveBeenCalledExactlyOnceWith("/", false, "?page=2"),
+  );
+  expect(screen.getByTestId("query-value").textContent).toBe("{}");
+  act(() =>
+    host.updatePresentation({
+      ...routed,
+      navigation: { ...routed.navigation, search: "?page=2" },
+    }),
+  );
+  await waitFor(() =>
+    expect(screen.getByTestId("query-value").textContent).toBe('{"page":2}'),
+  );
+  expect(screen.getByRole("button", { name: "Query 1" })).toBeTruthy();
 });
