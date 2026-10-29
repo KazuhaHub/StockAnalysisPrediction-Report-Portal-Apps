@@ -16,6 +16,7 @@ const control = vi.hoisted(() => ({
   close: vi.fn(),
   request: vi.fn(),
   measure: vi.fn(() => true),
+  draft: vi.fn(() => true),
 }));
 vi.mock("../src/bridge-v2", async (original) => ({
   ...(await original<typeof import("../src/bridge-v2")>()),
@@ -25,6 +26,7 @@ vi.mock("../src/bridge-v2", async (original) => ({
       close: control.close,
       requestBackend: control.request,
       reportDocumentHeight: control.measure,
+      setDraftDirty: control.draft,
     };
   },
 }));

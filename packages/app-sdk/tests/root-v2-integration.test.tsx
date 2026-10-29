@@ -3,7 +3,12 @@ import { useEffect, useState, StrictMode } from "react";
 import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { createBridgeHost, type BridgePresentation } from "../src/bridge-v2";
-import { AppRoot, useAppPresentation, useAppBackend } from "../src/root-v2";
+import {
+  AppRoot,
+  useAppPresentation,
+  useAppBackend,
+  useAppDraft,
+} from "../src/root-v2";
 const disposals: (() => void)[] = [];
 afterEach(() => {
   cleanup();
@@ -253,4 +258,65 @@ test("real React backend hook waits for ready and presentation changes do not re
     expect(screen.getByRole("button").textContent).toBe("zh-TW/2"),
   );
   expect(dispatch).toHaveBeenCalledTimes(2);
+});
+
+test("draft hook aggregates forms, survives presentation changes and retires owners", async () => {
+  const w = windows(),
+    changes = vi.fn();
+  const host = createBridgeHost({
+    localWindow: w.host,
+    frameWindow: w.child,
+    binding,
+    presentation,
+    capabilities: [],
+    onDraftChange: changes,
+  });
+  disposals.push(() => host.close());
+  function Form({ name }: { name: string }) {
+    const [dirty, setDirty] = useState(false);
+    useAppDraft(dirty);
+    return (
+      <button onClick={() => setDirty((v) => !v)}>
+        {name}/{String(dirty)}
+      </button>
+    );
+  }
+  function Forms() {
+    const [second, setSecond] = useState(true);
+    return (
+      <>
+        <Form name="first" />
+        {second && <Form name="second" />}
+        <button onClick={() => setSecond(false)}>Remove second</button>
+      </>
+    );
+  }
+  const view = render(
+    <StrictMode>
+      <AppRoot
+        localWindow={w.child}
+        parentWindow={w.host}
+        parentOrigin="https://portal.example.invalid"
+      >
+        <Forms />
+      </AppRoot>
+    </StrictMode>,
+  );
+  await waitFor(() => expect(host.state()).toBe("ready"));
+  await waitFor(() => expect(changes).toHaveBeenLastCalledWith(false));
+  act(() => screen.getByRole("button", { name: "first/false" }).click());
+  await waitFor(() => expect(changes).toHaveBeenLastCalledWith(true));
+  act(() => screen.getByRole("button", { name: "second/false" }).click());
+  act(() => screen.getByRole("button", { name: "first/true" }).click());
+  act(() => host.updatePresentation({ ...presentation, locale: "zh-TW" }));
+  await waitFor(() => expect(document.documentElement.lang).toBe("zh-TW"));
+  await new Promise((resolve) => setTimeout(resolve, 150));
+  expect(changes).toHaveBeenLastCalledWith(true);
+  expect(screen.getByRole("button", { name: "second/true" })).toBeTruthy();
+  act(() => screen.getByRole("button", { name: "Remove second" }).click());
+  await waitFor(() => expect(changes).toHaveBeenLastCalledWith(false));
+  view.unmount();
+  const count = changes.mock.calls.length;
+  await new Promise((resolve) => setTimeout(resolve, 150));
+  expect(changes).toHaveBeenCalledTimes(count);
 });

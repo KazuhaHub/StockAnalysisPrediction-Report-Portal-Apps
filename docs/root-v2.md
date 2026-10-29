@@ -1,7 +1,7 @@
 # Experimental v2 React presentation root
 
 `@portal-app/sdk/root-v2` is an internal P06 development entry point built on the
-shared `portal.app.bridge/2-dev.3` transport. It is not a released stable SDK,
+shared `portal.app.bridge/2-dev.4` transport. It is not a released stable SDK,
 accepted v2 host, capability client or migration of a maintained app. Existing
 applications and the public template retain their legacy provider until the whole
 host/root/package lifecycle passes acceptance. No catalogue/release changes here.
@@ -77,8 +77,8 @@ Document layout has no SDK-owned viewport height or inner scroll. Viewport layou
 uses the iframe viewport height and hides outer overflow; the app provides its
 intended internal region. It does not resize or navigate the parent or read its
 DOM. The shared root now observes natural document content height; see the
-[document sizing contract](bridge-v2.md#document-sizing-extension). Guarded
-navigation and draft persistence remain separate P06 contracts.
+[document sizing contract](bridge-v2.md#document-sizing-extension). The boolean draft guard described below is available; signed in-app navigation
+and draft persistence remain separate P06 contracts.
 
 ## Refresh and white-frame boundary
 
@@ -136,3 +136,41 @@ not a native backend or production authority proof. The SDK suite now has 192
 passing local tests with workspace typechecks. The preceding functional commit
 `fef8ef7a4efd2da1aca96a4960dffaf6985bea85` passed complete check run 40843217337;
 this additional test still requires CI at its own commit.
+
+
+## Unsaved changes
+
+Use `useAppDraft(dirty)` from `@portal-app/sdk/root-v2` in each mounted form.
+The root combines all registered forms with logical OR. Saving one form does not
+clear another form's changes. Unmounting a form removes its own bit. Language and
+theme updates preserve the registry. A new document/connection gets a fresh
+registry. StrictMode cleanup/remount does not leave an abandoned owner behind.
+
+```tsx
+function Editor() {
+  const [value, setValue] = useState('');
+  const [saved, setSaved] = useState('');
+  useAppDraft(value !== saved);
+  return <Input value={value} onChange={event => setValue(event.target.value)} />;
+  // After a successful save, setSaved(value). Do not clear on a failed save.
+}
+```
+
+Import `useState` from React, `Input` from Ant Design and `useAppDraft` from the
+root entry point. The example omits persistence deliberately: the hook reports a
+boolean only. It does not save text, restore drafts, intercept app-local form
+navigation, call an app-provided confirmation handler or grant backend access.
+
+After readiness, the SDK sends the aggregate bit over the current private bridge.
+Updates are coalesced to at most ten messages per second; duplicate bits are
+suppressed. Before readiness the registry keeps its current aggregate and emits
+it when ready. Retirement cancels queued reports. Avoid app-specific window
+`beforeunload` handlers or custom host confirmation dialogs.
+
+The Portal host owns the localized Ant confirmation for routed departures,
+including its return link and browser history. Cancel keeps the document mounted;
+confirm proceeds without waiting for an app callback. Refresh/close uses the
+browser's native warning, whose text and availability are browser controlled.
+Only routed departures are guarded: document crashes, direct iframe reloads,
+forced termination, session loss and unsaved state not reported by the app can
+still lose data. Implement appropriate persistence separately.
