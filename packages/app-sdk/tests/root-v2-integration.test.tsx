@@ -1,9 +1,9 @@
 import { MessageChannel as NodeMessageChannel } from "node:worker_threads";
-import { useState, StrictMode } from "react";
+import { useEffect, useState, StrictMode } from "react";
 import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { createBridgeHost, type BridgePresentation } from "../src/bridge-v2";
-import { AppRoot, useAppPresentation } from "../src/root-v2";
+import { AppRoot, useAppPresentation, useAppBackend } from "../src/root-v2";
 const disposals: (() => void)[] = [];
 afterEach(() => {
   cleanup();
@@ -174,4 +174,83 @@ test("a fresh host challenge clears prior context and remounts app state for the
   expect(screen.getByRole("button").textContent).toBe(
     "en-US/Asia/Shanghai/0/9007199254740994",
   );
+});
+
+test("real React backend hook waits for ready and presentation changes do not repeat data reads", async () => {
+  const w = windows();
+  const dispatch = vi.fn(
+    async (request: { method: string; path: string; body: string }) => {
+      expect(host.state()).toBe("ready");
+      return {
+        status: 200,
+        body: JSON.stringify({ value: request.method === "POST" ? 2 : 1 }),
+      };
+    },
+  );
+  const host = createBridgeHost({
+    localWindow: w.host,
+    frameWindow: w.child,
+    binding,
+    presentation,
+    capabilities: [],
+    onBackendRequest: dispatch,
+  });
+  disposals.push(() => host.close());
+  function BackendApp() {
+    const { ready, request } = useAppBackend();
+    const { presentation } = useAppPresentation();
+    const [value, setValue] = useState(0);
+    useEffect(() => {
+      if (!ready) return;
+      const abort = new AbortController();
+      request({ method: "GET", path: "/v1/notes", body: "" }, abort.signal)
+        .then((result) => {
+          if (!abort.signal.aborted) setValue(JSON.parse(result.body).value);
+        })
+        .catch(() => {});
+      return () => abort.abort();
+    }, [ready, request]);
+    return (
+      <button
+        disabled={!ready}
+        onClick={() => {
+          void request({
+            method: "POST",
+            path: "/v1/notes",
+            body: '{"value":2}',
+          }).then((result) => setValue(JSON.parse(result.body).value));
+        }}
+      >
+        {presentation.locale}/{value}
+      </button>
+    );
+  }
+  render(
+    <StrictMode>
+      <AppRoot
+        localWindow={w.child}
+        parentWindow={w.host}
+        parentOrigin="https://portal.example.invalid"
+      >
+        <BackendApp />
+      </AppRoot>
+    </StrictMode>,
+  );
+  await waitFor(() =>
+    expect(screen.getByRole("button").textContent).toBe("zh-CN/1"),
+  );
+  expect(dispatch).toHaveBeenCalledExactlyOnceWith(
+    { method: "GET", path: "/v1/notes", body: "" },
+    expect.any(AbortSignal),
+  );
+  act(() => host.updatePresentation({ ...presentation, locale: "zh-TW" }));
+  await waitFor(() =>
+    expect(screen.getByRole("button").textContent).toBe("zh-TW/1"),
+  );
+  expect(dispatch).toHaveBeenCalledOnce();
+  act(() => screen.getByRole("button").click());
+  await waitFor(() =>
+    expect(screen.getByRole("button").textContent).toBe("zh-TW/2"),
+  );
+  expect(dispatch).toHaveBeenCalledTimes(2);
 });

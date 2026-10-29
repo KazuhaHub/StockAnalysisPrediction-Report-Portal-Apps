@@ -126,3 +126,12 @@ and one local stylesheet. It needs no CDN, remote font, ESM fetch, storage token
 new permission. The existing CI runs that build check with the frontend standard
 suite. Existing template, demo and Status checks verify the unchanged legacy
 consumers alongside the new experimental entry point.
+
+The own-backend integration case also uses the real React root and transferable
+MessagePort host/client under StrictMode. An initial automatic GET starts only
+after ready, a locale update preserves data without repeating that GET, and an
+explicit button action performs one POST. The dispatcher is a test callback,
+not a native backend or production authority proof. The SDK suite now has 192
+passing local tests with workspace typechecks. The preceding functional commit
+`fef8ef7a4efd2da1aca96a4960dffaf6985bea85` passed complete check run 40843217337;
+this additional test still requires CI at its own commit.
