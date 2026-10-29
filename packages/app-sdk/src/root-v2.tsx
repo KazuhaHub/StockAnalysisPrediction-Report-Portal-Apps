@@ -47,7 +47,22 @@ export function useAppPresentation(): AppPresentation {
   if (!value) throw new Error("AppRoot presentation unavailable");
   return value;
 }
+type DraftRegistry = (owner: symbol, dirty: boolean | undefined) => void;
+const DraftContext = createContext<DraftRegistry | null>(null);
+// Each mounted form owns one bit. No draft contents leave the app document.
+export function useAppDraft(dirty: boolean): void {
+  const register = useContext(DraftContext);
+  const owner = useRef(Symbol("draft"));
+  if (!register) throw new Error("AppRoot draft registry unavailable");
+  useLayoutEffect(() => {
+    if (typeof dirty !== "boolean")
+      throw new Error("Draft state must be boolean");
+    register(owner.current, dirty);
+    return () => register(owner.current, undefined);
+  }, [register, dirty]);
+}
 interface Pending extends AppPresentation {
+  setDraftDirty(dirty: boolean): boolean;
   measureDocument(height: number): boolean;
   requestBackend(
     value: BridgeBackendRequest,
@@ -124,7 +139,11 @@ export function AppRoot({
     let stopped = false;
     let connection: ReturnType<typeof createBridgeClient> | undefined;
     let backendForSignal:
-      | { signal: AbortSignal; request: AppBackend["request"] }
+      | {
+          signal: AbortSignal;
+          request: AppBackend["request"];
+          draft(dirty: boolean): boolean;
+        }
       | undefined;
     let closed = false;
     const closeConnection = () => {
@@ -175,6 +194,13 @@ export function AppRoot({
           if (backendForSignal?.signal !== signal) {
             backendForSignal = {
               signal,
+              draft: (dirty) =>
+                !!(
+                  active &&
+                  !stopped &&
+                  !signal.aborted &&
+                  connection?.setDraftDirty(dirty)
+                ),
               request: (value, requestSignal) => {
                 if (!active || stopped || !connection || signal.aborted)
                   return Promise.reject(new BridgeBackendError("not_ready"));
@@ -210,6 +236,7 @@ export function AppRoot({
                 connection?.reportDocumentHeight(height)
               ),
             requestBackend: backendForSignal.request,
+            setDraftDirty: backendForSignal.draft,
             resolve: () => {
               if (settled || signal.aborted) return;
               settled = true;
@@ -274,6 +301,29 @@ function PresentationFrame({
   children: ReactNode;
 }) {
   const element = useRef<HTMLDivElement>(null);
+  const draft = useMemo(() => {
+    const owners = new Map<symbol, boolean>();
+    const state = {
+      ready: false,
+      emit: () => {
+        if (state.ready && !pending.signal.aborted)
+          pending.setDraftDirty([...owners.values()].some(Boolean));
+      },
+      register: (owner: symbol, dirty: boolean | undefined) => {
+        if (dirty === undefined) owners.delete(owner);
+        else owners.set(owner, dirty);
+        state.emit();
+      },
+    };
+    return state;
+  }, [pending.signal, pending.setDraftDirty]);
+  useLayoutEffect(() => {
+    draft.ready = backendReady;
+    draft.emit();
+    return () => {
+      draft.ready = false;
+    };
+  }, [draft, backendReady]);
   useLayoutEffect(() => {
     const root = element.current;
     if (!root || !backendReady || pending.presentation.layout !== "document")
@@ -359,10 +409,12 @@ function PresentationFrame({
       <PortalAppProvider client={client} locale={pending.presentation.locale}>
         <PresentationContext.Provider value={value}>
           <BackendContext.Provider value={backend}>
-            <RenderBoundary key={epoch} onFailure={onFailure}>
-              {children}
-              <Commit pending={pending} />
-            </RenderBoundary>
+            <DraftContext.Provider value={draft.register}>
+              <RenderBoundary key={epoch} onFailure={onFailure}>
+                {children}
+                <Commit pending={pending} />
+              </RenderBoundary>
+            </DraftContext.Provider>
           </BackendContext.Provider>
         </PresentationContext.Provider>
       </PortalAppProvider>

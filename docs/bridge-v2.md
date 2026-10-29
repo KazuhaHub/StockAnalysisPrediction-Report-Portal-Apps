@@ -2,7 +2,7 @@
 
 `@portal-app/sdk/bridge-v2` is SDK/root integration infrastructure, not a released
 capability client or replacement for the legacy provider.
-The development protocol is `portal.app.bridge/2-dev.3`. It is not frozen.
+The development protocol is `portal.app.bridge/2-dev.4`. It is not frozen.
 
 Use the [Portal transport contract and lifecycle guide](https://github.com/KazuhaHub/StockAnalysisPrediction-Report-Portal/blob/kazuha/app-bridge-presentation/docs/app-platform/22-presentation-bridge-implementation.md)
 for source ownership, state transitions, message bounds and integration rules.
@@ -94,3 +94,21 @@ retry. A minimum 64px host surface accommodates empty apps. Heights may both gro
 and shrink. This adds no host DOM access to the child and does not weaken the
 opaque iframe sandbox. Rebuild the development host and SDK together; previous
 protocols do not silently receive the new control message.
+
+
+## Unsaved-change extension
+
+Development protocol `2-dev.4` adds child-to-host `draft.changed` with the exact
+current channel envelope, a canonical increasing positive int64 `revision` string
+and boolean `dirty`. Extra fields (including text, URLs and prompt callbacks) are
+rejected. A stale envelope/revision cannot update the current document's hint.
+The SDK aggregates form owners; the low-level client exposes `setDraftDirty`.
+It returns false before readiness or after retirement and coalesces reports to
+at most ten per second. The host rejects more than twenty increasing reports in
+one second. This hint conveys no authority and contains no draft body.
+
+The host clears the hint on reload, failure, activation replacement and unmount.
+It uses its router blocker and localized Ant modal; apps cannot veto a confirmed
+leave or choose a destination through this extension. No persistence or signed
+in-app history navigation protocol is introduced. This development bump requires
+matched host/SDK sources; there is no fallback to an earlier v2 revision.
