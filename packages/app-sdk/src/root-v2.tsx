@@ -16,11 +16,13 @@ import {
   type BridgeFailure,
   type BridgePresentation,
   type BridgeRoute,
+  type BridgeNavigationOptions,
   BridgeBackendError,
   BRIDGE_DOCUMENT_MAX_HEIGHT,
   type BridgeBackendRequest,
   type BridgeBackendResponse,
 } from "./bridge-v2";
+import { parseRouteSearch, type RouteQueryValues } from "./route-query-v2";
 import { PortalAppProvider, type AppClient } from "./index";
 import "./root-v2.css";
 
@@ -51,8 +53,10 @@ export function useAppPresentation(): AppPresentation {
 export interface AppNavigation {
   readonly ready: boolean;
   readonly path: string | null;
+  readonly search: string;
+  readonly query: RouteQueryValues;
   readonly routes: readonly BridgeRoute[];
-  navigate(path: string, replace?: boolean): boolean;
+  navigate(path: string, options?: BridgeNavigationOptions): boolean;
 }
 const NavigationContext = createContext<AppNavigation | null>(null);
 export function useAppNavigation(): AppNavigation {
@@ -75,7 +79,7 @@ export function useAppDraft(dirty: boolean): void {
   }, [register, dirty]);
 }
 interface Pending extends AppPresentation {
-  navigate(path: string, replace?: boolean): boolean;
+  navigate(path: string, options?: BridgeNavigationOptions): boolean;
   setDraftDirty(dirty: boolean): boolean;
   measureDocument(height: number): boolean;
   requestBackend(
@@ -157,7 +161,7 @@ export function AppRoot({
           signal: AbortSignal;
           request: AppBackend["request"];
           draft(dirty: boolean): boolean;
-          navigate(path: string, replace?: boolean): boolean;
+          navigate(path: string, options?: BridgeNavigationOptions): boolean;
         }
       | undefined;
     let closed = false;
@@ -209,12 +213,12 @@ export function AppRoot({
           if (backendForSignal?.signal !== signal) {
             backendForSignal = {
               signal,
-              navigate: (path, replace) =>
+              navigate: (path, options) =>
                 !!(
                   active &&
                   !stopped &&
                   !signal.aborted &&
-                  connection?.navigate(path, replace)
+                  connection?.navigate(path, options)
                 ),
               draft: (dirty) =>
                 !!(
@@ -423,15 +427,33 @@ function PresentationFrame({
       }),
     [pending, backendReady],
   );
+  // Cache query values by signed definition/search and document lifetime, so
+  // appearance updates do not look like a filter change to data-loading effects.
+  const querySource = JSON.stringify([
+    pending.presentation.navigation?.routes.find(
+      (route) => route.path === pending.presentation.navigation?.path,
+    )?.query ?? [],
+    pending.presentation.navigation?.search ?? "",
+  ]);
+  const query = useMemo<RouteQueryValues>(() => {
+    if (pending.signal.aborted) return Object.freeze({});
+    const [rules, search] = JSON.parse(querySource) as [
+      Parameters<typeof parseRouteSearch>[0],
+      string,
+    ];
+    return parseRouteSearch(rules, search)!.query;
+  }, [querySource, pending.signal]);
   const navigation = useMemo<AppNavigation>(
     () =>
       Object.freeze({
         ready: backendReady && !!pending.presentation.navigation,
         path: pending.presentation.navigation?.path ?? null,
+        search: pending.presentation.navigation?.search ?? "",
+        query,
         routes: pending.presentation.navigation?.routes ?? Object.freeze([]),
         navigate: pending.navigate,
       }),
-    [backendReady, pending],
+    [backendReady, pending, query],
   );
   return (
     <div

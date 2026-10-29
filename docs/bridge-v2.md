@@ -2,7 +2,7 @@
 
 `@portal-app/sdk/bridge-v2` is SDK/root integration infrastructure, not a released
 capability client or replacement for the legacy provider.
-The development protocol is `portal.app.bridge/2-dev.5`. It is not frozen.
+The development protocol is `portal.app.bridge/2-dev.6`. It is not frozen.
 
 Use the [Portal transport contract and lifecycle guide](https://github.com/KazuhaHub/StockAnalysisPrediction-Report-Portal/blob/kazuha/app-bridge-presentation/docs/app-platform/22-presentation-bridge-implementation.md)
 for source ownership, state transitions, message bounds and integration rules.
@@ -137,3 +137,25 @@ unsaved-change prompt. The later presentation reports only the committed path.
 App callbacks cannot block a confirmed leave. There is no automatic replay after
 cancel, timeout, channel replacement or failure. No descriptor/storage schema is
 changed and no query syntax is implicitly authorized by this development step.
+
+
+## Typed-query development extension
+
+Protocol dev.6 adds mandatory canonical `search` to navigation presentations and
+requests. Route descriptors optionally include signed typed query rules; the
+shared pure validator handles the descriptor, host, SDK request and URL read
+boundaries consistently. `useAppNavigation()` exposes a readonly typed query and
+canonical search; requests take `{replace?,query?}`. Empty query clears state.
+
+Only declared fields cross the boundary. Canonical search order/encoding, duplicate
+refusal, numeric/boolean type and range checks, UTF-8 text bounds, finite enum
+choices and a 2048-byte total budget prevent alternative or unbounded states.
+The host validates canonical search against the current signed destination route
+before navigation; the committed presentation is independently parsed by the
+child. Query changes do not create a new iframe, metadata request, root epoch or
+backend write. A stale/canceled request does not change the SDK's query.
+
+The descriptor schema extension is experimental and signed as release bytes; it
+is not a database schema or stable SDK freeze. Existing declarations without
+query rules retain an empty allowed query set. Existing package bytes, signatures,
+legacy SDK providers and catalogue entries are not rewritten or published.

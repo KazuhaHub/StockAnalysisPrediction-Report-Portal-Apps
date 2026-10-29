@@ -1,5 +1,6 @@
 // Experimental declaration validation only. This does not verify signatures,
 // compatibility, artifact bytes, effective permissions or runtime admission.
+import { parseRouteQueryRules } from "./route-query-v2";
 export const MAX_DESCRIPTOR_BYTES = DESCRIPTOR_LIMITS.MaxDescriptorBytes;
 
 export class DescriptorError extends Error {
@@ -225,6 +226,7 @@ function validManifest(value: unknown): value is Descriptor {
   for (const route of p.routes) {
     if (
       !record(route, DESCRIPTOR_FIELDS.Route) ||
+      parseRouteQueryRules(route.query) === null ||
       !match(route.id, slug) ||
       typeof route.path !== "string" ||
       !(
