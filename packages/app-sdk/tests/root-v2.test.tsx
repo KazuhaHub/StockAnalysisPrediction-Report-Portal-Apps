@@ -15,12 +15,17 @@ const control = vi.hoisted(() => ({
   options: null as BridgeClientOptions | null,
   close: vi.fn(),
   request: vi.fn(),
+  measure: vi.fn(() => true),
 }));
 vi.mock("../src/bridge-v2", async (original) => ({
   ...(await original<typeof import("../src/bridge-v2")>()),
   createBridgeClient: (options: BridgeClientOptions) => {
     control.options = options;
-    return { close: control.close, requestBackend: control.request };
+    return {
+      close: control.close,
+      requestBackend: control.request,
+      reportDocumentHeight: control.measure,
+    };
   },
 }));
 const presentation = {
@@ -50,6 +55,7 @@ const context = {
 beforeEach(() => {
   control.close.mockClear();
   control.request.mockReset();
+  control.measure.mockClear();
   control.options = null;
   vi.stubGlobal(
     "matchMedia",
@@ -157,6 +163,60 @@ test("backend hook becomes ready after acknowledgment and aborts requests when r
     old.request({ method: "GET", path: "/v1/echo", body: "" }),
   ).rejects.toMatchObject({ code: "not_ready" });
   expect(control.request).toHaveBeenCalledOnce();
+});
+test("document observer reports committed natural height, shrinks and retires cleanly", async () => {
+  let notify!: ResizeObserverCallback;
+  const disconnect = vi.fn(),
+    observe = vi.fn();
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      constructor(callback: ResizeObserverCallback) {
+        notify = callback;
+      }
+      observe = observe;
+      disconnect = disconnect;
+    },
+  );
+  let height = 350;
+  const rect = vi
+    .spyOn(HTMLElement.prototype, "getBoundingClientRect")
+    .mockImplementation(() => ({
+      height,
+      width: 400,
+      x: 0,
+      y: 0,
+      top: 0,
+      left: 0,
+      right: 400,
+      bottom: height,
+      toJSON() {
+        return {};
+      },
+    }));
+  try {
+    const view = mount();
+    await apply();
+    expect(control.measure).not.toHaveBeenCalled();
+    act(() => control.options!.onReady?.(presentation));
+    await vi.waitFor(() =>
+      expect(control.measure).toHaveBeenLastCalledWith(350),
+    );
+    height = 70;
+    act(() => notify([], {} as ResizeObserver));
+    await vi.waitFor(() =>
+      expect(control.measure).toHaveBeenLastCalledWith(70),
+    );
+    expect(observe).toHaveBeenCalled();
+    view.unmount();
+    expect(disconnect).toHaveBeenCalled();
+    const count = control.measure.mock.calls.length;
+    act(() => notify([], {} as ResizeObserver));
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(control.measure).toHaveBeenCalledTimes(count);
+  } finally {
+    rect.mockRestore();
+  }
 });
 test("no application content before initialization; settings commit before acknowledgement", async () => {
   const view = mount();
