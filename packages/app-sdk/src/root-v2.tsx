@@ -15,6 +15,7 @@ import {
   type BridgeContext,
   type BridgeFailure,
   type BridgePresentation,
+  type BridgeRoute,
   BridgeBackendError,
   BRIDGE_DOCUMENT_MAX_HEIGHT,
   type BridgeBackendRequest,
@@ -47,6 +48,18 @@ export function useAppPresentation(): AppPresentation {
   if (!value) throw new Error("AppRoot presentation unavailable");
   return value;
 }
+export interface AppNavigation {
+  readonly ready: boolean;
+  readonly path: string | null;
+  readonly routes: readonly BridgeRoute[];
+  navigate(path: string, replace?: boolean): boolean;
+}
+const NavigationContext = createContext<AppNavigation | null>(null);
+export function useAppNavigation(): AppNavigation {
+  const value = useContext(NavigationContext);
+  if (!value) throw new Error("AppRoot navigation unavailable");
+  return value;
+}
 type DraftRegistry = (owner: symbol, dirty: boolean | undefined) => void;
 const DraftContext = createContext<DraftRegistry | null>(null);
 // Each mounted form owns one bit. No draft contents leave the app document.
@@ -62,6 +75,7 @@ export function useAppDraft(dirty: boolean): void {
   }, [register, dirty]);
 }
 interface Pending extends AppPresentation {
+  navigate(path: string, replace?: boolean): boolean;
   setDraftDirty(dirty: boolean): boolean;
   measureDocument(height: number): boolean;
   requestBackend(
@@ -143,6 +157,7 @@ export function AppRoot({
           signal: AbortSignal;
           request: AppBackend["request"];
           draft(dirty: boolean): boolean;
+          navigate(path: string, replace?: boolean): boolean;
         }
       | undefined;
     let closed = false;
@@ -194,6 +209,13 @@ export function AppRoot({
           if (backendForSignal?.signal !== signal) {
             backendForSignal = {
               signal,
+              navigate: (path, replace) =>
+                !!(
+                  active &&
+                  !stopped &&
+                  !signal.aborted &&
+                  connection?.navigate(path, replace)
+                ),
               draft: (dirty) =>
                 !!(
                   active &&
@@ -237,6 +259,7 @@ export function AppRoot({
               ),
             requestBackend: backendForSignal.request,
             setDraftDirty: backendForSignal.draft,
+            navigate: backendForSignal.navigate,
             resolve: () => {
               if (settled || signal.aborted) return;
               settled = true;
@@ -400,6 +423,16 @@ function PresentationFrame({
       }),
     [pending, backendReady],
   );
+  const navigation = useMemo<AppNavigation>(
+    () =>
+      Object.freeze({
+        ready: backendReady && !!pending.presentation.navigation,
+        path: pending.presentation.navigation?.path ?? null,
+        routes: pending.presentation.navigation?.routes ?? Object.freeze([]),
+        navigate: pending.navigate,
+      }),
+    [backendReady, pending],
+  );
   return (
     <div
       ref={element}
@@ -409,12 +442,14 @@ function PresentationFrame({
       <PortalAppProvider client={client} locale={pending.presentation.locale}>
         <PresentationContext.Provider value={value}>
           <BackendContext.Provider value={backend}>
-            <DraftContext.Provider value={draft.register}>
-              <RenderBoundary key={epoch} onFailure={onFailure}>
-                {children}
-                <Commit pending={pending} />
-              </RenderBoundary>
-            </DraftContext.Provider>
+            <NavigationContext.Provider value={navigation}>
+              <DraftContext.Provider value={draft.register}>
+                <RenderBoundary key={epoch} onFailure={onFailure}>
+                  {children}
+                  <Commit pending={pending} />
+                </RenderBoundary>
+              </DraftContext.Provider>
+            </NavigationContext.Provider>
           </BackendContext.Provider>
         </PresentationContext.Provider>
       </PortalAppProvider>

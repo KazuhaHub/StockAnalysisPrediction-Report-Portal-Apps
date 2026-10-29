@@ -27,6 +27,7 @@ vi.mock("../src/bridge-v2", async (original) => ({
       requestBackend: control.request,
       reportDocumentHeight: control.measure,
       setDraftDirty: control.draft,
+      navigate:()=>false,
     };
   },
 }));
