@@ -1,18 +1,26 @@
-import { act, cleanup, render, screen } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  render,
+  screen,
+  fireEvent,
+} from "@testing-library/react";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { useState } from "react";
 import { Empty, theme } from "antd";
 import type { BridgePresentation, BridgeClientOptions } from "../src/bridge-v2";
-import { AppRoot, useAppPresentation } from "../src/root-v2";
+import { AppRoot, useAppPresentation, useAppBackend } from "../src/root-v2";
 
 const control = vi.hoisted(() => ({
   options: null as BridgeClientOptions | null,
   close: vi.fn(),
+  request: vi.fn(),
 }));
-vi.mock("../src/bridge-v2", () => ({
+vi.mock("../src/bridge-v2", async (original) => ({
+  ...(await original<typeof import("../src/bridge-v2")>()),
   createBridgeClient: (options: BridgeClientOptions) => {
     control.options = options;
-    return { close: control.close };
+    return { close: control.close, requestBackend: control.request };
   },
 }));
 const presentation = {
@@ -37,9 +45,11 @@ const context = {
     releaseSha256: "a".repeat(64),
   },
   capabilities: [],
+  backendAvailable: true,
 };
 beforeEach(() => {
   control.close.mockClear();
+  control.request.mockReset();
   control.options = null;
   vi.stubGlobal(
     "matchMedia",
@@ -89,6 +99,65 @@ async function apply(value: BridgePresentation = presentation) {
   });
   return abort;
 }
+
+test("backend hook becomes ready after acknowledgment and aborts requests when root retires", async () => {
+  let observed: ReturnType<typeof useAppBackend> | undefined;
+  function BackendProbe() {
+    const backend = useAppBackend();
+    observed = backend;
+    return (
+      <button
+        disabled={!backend.ready}
+        onClick={() => {
+          void backend.request({
+            method: "POST",
+            path: "/v1/echo",
+            body: "{}",
+          });
+        }}
+      >
+        Run
+      </button>
+    );
+  }
+  control.request.mockResolvedValue({ status: 200, body: "{}" });
+  const view = render(
+    <AppRoot parentOrigin="https://portal.example.invalid">
+      <BackendProbe />
+    </AppRoot>,
+  );
+  const abort = await apply();
+  expect(observed?.available).toBe(true);
+  expect(observed?.ready).toBe(false);
+  act(() => control.options!.onReady?.(presentation));
+  expect(observed?.ready).toBe(true);
+  const originalRequest = observed!.request;
+  let updated: void | Promise<void>;
+  act(() => {
+    updated = control.options!.onPresentation(
+      { ...presentation, locale: "zh-TW" },
+      context,
+      abort.signal,
+    );
+  });
+  await act(async () => {
+    await updated;
+  });
+  expect(observed?.ready).toBe(true);
+  expect(observed!.request).toBe(originalRequest);
+  fireEvent.click(screen.getByRole("button", { name: "Run" }));
+  expect(control.request).toHaveBeenCalledOnce();
+  const signal = control.request.mock.calls[0][1] as AbortSignal;
+  expect(signal.aborted).toBe(false);
+  const old = observed!;
+  control.close.mockImplementationOnce(() => abort.abort());
+  view.unmount();
+  expect(signal.aborted).toBe(true);
+  await expect(
+    old.request({ method: "GET", path: "/v1/echo", body: "" }),
+  ).rejects.toMatchObject({ code: "not_ready" });
+  expect(control.request).toHaveBeenCalledOnce();
+});
 test("no application content before initialization; settings commit before acknowledgement", async () => {
   const view = mount();
   expect(view.container.textContent).toBe("");
