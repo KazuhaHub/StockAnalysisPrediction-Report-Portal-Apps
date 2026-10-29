@@ -1,0 +1,67 @@
+{
+  "format": "portal.app/v2",
+  "id": "APP_ID",
+  "version": "0.1.0-dev.1",
+  "publisher": PUBLISHER_JSON,
+  "compatibility": {
+    "platform_api": ">=2.0.0-0 <3.0.0",
+    "runner_protocol": ">=1.0.0 <2.0.0"
+  },
+  "presentation": {
+    "name_key": "title",
+    "description_key": "description",
+    "entry": "index.html",
+    "locales": [
+      "en-US",
+      "zh-CN",
+      "zh-TW"
+    ],
+    "routes": [
+      {
+        "id": "home",
+        "path": "/",
+        "layout": "document"
+      },
+      {
+        "id": "editor",
+        "path": "/editor",
+        "layout": "document"
+      }
+    ],
+    "display": {
+      "icon": "file-text",
+      "texts": [
+        {
+          "locale": "en-US",
+          "name": APP_NAME_JSON,
+          "description": "Development application"
+        },
+        {
+          "locale": "zh-CN",
+          "name": APP_NAME_JSON,
+          "description": "开发应用"
+        },
+        {
+          "locale": "zh-TW",
+          "name": APP_NAME_JSON,
+          "description": "開發應用"
+        }
+      ]
+    }
+  },
+  "frontend": {
+    "artifact": "frontend.zip",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "capabilities": {
+    "required": [],
+    "optional": []
+  },
+  "data": {
+    "schema": 1,
+    "readable_schemas": [
+      1
+    ],
+    "writes_on_startup": false
+  }
+}
