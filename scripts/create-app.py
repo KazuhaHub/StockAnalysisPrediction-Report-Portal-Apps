@@ -2,7 +2,6 @@
 import argparse
 import json
 import importlib.util
-import unicodedata
 import re
 import shutil
 from pathlib import Path
@@ -20,8 +19,7 @@ def create(app_id, name, template="legacy", parent_origin=None, publisher="devel
         raise ValueError("Unknown application template")
     if template == "v2":
         authoring.parent_origin(parent_origin)
-        if not isinstance(name,str) or not name.strip() or len(name)>80 or any(unicodedata.category(c) in {"Cc","Cs"} or c in "\u202a\u202b\u202c\u202d\u202e\u2066\u2067\u2068\u2069" for c in name):
-            raise ValueError("Use a nonblank page name of at most 80 Unicode characters")
+        authoring.display_name(name)
         if not re.fullmatch(r"[a-z][a-z0-9-]{0,63}", publisher):
             raise ValueError("Invalid publisher identifier")
     elif parent_origin is not None or publisher != "development-publisher":

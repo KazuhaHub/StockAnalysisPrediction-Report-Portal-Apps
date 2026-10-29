@@ -2,6 +2,8 @@
 import ipaddress
 import json
 import re
+import unicodedata
+from pathlib import Path
 from urllib.parse import urlsplit
 
 
@@ -67,3 +69,12 @@ def app_folder(root, app_id):
     if (root / 'apps').is_symlink() or app.is_symlink() or not app.resolve().is_relative_to((root / 'apps').resolve()):
         raise ValueError('Unsafe application directory')
     return app
+
+
+def display_name(value):
+    schema=Path(__file__).resolve().parents[1]/'packages/app-sdk/schema/descriptor-v2.schema.json'
+    maximum=json.loads(schema.read_text())['$defs']['AppDisplayText']['properties']['name']['maxLength']
+    if (not isinstance(value,str) or not value.strip() or value.strip()!=value or len(value)>maximum or
+            any(unicodedata.category(char) in {'Cc','Cf','Cs'} or char=='\ufffd' for char in value)):
+        raise ValueError('Use a nonblank display name without surrounding whitespace or control characters')
+    return value
