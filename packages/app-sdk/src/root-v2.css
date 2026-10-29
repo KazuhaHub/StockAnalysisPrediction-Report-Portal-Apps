@@ -8,7 +8,9 @@
 }
 .portal-v2-root[data-app-layout="document"] {
   min-height: 0;
+  display: flow-root;
 }
+html, body { overflow: hidden; }
 .portal-v2-root[data-app-layout="viewport"] {
   height: 100dvh;
   overflow: hidden;

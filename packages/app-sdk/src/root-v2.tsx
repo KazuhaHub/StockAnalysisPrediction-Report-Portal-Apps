@@ -16,6 +16,7 @@ import {
   type BridgeFailure,
   type BridgePresentation,
   BridgeBackendError,
+  BRIDGE_DOCUMENT_MAX_HEIGHT,
   type BridgeBackendRequest,
   type BridgeBackendResponse,
 } from "./bridge-v2";
@@ -47,6 +48,7 @@ export function useAppPresentation(): AppPresentation {
   return value;
 }
 interface Pending extends AppPresentation {
+  measureDocument(height: number): boolean;
   requestBackend(
     value: BridgeBackendRequest,
     signal?: AbortSignal,
@@ -200,6 +202,13 @@ export function AppRoot({
             presentation,
             context,
             signal,
+            measureDocument: (height) =>
+              !!(
+                active &&
+                !stopped &&
+                !signal.aborted &&
+                connection?.reportDocumentHeight(height)
+              ),
             requestBackend: backendForSignal.request,
             resolve: () => {
               if (settled || signal.aborted) return;
@@ -264,6 +273,52 @@ function PresentationFrame({
   onFailure(): void;
   children: ReactNode;
 }) {
+  const element = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const root = element.current;
+    if (!root || !backendReady || pending.presentation.layout !== "document")
+      return;
+    let active = true,
+      scheduled: ReturnType<typeof setTimeout> | undefined;
+    const schedule = () => {
+      if (!active || pending.signal.aborted || scheduled !== undefined) return;
+      scheduled = setTimeout(() => {
+        scheduled = undefined;
+        if (!active || pending.signal.aborted) return;
+        const height = Math.ceil(root.getBoundingClientRect().height);
+        if (
+          !Number.isFinite(height) ||
+          height < 0 ||
+          height > BRIDGE_DOCUMENT_MAX_HEIGHT
+        ) {
+          onFailure();
+          return;
+        }
+        pending.measureDocument(height);
+      }, 16);
+    };
+    const observer =
+      typeof ResizeObserver === "undefined"
+        ? null
+        : new ResizeObserver(schedule);
+    const fallback = observer ? null : new MutationObserver(schedule);
+    observer?.observe(root);
+    fallback?.observe(root, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      characterData: true,
+    });
+    window.addEventListener("resize", schedule);
+    schedule();
+    return () => {
+      active = false;
+      clearTimeout(scheduled);
+      observer?.disconnect();
+      fallback?.disconnect();
+      window.removeEventListener("resize", schedule);
+    };
+  }, [pending, backendReady, onFailure]);
   // Reuse the existing Ant/token foundation without constructing the legacy
   // bridge. This adapter has no request transport and is never exposed to apps.
   const client = useMemo<AppClient>(
@@ -297,6 +352,7 @@ function PresentationFrame({
   );
   return (
     <div
+      ref={element}
       className="portal-v2-root"
       data-app-layout={pending.presentation.layout}
     >

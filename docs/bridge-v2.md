@@ -2,7 +2,7 @@
 
 `@portal-app/sdk/bridge-v2` is SDK/root integration infrastructure, not a released
 capability client or replacement for the legacy provider.
-The development protocol is `portal.app.bridge/2-dev.2`. It is not frozen.
+The development protocol is `portal.app.bridge/2-dev.3`. It is not frozen.
 
 Use the [Portal transport contract and lifecycle guide](https://github.com/KazuhaHub/StockAnalysisPrediction-Report-Portal/blob/kazuha/app-bridge-presentation/docs/app-platform/22-presentation-bridge-implementation.md)
 for source ownership, state transitions, message bounds and integration rules.
@@ -67,3 +67,30 @@ silently resubmitting. Cancelling a submitted write does not prove rollback.
 
 Use [the React backend hook](backend-v2.md) for application code. Do not construct
 a second client inside the root. Source/test pin regeneration is unchanged.
+
+## Document sizing extension
+
+Development protocol `2-dev.3` adds `layout.measure` and
+`client.reportDocumentHeight(height)`. The shared root measures its natural
+flow-root border box after commit/ready, observes content/width changes and
+reports integer CSS pixels, 0..100000. Body/HTML own no document scroll; the
+Portal content region is the document scroll owner. Do not use `100vh`, viewport
+min-height or size-to-parent loops in document content. Dialog overlays are not
+part of natural flow. A viewport app owns its bounded editor/list region instead.
+
+Measurements carry the complete channel binding, an increasing measurement
+revision and the applied presentation revision. Old generations, old revisions
+and measurements during a superseded presentation cannot resize the current
+page. Both client and host coalesce to at most ten applied heights per second;
+the host fails a channel exceeding twenty valid-envelope measurements per
+one-second receive window. Non-finite, negative, fractional and oversized heights
+are rejected; content above the limit must use virtualization/viewport mode.
+Pending observers/timers retire with the document. Size changes do not reload
+frames, rerun initial backend reads or change capabilities.
+
+The host holds the initial document cover until presentation plus the first
+measurement; a missing first measurement fails after ten seconds with explicit
+retry. A minimum 64px host surface accommodates empty apps. Heights may both grow
+and shrink. This adds no host DOM access to the child and does not weaken the
+opaque iframe sandbox. Rebuild the development host and SDK together; previous
+protocols do not silently receive the new control message.

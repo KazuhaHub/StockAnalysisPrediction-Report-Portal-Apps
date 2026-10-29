@@ -1,7 +1,7 @@
 # Experimental v2 React presentation root
 
 `@portal-app/sdk/root-v2` is an internal P06 development entry point built on the
-shared `portal.app.bridge/2-dev.2` transport. It is not a released stable SDK,
+shared `portal.app.bridge/2-dev.3` transport. It is not a released stable SDK,
 accepted v2 host, capability client or migration of a maintained app. Existing
 applications and the public template retain their legacy provider until the whole
 host/root/package lifecycle passes acceptance. No catalogue/release changes here.
@@ -76,8 +76,9 @@ adjustment do not fork into another application-specific implementation.
 Document layout has no SDK-owned viewport height or inner scroll. Viewport layout
 uses the iframe viewport height and hides outer overflow; the app provides its
 intended internal region. It does not resize or navigate the parent or read its
-DOM. Automatic content sizing, guarded navigation and draft persistence are
-separate remaining P06 contracts.
+DOM. The shared root now observes natural document content height; see the
+[document sizing contract](bridge-v2.md#document-sizing-extension). Guarded
+navigation and draft persistence remain separate P06 contracts.
 
 ## Refresh and white-frame boundary
 
