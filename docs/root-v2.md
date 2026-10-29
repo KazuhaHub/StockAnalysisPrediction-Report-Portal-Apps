@@ -1,7 +1,7 @@
 # Experimental v2 React presentation root
 
 `@portal-app/sdk/root-v2` is an internal P06 development entry point built on the
-shared `portal.app.bridge/2-dev.6` transport. It is not a released stable SDK,
+shared `portal.app.bridge/2-dev.7` transport. It is not a released stable SDK,
 accepted v2 host, capability client or migration of a maintained app. Existing
 applications and the public template retain their legacy provider until the whole
 host/root/package lifecycle passes acceptance. No catalogue/release changes here.
@@ -259,3 +259,42 @@ are source-pinned into this SDK from Portal, including mirrored tests.
 Queries are address/history state, not a secret or draft storage mechanism.
 Declared state does not grant access: backend operations still use current server
 authorization. No database layout or legacy app protocol is changed by this step.
+
+
+## Shared page actions (development)
+
+`useAppPage` from `@portal-app/sdk/root-v2` declares the Portal-owned title,
+description and up to six actions. Mount one descriptor inside AppRoot and omit
+a duplicate inner page header. Example:
+
+```tsx
+useAppPage({ title: translatedTitle, actions: [{
+  id: 'refresh', label: translatedRefresh, variant: 'primary',
+  onAction: async signal => { await reload(signal); },
+}] });
+```
+
+Title/description/actions default to empty, variant to default, disabled/loading
+to false. IDs are unique lowercase ASCII identifiers (at most 32 characters);
+labels are nonblank (48 Unicode scalar values), titles 80, descriptions 240,
+with one primary action at most. Control/directional formatting and malformed
+Unicode are rejected. Only plain text crosses the channel; callbacks stay local.
+Use Portal locale values to translate application-owned copy.
+
+The dev.7 host and SDK must be used together. Page descriptions and action
+invocations carry the full bridge binding/nonces, owner scope and independent
+revision IDs. The host checks committed appearance; the client checks the latest
+published page and current action flags. One action runs at a time, with fixed
+completion or uncertainty and no automatic retry. The client deadline is 25s,
+host 30s. Pass the callback AbortSignal to backend work; cancellation cannot undo
+an already committed transaction. Await/check backend responses before resolving
+the callback.
+
+Route/query changes, page owner replacement, reload and close retire old buttons
+and abort their cooperative work. Locale/theme updates preserve ownership and
+ongoing operations. Updating loading/disabled metadata does not cancel a running
+action. Removing that action does. Old results cannot complete a successor page.
+StrictMode cleanup is fenced so it cannot clear a successor route descriptor.
+
+This remains a development API. Whole platform acceptance, D5, stable SDK freeze,
+production rollout and Status adoption are still pending.

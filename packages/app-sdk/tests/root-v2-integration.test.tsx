@@ -9,6 +9,7 @@ import {
   useAppBackend,
   useAppDraft,
   useAppNavigation,
+  useAppPage,
 } from "../src/root-v2";
 const disposals: (() => void)[] = [];
 afterEach(() => {
@@ -464,4 +465,86 @@ test("navigation query is typed only after the host commits canonical search", a
   );
   await waitFor(() => expect(document.documentElement.lang).toBe("zh-TW"));
   expect(observed).toBe(committed);
+});
+
+test("shared page hook retains live callbacks across appearance updates and retires old routes", async () => {
+  const w = windows(),
+    changed = vi.fn();
+  const routes = [
+    { id: "home", path: "/", layout: "document" },
+    { id: "editor", path: "/edit", layout: "document" },
+  ] as const;
+  const routed = {
+    ...presentation,
+    navigation: { path: "/", search: "", routes },
+  };
+  const host = createBridgeHost({
+    localWindow: w.host,
+    frameWindow: w.child,
+    binding,
+    presentation: routed,
+    capabilities: [],
+    onPageChange: changed,
+  });
+  disposals.push(() => host.close());
+  function Page() {
+    const { presentation: p } = useAppPresentation();
+    const nav = useAppNavigation();
+    const [count, setCount] = useState(0);
+    useAppPage({
+      title: p.locale + nav.path,
+      actions: [
+        {
+          id: "add",
+          label: "Add",
+          variant: "primary",
+          onAction: () => {
+            setCount((n) => n + 1);
+          },
+        },
+      ],
+    });
+    return <span data-testid="page-count">{count}</span>;
+  }
+  render(
+    <StrictMode>
+      <AppRoot
+        localWindow={w.child}
+        parentWindow={w.host}
+        parentOrigin="https://portal.example.invalid"
+      >
+        <Page />
+      </AppRoot>
+    </StrictMode>,
+  );
+  await waitFor(() =>
+    expect(changed.mock.lastCall?.[0]?.page.title).toBe("zh-CN/"),
+  );
+  const old = changed.mock.lastCall![0].invoke;
+  act(() => expect(old("add")).toBe(true));
+  await waitFor(() =>
+    expect(screen.getByTestId("page-count").textContent).toBe("1"),
+  );
+  await waitFor(() =>
+    expect(changed.mock.lastCall?.[0]?.busyAction).toBeNull(),
+  );
+  act(() => host.updatePresentation({ ...routed, locale: "zh-TW" }));
+  await waitFor(() =>
+    expect(changed.mock.lastCall?.[0]?.page.title).toBe("zh-TW/"),
+  );
+  act(() => expect(changed.mock.lastCall![0].invoke("add")).toBe(true));
+  await waitFor(() =>
+    expect(screen.getByTestId("page-count").textContent).toBe("2"),
+  );
+  act(() =>
+    host.updatePresentation({
+      ...routed,
+      navigation: { ...routed.navigation, path: "/edit" },
+    }),
+  );
+  await waitFor(() =>
+    expect(changed.mock.lastCall?.[0]?.page.title).toBe("zh-CN/edit"),
+  );
+  expect(old("add")).toBe(false);
+  expect(screen.getByTestId("page-count").textContent).toBe("2");
 });

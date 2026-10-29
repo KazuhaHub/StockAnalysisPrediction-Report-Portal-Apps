@@ -22,6 +22,7 @@ import {
   type BridgeBackendRequest,
   type BridgeBackendResponse,
 } from "./bridge-v2";
+import { parseAppPage, type AppPage, type AppPageAction } from "./page-v2";
 import { parseRouteSearch, type RouteQueryValues } from "./route-query-v2";
 import { PortalAppProvider, type AppClient } from "./index";
 import "./root-v2.css";
@@ -78,7 +79,31 @@ export function useAppDraft(dirty: boolean): void {
     return () => register(owner.current, undefined);
   }, [register, dirty]);
 }
+export interface AppPageOptions {
+  readonly title?: string;
+  readonly description?: string;
+  readonly actions?: readonly (Pick<AppPageAction, "id" | "label"> &
+    Partial<Pick<AppPageAction, "variant" | "disabled" | "loading">> & {
+      onAction(signal: AbortSignal): void | Promise<void>;
+    })[];
+}
+type PageRegistry = (owner: symbol, value: AppPageOptions | undefined) => void;
+const PageContext = createContext<PageRegistry | null>(null);
+export function useAppPage(value: AppPageOptions): void {
+  const register = useContext(PageContext),
+    owner = useRef(Symbol("page"));
+  if (!register) throw new Error("AppRoot page registry unavailable");
+  useLayoutEffect(() => {
+    register(owner.current, value);
+  });
+  useLayoutEffect(() => () => register(owner.current, undefined), [register]);
+}
 interface Pending extends AppPresentation {
+  describePage(
+    scope: string,
+    page: AppPage | null,
+    handler?: (id: string, signal: AbortSignal) => void | Promise<void>,
+  ): boolean;
   navigate(path: string, options?: BridgeNavigationOptions): boolean;
   setDraftDirty(dirty: boolean): boolean;
   measureDocument(height: number): boolean;
@@ -159,6 +184,7 @@ export function AppRoot({
     let backendForSignal:
       | {
           signal: AbortSignal;
+          page: Pending["describePage"];
           request: AppBackend["request"];
           draft(dirty: boolean): boolean;
           navigate(path: string, options?: BridgeNavigationOptions): boolean;
@@ -213,6 +239,13 @@ export function AppRoot({
           if (backendForSignal?.signal !== signal) {
             backendForSignal = {
               signal,
+              page: (scope, page, handler) =>
+                !!(
+                  active &&
+                  !stopped &&
+                  !signal.aborted &&
+                  connection?.describePage(scope, page, handler)
+                ),
               navigate: (path, options) =>
                 !!(
                   active &&
@@ -261,6 +294,7 @@ export function AppRoot({
                 !signal.aborted &&
                 connection?.reportDocumentHeight(height)
               ),
+            describePage: backendForSignal.page,
             requestBackend: backendForSignal.request,
             setDraftDirty: backendForSignal.draft,
             navigate: backendForSignal.navigate,
@@ -327,6 +361,111 @@ function PresentationFrame({
   onFailure(): void;
   children: ReactNode;
 }) {
+  const pagePath = pending.presentation.navigation?.path,
+    pageSearch = pending.presentation.navigation?.search;
+  const pageRegistry = useMemo(() => {
+    const lifetime = { active: true };
+    let lastOwner: symbol | undefined;
+    let currentOwner: symbol | undefined,
+      scope = "";
+    let handlers = new Map<
+      string,
+      (signal: AbortSignal) => void | Promise<void>
+    >();
+    const register: PageRegistry = (owner, value) => {
+      if (pending.signal.aborted) return;
+      if (value === undefined) {
+        if (currentOwner !== owner) return;
+        currentOwner = undefined;
+        handlers.clear();
+        const removedScope = scope;
+        queueMicrotask(() => {
+          if (
+            lifetime.active &&
+            currentOwner === undefined &&
+            scope === removedScope &&
+            !pending.signal.aborted
+          )
+            pending.describePage(removedScope, null);
+        });
+        return;
+      }
+      if (currentOwner !== undefined && currentOwner !== owner)
+        throw new Error("Only one page descriptor may be mounted");
+      if (
+        !value ||
+        typeof value !== "object" ||
+        Array.isArray(value) ||
+        Object.keys(value).some(
+          (key) => !["title", "description", "actions"].includes(key),
+        )
+      )
+        throw new Error("Invalid page descriptor");
+      const nextHandlers = new Map<
+        string,
+        (signal: AbortSignal) => void | Promise<void>
+      >();
+      const page = parseAppPage({
+        title: value.title ?? "",
+        description: value.description ?? "",
+        actions: (value.actions ?? []).map((action) => {
+          if (
+            !action ||
+            typeof action !== "object" ||
+            Object.keys(action).some(
+              (key) =>
+                ![
+                  "id",
+                  "label",
+                  "variant",
+                  "disabled",
+                  "loading",
+                  "onAction",
+                ].includes(key),
+            ) ||
+            typeof action.onAction !== "function"
+          )
+            throw new Error("Invalid page action");
+          nextHandlers.set(action.id, action.onAction);
+          return {
+            id: action.id,
+            label: action.label,
+            variant: action.variant ?? "default",
+            disabled: action.disabled ?? false,
+            loading: action.loading ?? false,
+          };
+        }),
+      });
+      if (!page) throw new Error("Invalid page descriptor");
+      if (lastOwner !== owner) {
+        lastOwner = owner;
+        const bytes = crypto.getRandomValues(new Uint8Array(16));
+        scope = Array.from(bytes, (byte) =>
+          byte.toString(16).padStart(2, "0"),
+        ).join("");
+      }
+      currentOwner = owner;
+      handlers = nextHandlers;
+      pending.describePage(scope, page, (id, signal) => {
+        const handler = handlers.get(id);
+        if (
+          currentOwner !== owner ||
+          !handler ||
+          pending.signal.aborted ||
+          signal.aborted
+        )
+          throw new Error("Page action unavailable");
+        return handler(signal);
+      });
+    };
+    return { register, lifetime };
+  }, [pending.signal, pending.describePage, pagePath, pageSearch]);
+  useLayoutEffect(() => {
+    pageRegistry.lifetime.active = true;
+    return () => {
+      pageRegistry.lifetime.active = false;
+    };
+  }, [pageRegistry]);
   const element = useRef<HTMLDivElement>(null);
   const draft = useMemo(() => {
     const owners = new Map<symbol, boolean>();
@@ -466,10 +605,12 @@ function PresentationFrame({
           <BackendContext.Provider value={backend}>
             <NavigationContext.Provider value={navigation}>
               <DraftContext.Provider value={draft.register}>
-                <RenderBoundary key={epoch} onFailure={onFailure}>
-                  {children}
-                  <Commit pending={pending} />
-                </RenderBoundary>
+                <PageContext.Provider value={pageRegistry.register}>
+                  <RenderBoundary key={epoch} onFailure={onFailure}>
+                    {children}
+                    <Commit pending={pending} />
+                  </RenderBoundary>
+                </PageContext.Provider>
               </DraftContext.Provider>
             </NavigationContext.Provider>
           </BackendContext.Provider>
