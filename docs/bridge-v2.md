@@ -2,7 +2,7 @@
 
 `@portal-app/sdk/bridge-v2` is SDK/root integration infrastructure, not a released
 capability client or replacement for the legacy provider.
-The development protocol is `portal.app.bridge/2-dev.4`. It is not frozen.
+The development protocol is `portal.app.bridge/2-dev.5`. It is not frozen.
 
 Use the [Portal transport contract and lifecycle guide](https://github.com/KazuhaHub/StockAnalysisPrediction-Report-Portal/blob/kazuha/app-bridge-presentation/docs/app-platform/22-presentation-bridge-implementation.md)
 for source ownership, state transitions, message bounds and integration rules.
@@ -112,3 +112,28 @@ It uses its router blocker and localized Ant modal; apps cannot veto a confirmed
 leave or choose a destination through this extension. No persistence or signed
 in-app history navigation protocol is introduced. This development bump requires
 matched host/SDK sources; there is no fallback to an earlier v2 revision.
+
+
+## Registered navigation extension
+
+Development protocol `2-dev.5` adds optional validated presentation `navigation`
+with exact `path` and `routes`. Routes contain only signed `id`, `path`, `layout`,
+with unique IDs/paths, a `/` route and a maximum of 32. The active path must exist
+and its signed layout must equal presentation layout. Hosts obtain this registry
+from the current authenticated launch admission, never from a child message.
+Consumers without navigation keep the presentation-only behavior.
+
+`navigation.request` carries the exact current channel envelope, independent
+canonical increasing int64 `revision`, current `presentationRevision`, exact
+registered `path` and boolean `replace`. Stale channels/revisions, queued or
+unacknowledged host presentations cannot dispatch a navigation. Unknown paths or
+extra payload fields fail the channel. Requests are bounded separately from
+height and draft messages. No URL, query object, callback, HTML or app-owned
+history object crosses the boundary.
+
+The client exposes `navigate`; the host exposes `onNavigate`. Sending is not
+commit acknowledgment. The host router remains authoritative and may show its
+unsaved-change prompt. The later presentation reports only the committed path.
+App callbacks cannot block a confirmed leave. There is no automatic replay after
+cancel, timeout, channel replacement or failure. No descriptor/storage schema is
+changed and no query syntax is implicitly authorized by this development step.

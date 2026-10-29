@@ -8,6 +8,7 @@ import {
   useAppPresentation,
   useAppBackend,
   useAppDraft,
+  useAppNavigation,
 } from "../src/root-v2";
 const disposals: (() => void)[] = [];
 afterEach(() => {
@@ -319,4 +320,64 @@ test("draft hook aggregates forms, survives presentation changes and retires own
   const count = changes.mock.calls.length;
   await new Promise((resolve) => setTimeout(resolve, 150));
   expect(changes).toHaveBeenCalledTimes(count);
+});
+
+test("navigation hook follows host commits without replacing mounted form state", async () => {
+  const w = windows(),
+    requests = vi.fn();
+  const routed = {
+    ...presentation,
+    navigation: {
+      path: "/",
+      routes: [
+        { id: "home", path: "/", layout: "document" as const },
+        { id: "details", path: "/details", layout: "document" as const },
+      ],
+    },
+  };
+  const host = createBridgeHost({
+    localWindow: w.host,
+    frameWindow: w.child,
+    binding,
+    presentation: routed,
+    capabilities: [],
+    onNavigate: requests,
+  });
+  disposals.push(() => host.close());
+  function Routed() {
+    const nav = useAppNavigation();
+    const [count, setCount] = useState(0);
+    return (
+      <>
+        <button onClick={() => setCount((n) => n + 1)}>Count {count}</button>
+        <button onClick={() => nav.navigate("/details")}>{nav.path}</button>
+      </>
+    );
+  }
+  render(
+    <AppRoot
+      localWindow={w.child}
+      parentWindow={w.host}
+      parentOrigin="https://portal.example.invalid"
+    >
+      <Routed />
+    </AppRoot>,
+  );
+  await waitFor(() => expect(host.state()).toBe("ready"));
+  act(() => screen.getByRole("button", { name: "Count 0" }).click());
+  act(() => screen.getByRole("button", { name: "/" }).click());
+  await waitFor(() =>
+    expect(requests).toHaveBeenCalledExactlyOnceWith("/details", false),
+  );
+  expect(screen.getByRole("button", { name: "/" })).toBeTruthy();
+  act(() =>
+    host.updatePresentation({
+      ...routed,
+      navigation: { ...routed.navigation, path: "/details" },
+    }),
+  );
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: "/details" })).toBeTruthy(),
+  );
+  expect(screen.getByRole("button", { name: "Count 1" })).toBeTruthy();
 });

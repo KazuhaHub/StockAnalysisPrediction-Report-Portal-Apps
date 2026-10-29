@@ -1,7 +1,7 @@
 # Experimental v2 React presentation root
 
 `@portal-app/sdk/root-v2` is an internal P06 development entry point built on the
-shared `portal.app.bridge/2-dev.4` transport. It is not a released stable SDK,
+shared `portal.app.bridge/2-dev.5` transport. It is not a released stable SDK,
 accepted v2 host, capability client or migration of a maintained app. Existing
 applications and the public template retain their legacy provider until the whole
 host/root/package lifecycle passes acceptance. No catalogue/release changes here.
@@ -77,8 +77,8 @@ Document layout has no SDK-owned viewport height or inner scroll. Viewport layou
 uses the iframe viewport height and hides outer overflow; the app provides its
 intended internal region. It does not resize or navigate the parent or read its
 DOM. The shared root now observes natural document content height; see the
-[document sizing contract](bridge-v2.md#document-sizing-extension). The boolean draft guard described below is available; signed in-app navigation
-and draft persistence remain separate P06 contracts.
+[document sizing contract](bridge-v2.md#document-sizing-extension). The boolean draft guard described below is available; registered static-route navigation is described below; typed query declarations
+and draft persistence remain separate P06 work.
 
 ## Refresh and white-frame boundary
 
@@ -174,3 +174,39 @@ browser's native warning, whose text and availability are browser controlled.
 Only routed departures are guarded: document crashes, direct iframe reloads,
 forced termination, session loss and unsaved state not reported by the app can
 still lose data. Implement appropriate persistence separately.
+
+
+## Registered navigation
+
+`useAppNavigation()` exposes `ready`, the host-committed `path`, readonly signed
+`routes` and `navigate(path, replace = false)`. Render route-specific business
+content from `path`. The root does not construct an inner browser router and apps
+must not read or change parent DOM/history. Changing the route preserves the
+same root/document and state in components that remain mounted. A layout change
+between signed document/viewport routes does not reload the application.
+
+```tsx
+const navigation = useAppNavigation();
+return <Button disabled={!navigation.ready}
+  onClick={() => navigation.navigate('/editor')}>Open editor</Button>;
+```
+
+The path must exactly equal a route in the package's signed descriptor. Routes
+are limited to 32, with unique IDs/paths and one `/` home route. No arbitrary URL,
+percent alias, dot traversal, query, fragment, dynamic route template or inferred
+permission is accepted. Current descriptors have no declared query fields, so the
+allowed query set is empty. Do not put credentials or tokens in route state.
+
+The return boolean means a request was sent or the path is already current; it
+is **not** a committed-navigation result. The host may decline it while another
+confirmation is open, while applying a newer presentation, or when it is stale.
+The committed path changes only through a later host presentation update. Cancel
+keeps the old path. There is no background retry/queued navigation and no app veto
+after user confirmation. Requests faster than one per 100 ms return false locally;
+the host rejects a channel above twenty increasing requests per second.
+
+Deep links and host browser history use the same registered path/layout. Invalid
+or undeclared deep links never mount executable content. Back/forward does not
+repeat launch requests, recreate the iframe or replay a backend write. This
+extension does not add typed query parameters, persistent drafts or full shell
+metadata/actions. The SDK and host must use the matched development protocol.
