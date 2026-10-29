@@ -241,7 +241,9 @@ navigation.navigate(navigation.path ?? '/', {
 ```
 
 `query` is a readonly typed view of the host-committed search. `search` is its
-canonical encoded string. Never update a form from the send boolean; canceled
+canonical encoded string. The typed query object retains its identity across
+locale/theme updates when its definition and search are unchanged, so query-based
+data effects do not rerun for appearance alone. Never update a form from the send boolean; canceled
 navigation keeps the previous committed query. Omit query (or supply {}) to clear
 it. Sending replaces the full query set; spread the current query to preserve
 other filters. The experimental API now uses an options object rather than a

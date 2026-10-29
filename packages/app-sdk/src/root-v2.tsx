@@ -427,24 +427,33 @@ function PresentationFrame({
       }),
     [pending, backendReady],
   );
+  // Cache query values by signed definition/search and document lifetime, so
+  // appearance updates do not look like a filter change to data-loading effects.
+  const querySource = JSON.stringify([
+    pending.presentation.navigation?.routes.find(
+      (route) => route.path === pending.presentation.navigation?.path,
+    )?.query ?? [],
+    pending.presentation.navigation?.search ?? "",
+  ]);
+  const query = useMemo<RouteQueryValues>(() => {
+    if (pending.signal.aborted) return Object.freeze({});
+    const [rules, search] = JSON.parse(querySource) as [
+      Parameters<typeof parseRouteSearch>[0],
+      string,
+    ];
+    return parseRouteSearch(rules, search)!.query;
+  }, [querySource, pending.signal]);
   const navigation = useMemo<AppNavigation>(
     () =>
       Object.freeze({
         ready: backendReady && !!pending.presentation.navigation,
         path: pending.presentation.navigation?.path ?? null,
         search: pending.presentation.navigation?.search ?? "",
-        query: pending.presentation.navigation
-          ? parseRouteSearch(
-              pending.presentation.navigation.routes.find(
-                (route) => route.path === pending.presentation.navigation!.path,
-              )!.query ?? [],
-              pending.presentation.navigation.search,
-            )!.query
-          : Object.freeze({}),
+        query,
         routes: pending.presentation.navigation?.routes ?? Object.freeze([]),
         navigate: pending.navigate,
       }),
-    [backendReady, pending],
+    [backendReady, pending, query],
   );
   return (
     <div

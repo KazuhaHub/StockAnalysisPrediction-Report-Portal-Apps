@@ -410,8 +410,10 @@ test("navigation query is typed only after the host commits canonical search", a
     onNavigate: requests,
   });
   disposals.push(() => host.close());
+  let observed: ReturnType<typeof useAppNavigation>["query"] | undefined;
   function QueryApp() {
     const nav = useAppNavigation();
+    observed = nav.query;
     const [count, setCount] = useState(0);
     return (
       <>
@@ -452,4 +454,14 @@ test("navigation query is typed only after the host commits canonical search", a
     expect(screen.getByTestId("query-value").textContent).toBe('{"page":2}'),
   );
   expect(screen.getByRole("button", { name: "Query 1" })).toBeTruthy();
+  const committed = observed;
+  act(() =>
+    host.updatePresentation({
+      ...routed,
+      locale: "zh-TW",
+      navigation: { ...routed.navigation, search: "?page=2" },
+    }),
+  );
+  await waitFor(() => expect(document.documentElement.lang).toBe("zh-TW"));
+  expect(observed).toBe(committed);
 });
