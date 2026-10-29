@@ -1,5 +1,5 @@
-// Experimental React presentation root. No data API, credential, navigation or
-// legacy-protocol fallback is granted by this component.
+// Experimental React root with a bounded own-backend channel. No credential,
+// generic network authority or legacy-protocol fallback is granted here.
 import {
   Component,
   createContext,
@@ -15,6 +15,9 @@ import {
   type BridgeContext,
   type BridgeFailure,
   type BridgePresentation,
+  BridgeBackendError,
+  type BridgeBackendRequest,
+  type BridgeBackendResponse,
 } from "./bridge-v2";
 import { PortalAppProvider, type AppClient } from "./index";
 import "./root-v2.css";
@@ -24,12 +27,30 @@ export interface AppPresentation {
   readonly context: BridgeContext;
 }
 const PresentationContext = createContext<AppPresentation | null>(null);
+export interface AppBackend {
+  readonly available: boolean;
+  readonly ready: boolean;
+  request(
+    value: BridgeBackendRequest,
+    signal?: AbortSignal,
+  ): Promise<BridgeBackendResponse>;
+}
+const BackendContext = createContext<AppBackend | null>(null);
+export function useAppBackend(): AppBackend {
+  const value = useContext(BackendContext);
+  if (!value) throw new Error("AppRoot backend unavailable");
+  return value;
+}
 export function useAppPresentation(): AppPresentation {
   const value = useContext(PresentationContext);
   if (!value) throw new Error("AppRoot presentation unavailable");
   return value;
 }
 interface Pending extends AppPresentation {
+  requestBackend(
+    value: BridgeBackendRequest,
+    signal?: AbortSignal,
+  ): Promise<BridgeBackendResponse>;
   resolve(): void;
   reject(): void;
   signal: AbortSignal;
@@ -89,6 +110,7 @@ export function AppRoot({
 }: AppRootProps) {
   const [pending, setPending] = useState<Pending | null>(null);
   const [failed, setFailed] = useState(false);
+  const [backendReady, setBackendReady] = useState(false);
   const [epoch, setEpoch] = useState(0);
   const current = useRef<Pending | null>(null);
   const locale = useRef<BridgePresentation["locale"]>("en-US");
@@ -99,6 +121,9 @@ export function AppRoot({
     let active = true;
     let stopped = false;
     let connection: ReturnType<typeof createBridgeClient> | undefined;
+    let backendForSignal:
+      | { signal: AbortSignal; request: AppBackend["request"] }
+      | undefined;
     let closed = false;
     const closeConnection = () => {
       if (connection && !closed) {
@@ -106,7 +131,8 @@ export function AppRoot({
         connection.close();
       }
     };
-    const discard = () => {
+    const discard = (resetBackend = true) => {
+      if (resetBackend) setBackendReady(false);
       current.current?.reject();
       current.current?.dispose();
       current.current = null;
@@ -142,8 +168,23 @@ export function AppRoot({
             reject(new Error("Presentation cancelled"));
             return;
           }
-          discard();
+          discard(false);
           locale.current = presentation.locale;
+          if (backendForSignal?.signal !== signal) {
+            backendForSignal = {
+              signal,
+              request: (value, requestSignal) => {
+                if (!active || stopped || !connection || signal.aborted)
+                  return Promise.reject(new BridgeBackendError("not_ready"));
+                return connection.requestBackend(
+                  value,
+                  requestSignal
+                    ? AbortSignal.any([signal, requestSignal])
+                    : signal,
+                );
+              },
+            };
+          }
           let settled = false;
           const abort = () => {
             if (!settled) {
@@ -159,6 +200,7 @@ export function AppRoot({
             presentation,
             context,
             signal,
+            requestBackend: backendForSignal.request,
             resolve: () => {
               if (settled || signal.aborted) return;
               settled = true;
@@ -184,6 +226,9 @@ export function AppRoot({
         }
       },
       onFailure: failure,
+      onReady: () => {
+        if (active && !stopped) setBackendReady(true);
+      },
     });
     return () => {
       active = false;
@@ -198,6 +243,7 @@ export function AppRoot({
   return (
     <PresentationFrame
       pending={pending}
+      backendReady={backendReady}
       epoch={epoch}
       onFailure={() => fail.current()}
     >
@@ -207,11 +253,13 @@ export function AppRoot({
 }
 function PresentationFrame({
   pending,
+  backendReady,
   epoch,
   onFailure,
   children,
 }: {
   pending: Pending;
+  backendReady: boolean;
   epoch: number;
   onFailure(): void;
   children: ReactNode;
@@ -238,6 +286,15 @@ function PresentationFrame({
       }),
     [pending.presentation, pending.context],
   );
+  const backend = useMemo<AppBackend>(
+    () =>
+      Object.freeze({
+        available: pending.context.backendAvailable,
+        ready: backendReady && pending.context.backendAvailable,
+        request: pending.requestBackend,
+      }),
+    [pending, backendReady],
+  );
   return (
     <div
       className="portal-v2-root"
@@ -245,10 +302,12 @@ function PresentationFrame({
     >
       <PortalAppProvider client={client} locale={pending.presentation.locale}>
         <PresentationContext.Provider value={value}>
-          <RenderBoundary key={epoch} onFailure={onFailure}>
-            {children}
-            <Commit pending={pending} />
-          </RenderBoundary>
+          <BackendContext.Provider value={backend}>
+            <RenderBoundary key={epoch} onFailure={onFailure}>
+              {children}
+              <Commit pending={pending} />
+            </RenderBoundary>
+          </BackendContext.Provider>
         </PresentationContext.Provider>
       </PortalAppProvider>
     </div>
