@@ -56,9 +56,12 @@ class V2AuthoringTests(unittest.TestCase):
             self.assertFalse((self.root / 'apps/example-app').exists())
         with self.assertRaises(ValueError):
             self.creator.create('example-app', 'Example', template='unknown')
-        for name in ['', ' ', 'x'*81, '\ud800', 'x\n', '\u202e']:
-            with self.subTest(name=repr(name)), self.assertRaises(ValueError):
-                self.creator.create('example-app', name, template='v2', parent_origin='http://127.0.0.1:31935')
+        for index,name in enumerate(['', ' ', 'x'*81, '\ud800', 'x\n', '\u202e', ' x', 'x ', 'x\u200b', 'x\ufffd']):
+            identity=f'invalid-name-{index}'
+            with self.subTest(name=repr(name)):
+                with self.assertRaises(ValueError):
+                    self.creator.create(identity, name, template='v2', parent_origin='http://127.0.0.1:31935')
+                self.assertFalse((self.root/'apps'/identity).exists())
         self.assertFalse((self.root / 'apps/example-app').exists())
 
     def test_names_containing_template_markers_remain_literal_text(self):
