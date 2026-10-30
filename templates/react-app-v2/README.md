@@ -46,6 +46,25 @@ correlation, cancellation and fixed errors. Never call the Portal network route,
 copy the transport, supply identity fields or add arbitrary headers. The starter
 keeps the capability undeclared because it has no reviewed destination.
 
+Apps that declare `reports.read` use `useAppReports` for the current viewer's
+visible reports. Call `query` for a bounded list or `get` for summary metadata and
+Markdown. The hook never accepts a viewer, tenant, installation or destination;
+Portal checks current session, binding and owner scope before and after each
+read. The starter keeps this capability undeclared because its sample has no
+report workflow.
+
+```tsx
+const reports = useAppReports();
+const page = await reports.query({ date: "today", limit: 20 });
+const detail = await reports.get(page.items[0].id);
+```
+
+Start automatic reads only after `reports.ready`. Handle `BridgeReportError`
+codes with localized UI, abort on cleanup and do not retry `uncertain`
+automatically. Render Markdown without raw HTML injection. See
+[`docs/reports-v2.md`](../../docs/reports-v2.md) for the full lifecycle,
+authority and failure contract.
+
 ```sh
 python3 scripts/plugin-standard.py
 npm run typecheck

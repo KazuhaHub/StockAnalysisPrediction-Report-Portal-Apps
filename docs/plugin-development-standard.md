@@ -15,8 +15,10 @@ commit-aware presentation for isolated v2 development. An explicit
 root; it is not the stable public default or a migration of published apps. Maintained business apps must not implement their own
 handshake or HTTP transport. Experimental v2 backend calls use
 [`useAppBackend`](backend-v2.md), while reviewed outbound HTTP uses
-[`useAppNetwork`](network-v2.md). Current viewer authority remains with the
-Portal host. Do not use this development entry point to bypass the legacy provider before v2 host/root acceptance.
+[`useAppNetwork`](network-v2.md). Current viewer reports use
+[`useAppReports`](reports-v2.md). Current viewer authority remains with the
+Portal host. Do not use this development entry point to bypass the legacy
+provider before v2 host/root acceptance.
 
 Experimental v2 package declarations use the [shared descriptor source and
 generation workflow](descriptor-v2.md#shared-source-contract). Do not duplicate
@@ -110,7 +112,8 @@ gate before promoting this provisional template to the public default.
 A v2 app must not mount PortalPage/PortalAppProvider/PortalClient or expose an
 independent language selector. AppRoot already supplies the shared Ant foundation.
 Use shared field/typography components for content, and the root-v2 hooks for
-presentation, navigation, own-backend calls and page ownership. The checker
+presentation, navigation, current-viewer reports, own-backend calls and page
+ownership. The checker
 requires the v2 entry points, rejects dual manifests/copied authority and verifies
 immutable origin configuration. It remains a structural check, not a JS security
 proof or complete UX acceptance.

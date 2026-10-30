@@ -27,11 +27,18 @@ import {
   decodeNetworkBody,
   type NetworkRequest as WireNetworkRequest,
   type NetworkResponse as WireNetworkResponse,
+  BridgeReportError,
+  type BridgeReportQuery,
+  type BridgeReportRequest,
+  type BridgeReportResponse,
+  type BridgeReportSummary,
+  type BridgeReportDetail,
 } from "./bridge-v2";
 import { parseAppPage, type AppPage, type AppPageAction } from "./page-v2";
 import { parseRouteSearch, type RouteQueryValues } from "./route-query-v2";
 import { PortalAppProvider, type AppClient } from "./index";
 import "./root-v2.css";
+export { BridgeReportError } from "./bridge-v2";
 
 export interface AppPresentation {
   readonly presentation: BridgePresentation;
@@ -76,6 +83,29 @@ const NetworkContext = createContext<AppNetwork | null>(null);
 export function useAppNetwork(): AppNetwork {
   const value = useContext(NetworkContext);
   if (!value) throw new Error("AppRoot network unavailable");
+  return value;
+}
+export type AppReportQuery = BridgeReportQuery;
+export type AppReportSummary = BridgeReportSummary;
+export type AppReportDetail = BridgeReportDetail;
+export type AppReportList = Extract<
+  BridgeReportResponse,
+  { readonly kind: "query" }
+>;
+export type AppReportDetailResult = Extract<
+  BridgeReportResponse,
+  { readonly kind: "get" }
+>;
+export interface AppReports {
+  readonly available: boolean;
+  readonly ready: boolean;
+  query(query?: AppReportQuery, signal?: AbortSignal): Promise<AppReportList>;
+  get(id: number, signal?: AbortSignal): Promise<AppReportDetailResult>;
+}
+const ReportsContext = createContext<AppReports | null>(null);
+export function useAppReports(): AppReports {
+  const value = useContext(ReportsContext);
+  if (!value) throw new Error("AppRoot reports unavailable");
   return value;
 }
 export function useAppPresentation(): AppPresentation {
@@ -147,6 +177,10 @@ interface Pending extends AppPresentation {
     value: WireNetworkRequest,
     signal?: AbortSignal,
   ): Promise<WireNetworkResponse>;
+  requestReports(
+    value: BridgeReportRequest,
+    signal?: AbortSignal,
+  ): Promise<BridgeReportResponse>;
   resolve(): void;
   reject(): void;
   signal: AbortSignal;
@@ -226,6 +260,10 @@ export function AppRoot({
             value: WireNetworkRequest,
             signal?: AbortSignal,
           ) => Promise<WireNetworkResponse>;
+          requestReports: (
+            value: BridgeReportRequest,
+            signal?: AbortSignal,
+          ) => Promise<BridgeReportResponse>;
           draft(dirty: boolean): boolean;
           navigate(path: string, options?: BridgeNavigationOptions): boolean;
         }
@@ -320,6 +358,16 @@ export function AppRoot({
                     : signal,
                 );
               },
+              requestReports: (value, requestSignal) => {
+                if (!active || stopped || !connection || signal.aborted)
+                  return Promise.reject(new BridgeReportError("not_ready"));
+                return connection.requestReports(
+                  value,
+                  requestSignal
+                    ? AbortSignal.any([signal, requestSignal])
+                    : signal,
+                );
+              },
             };
           }
           let settled = false;
@@ -347,6 +395,7 @@ export function AppRoot({
             describePage: backendForSignal.page,
             requestBackend: backendForSignal.request,
             requestNetwork: backendForSignal.requestNetwork,
+            requestReports: backendForSignal.requestReports,
             setDraftDirty: backendForSignal.draft,
             navigate: backendForSignal.navigate,
             resolve: () => {
@@ -656,6 +705,42 @@ function PresentationFrame({
     },
     [networkAvailable, backendReady, pending.requestNetwork, pending.signal],
   );
+  const reportsAvailable =
+    pending.context.capabilities.includes("reports.read");
+  const reports = useMemo<AppReports>(
+    () =>
+      Object.freeze({
+        available: reportsAvailable,
+        ready: backendReady && reportsAvailable,
+        query: (
+          query: AppReportQuery = {},
+          signal?: AbortSignal,
+        ): Promise<AppReportList> => {
+          if (!reportsAvailable)
+            return Promise.reject(new BridgeReportError("unsupported"));
+          if (!backendReady || pending.signal.aborted)
+            return Promise.reject(new BridgeReportError("not_ready"));
+          return pending.requestReports(
+            { kind: "query", query },
+            signal,
+          ) as Promise<AppReportList>;
+        },
+        get: (
+          id: number,
+          signal?: AbortSignal,
+        ): Promise<AppReportDetailResult> => {
+          if (!reportsAvailable)
+            return Promise.reject(new BridgeReportError("unsupported"));
+          if (!backendReady || pending.signal.aborted)
+            return Promise.reject(new BridgeReportError("not_ready"));
+          return pending.requestReports(
+            { kind: "get", id },
+            signal,
+          ) as Promise<AppReportDetailResult>;
+        },
+      }),
+    [reportsAvailable, backendReady, pending.requestReports, pending.signal],
+  );
   // Cache query values by signed definition/search and document lifetime, so
   // appearance updates do not look like a filter change to data-loading effects.
   const querySource = JSON.stringify([
@@ -694,16 +779,18 @@ function PresentationFrame({
         <PresentationContext.Provider value={value}>
           <BackendContext.Provider value={backend}>
             <NetworkContext.Provider value={network}>
-              <NavigationContext.Provider value={navigation}>
-                <DraftContext.Provider value={draft.register}>
-                  <PageContext.Provider value={pageRegistry.register}>
-                    <RenderBoundary key={epoch} onFailure={onFailure}>
-                      {children}
-                      <Commit pending={pending} />
-                    </RenderBoundary>
-                  </PageContext.Provider>
-                </DraftContext.Provider>
-              </NavigationContext.Provider>
+              <ReportsContext.Provider value={reports}>
+                <NavigationContext.Provider value={navigation}>
+                  <DraftContext.Provider value={draft.register}>
+                    <PageContext.Provider value={pageRegistry.register}>
+                      <RenderBoundary key={epoch} onFailure={onFailure}>
+                        {children}
+                        <Commit pending={pending} />
+                      </RenderBoundary>
+                    </PageContext.Provider>
+                  </DraftContext.Provider>
+                </NavigationContext.Provider>
+              </ReportsContext.Provider>
             </NetworkContext.Provider>
           </BackendContext.Provider>
         </PresentationContext.Provider>

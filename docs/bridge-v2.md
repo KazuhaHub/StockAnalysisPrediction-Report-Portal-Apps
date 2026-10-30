@@ -88,6 +88,28 @@ An `uncertain` network result may follow a completed remote write. Neither side
 retries automatically. Closing, capability changes or a replacement document
 abort pending work and reject old closures.
 
+## Current-viewer reports extension
+
+Development protocol `2-dev.8` also adds `reports.request`, `reports.cancel` and
+`reports.result`. The capability is `reports.read`; it is advertised only when
+the current installation has a current grant. Use
+[`useAppReports`](reports-v2.md); application code must not construct report
+messages or call a Portal route directly.
+
+The closed request is either `{kind:"query", query}` or `{kind:"get", id}`. Query
+filters are bounded text fields plus `limit` 1..50 and nonnegative `offset`.
+Responses are strict list/detail shapes. Detail Markdown is limited to 1 MiB.
+Reports and backend/network request IDs are independent sequences with separate
+pending maps and a two-request ceiling per channel.
+
+Portal fixes the installation destination and rechecks the launch binding,
+current session, capability grant and owner scope before and after each read.
+Revocation, an old generation, or a scope change while reading fails closed.
+Closing or replacing a connection aborts pending work and rejects old closures.
+Stable errors are `not_ready`, `unsupported`, `invalid_request`, `busy`,
+`unavailable` and `uncertain`; no request is retried automatically. Report reads
+do not grant background/service access or any write authority.
+
 ## Document sizing extension
 
 Development protocol `2-dev.3` adds `layout.measure` and
