@@ -19,7 +19,9 @@ The subpath is experimental and is not re-exported through the legacy SDK entry.
 
 Required later gates remain separate:
 
-- Trusted publisher/signature/namespace and revocation verification.
+- Host-authoritative publisher trust and revocation at commit. An independent
+  [experimental verification helper](publisher-v2.md) now checks signatures and
+  namespace/validity policy against an explicit snapshot.
 - Exact artifact checksum and image-platform verification.
 - Actual compatibility range evaluation, rather than bounded range text.
 - Current administrator review and effective capability/resource admission.
@@ -50,6 +52,29 @@ Nesting and input size are bounded before typed validation. SDK field validation
 does not freeze the future schema: D3 review and broader generated-schema parity
 are still required.
 
+## Shared source contract
+
+The structure, types, fields, capability/locale/platform/layout domains and limits
+now derive from Portal's single
+`internal/appplatform/contract/descriptor-v2.schema.json`. The generated products
+carry its exact SHA-256. Follow the
+[generation workflow](https://github.com/KazuhaHub/StockAnalysisPrediction-Report-Portal/blob/kazuha/app-descriptor-schema/docs/app-platform/21-descriptor-schema-implementation.md)
+for paired changes. Edit the Portal source, regenerate both checkouts, and submit
+both changes together; do not author a second schema or permission enum here.
+
+From Apps root, `python3 scripts/generate_app_contract.py --check` verifies the
+SDK products offline without Go or network access. CI runs this before frontend
+checks. A source change that introduces unsupported schema constructs refuses;
+extend tooling and validators with tests rather than manually editing products.
+
+The SDK exports `@portal-app/sdk/descriptor-v2.schema.json` for editor association.
+Do not apply it to legacy `app.json`, add `$schema` inside signed descriptor bytes,
+or use editor validation as installation approval. JSON Schema validates decoded
+structure; strict byte scanning and semantic checks remain mandatory. Tests
+demonstrate the distinction for traversal, capability dependencies, route identity,
+data compatibility and integer lexical forms. Ajv is a test-only dev dependency,
+not a new runtime requirement or admission authority.
+
 ## Development verification
 
 From the Apps repository root:
@@ -64,3 +89,36 @@ python3 scripts/test-app-template.py
 The parser adds no package dependency and does not import React. Its test-only
 Node APIs read/hash the fixed public corpus; they are not bundled into app code.
 Existing Status/demo/template regressions remain required for SDK changes.
+
+## Signed host display metadata
+
+Maintained experimental v2 packages should include `presentation.display`. The
+host uses this signed, bounded metadata for cards and launch titles; `name_key`
+and `description_key` remain app-internal translation identifiers. Do not use
+those keys as a public name or load a name/icon from an external URL.
+
+```json
+{
+  "icon": "file-text",
+  "texts": [
+    {"locale": "en-US", "name": "Notes", "description": "Personal notes"},
+    {"locale": "zh-CN", "name": "笔记", "description": "个人笔记"},
+    {"locale": "zh-TW", "name": "筆記", "description": "個人筆記"}
+  ]
+}
+```
+
+All three locales occur exactly once. Names contain 1–80 Unicode code points;
+descriptions contain 1–320. Leading/trailing whitespace, control/format characters
+and malformed/replacement Unicode characters are refused. Values are plain text,
+not HTML. Icons are the closed shared Ant set `appstore`, `file-text`, `dashboard`,
+`calendar`, `bar-chart`, `cloud`, `tool`, `experiment`. Custom raster/SVG branding
+requires a separate validated asset policy; it is not accepted as a URL here.
+
+The display object is nullable/optional only for compatibility with existing
+unpublished pre-freeze development fixtures. Such packages use an ID/generic-icon
+fallback; this is not the final publishing standard. Before D3/public publishing,
+the publisher tool must require complete metadata and its install/market path
+must be tested. Never mutate already signed descriptor bytes to add labels:
+create and sign a new app-qualified release. Current legacy catalogue packages
+are unchanged and are not v2 conversions.

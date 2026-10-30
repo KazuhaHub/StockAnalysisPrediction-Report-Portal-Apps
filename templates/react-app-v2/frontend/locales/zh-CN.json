@@ -1,0 +1,13 @@
+{
+  "title": APP_NAME_JSON,
+  "editorTitle": "草稿编辑器",
+  "description": "共用 Portal 外观、导航和页面操作",
+  "openEditor": "打开编辑器",
+  "preview": "预览",
+  "home": "首页",
+  "draft": "草稿内容",
+  "draftHelp": "离开页面时可体验 Portal 的未保存内容提示。",
+  "temporary": "此模板只在内存中保存文字，关闭或刷新页面后会丢失。",
+  "introduction": "使用上方的页面操作打开编辑器。此应用不申请任何权限。",
+  "empty": "草稿为空。"
+}
