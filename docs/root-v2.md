@@ -1,7 +1,7 @@
 # Experimental v2 React presentation root
 
 `@portal-app/sdk/root-v2` is an internal P06 development entry point built on the
-shared `portal.app.bridge/2-dev.7` transport. It is not a released stable SDK,
+shared `portal.app.bridge/2-dev.8` transport. It is not a released stable SDK,
 accepted v2 host, capability client or migration of a maintained app. Existing
 applications and the public template retain their legacy provider until the whole
 host/root/package lifecycle passes acceptance. No catalogue/release changes here.
@@ -33,7 +33,8 @@ host locale and tokens directly. `useAppPresentation()` exposes only readonly
 validated presentation/context: locale, timezone, document/viewport layout, theme,
 installation generation and capability **hints**. Hints are not backend grants.
 The private pending-commit resolver and abort machinery are not exposed through
-the presentation context. The separate [own-backend hook](backend-v2.md) exposes
+the presentation context. The separate [own-backend hook](backend-v2.md) and
+[reviewed network hook](network-v2.md) expose
 only the bounded, document-bound request method. Outside the root, the hook throws a fixed error.
 
 The SDK reuses its existing `PortalAppProvider`/Ant token palette through an internal

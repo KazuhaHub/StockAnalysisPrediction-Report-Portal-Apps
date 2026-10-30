@@ -30,7 +30,7 @@ with tempfile.TemporaryDirectory(prefix="portal-root-v2-") as directory:
     if files != ["app.js", "style.css"]:
         raise ValueError(f"Expected one classic bundle and one stylesheet, got {files}")
     source = (target / "dist/app.js").read_text()
-    if "portal.app.bridge/2-dev.7" not in source or "portal-v2-root" not in source:
+    if "portal.app.bridge/2-dev.8" not in source or "portal-v2-root" not in source:
         raise ValueError("Build omitted the experimental presentation root")
     styles = (target / "dist/style.css").read_text()
     if "portal-v2-root" not in styles:

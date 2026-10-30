@@ -2,7 +2,7 @@
 
 `@portal-app/sdk/bridge-v2` is SDK/root integration infrastructure, not a released
 capability client or replacement for the legacy provider.
-The development protocol is `portal.app.bridge/2-dev.7`. It is not frozen.
+The development protocol is `portal.app.bridge/2-dev.8`. It is not frozen.
 
 Use the [Portal transport contract and lifecycle guide](https://github.com/KazuhaHub/StockAnalysisPrediction-Report-Portal/blob/kazuha/app-bridge-presentation/docs/app-platform/22-presentation-bridge-implementation.md)
 for source ownership, state transitions, message bounds and integration rules.
@@ -67,6 +67,26 @@ silently resubmitting. Cancelling a submitted write does not prove rollback.
 
 Use [the React backend hook](backend-v2.md) for application code. Do not construct
 a second client inside the root. Source/test pin regeneration is unchanged.
+
+## Reviewed network extension
+
+Development protocol `2-dev.8` adds `network.request`, `network.cancel` and
+`network.result`. The host advertises `network.http` only when the current
+installation has a granted, reviewed network policy. Use
+[`useAppNetwork`](network-v2.md); never construct these messages in application
+code.
+
+Network and own-backend request IDs are independent monotonic sequences with
+separate pending maps. Each connection allows two requests per channel. Network
+requests use exact `method/url/accept/contentType/bodyBase64` fields, UTF-8 JSON
+below 64 KiB and binary responses below 1 MiB. Parent/current binding, channel
+nonce, grant and current server-side policy are all rechecked by the host and
+Portal. Remote 401/403 statuses remain application responses; only a Portal
+session failure invokes the host's session-loss handler.
+
+An `uncertain` network result may follow a completed remote write. Neither side
+retries automatically. Closing, capability changes or a replacement document
+abort pending work and reject old closures.
 
 ## Document sizing extension
 

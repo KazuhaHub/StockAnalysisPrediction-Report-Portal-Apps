@@ -14,7 +14,8 @@ commit-aware presentation for isolated v2 development. An explicit
 [development v2 template](../templates/react-app-v2/README.md) now exercises this
 root; it is not the stable public default or a migration of published apps. Maintained business apps must not implement their own
 handshake or HTTP transport. Experimental v2 backend calls use
-[`useAppBackend`](backend-v2.md), with current viewer authority retained by the
+[`useAppBackend`](backend-v2.md), while reviewed outbound HTTP uses
+[`useAppNetwork`](network-v2.md). Current viewer authority remains with the
 Portal host. Do not use this development entry point to bypass the legacy provider before v2 host/root acceptance.
 
 Experimental v2 package declarations use the [shared descriptor source and

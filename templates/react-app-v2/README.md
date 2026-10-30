@@ -40,6 +40,12 @@ declares the host title/actions; `useAppNavigation` owns signed-route requests a
 action demonstrates current callback state and preserves a draft across language
 updates. It renders no inner title or language selector.
 
+Apps that declare `network.http` use `useAppNetwork` from the same root. Pass a
+method, reviewed HTTPS URL and binary body; the hook owns Base64, request
+correlation, cancellation and fixed errors. Never call the Portal network route,
+copy the transport, supply identity fields or add arbitrary headers. The starter
+keeps the capability undeclared because it has no reviewed destination.
+
 ```sh
 python3 scripts/plugin-standard.py
 npm run typecheck
