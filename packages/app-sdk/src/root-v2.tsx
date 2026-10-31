@@ -33,12 +33,17 @@ import {
   type BridgeReportResponse,
   type BridgeReportSummary,
   type BridgeReportDetail,
+  BridgeObjectError,
+  type BridgeObjectRequest,
+  type BridgeObjectResponse,
+  type BridgeObjectSummary,
 } from "./bridge-v2";
 import { parseAppPage, type AppPage, type AppPageAction } from "./page-v2";
 import { parseRouteSearch, type RouteQueryValues } from "./route-query-v2";
 import { PortalAppProvider, type AppClient } from "./index";
 import "./root-v2.css";
 export { BridgeReportError } from "./bridge-v2";
+export { BridgeObjectError } from "./bridge-v2";
 
 export interface AppPresentation {
   readonly presentation: BridgePresentation;
@@ -106,6 +111,55 @@ const ReportsContext = createContext<AppReports | null>(null);
 export function useAppReports(): AppReports {
   const value = useContext(ReportsContext);
   if (!value) throw new Error("AppRoot reports unavailable");
+  return value;
+}
+export type AppObjectSummary = BridgeObjectSummary;
+export interface AppObject extends AppObjectSummary {
+  readonly content: Uint8Array;
+}
+export interface AppObjectList {
+  readonly items: readonly AppObjectSummary[];
+  readonly nextCursor?: string;
+}
+export interface AppObjectCreate {
+  readonly requestId: string;
+  readonly collection: string;
+  readonly label: string;
+  readonly mediaType: string;
+  readonly content: Uint8Array;
+}
+export interface AppObjectUpdate {
+  readonly expectedRevision: number;
+  readonly label: string;
+  readonly mediaType: string;
+  readonly content: Uint8Array;
+}
+export interface AppObjects {
+  readonly available: boolean;
+  readonly ready: boolean;
+  list(
+    collection: string,
+    cursor?: string,
+    limit?: number,
+    signal?: AbortSignal,
+  ): Promise<AppObjectList>;
+  get(id: string, signal?: AbortSignal): Promise<AppObject>;
+  create(value: AppObjectCreate, signal?: AbortSignal): Promise<AppObjectSummary>;
+  update(
+    id: string,
+    value: AppObjectUpdate,
+    signal?: AbortSignal,
+  ): Promise<AppObjectSummary>;
+  delete(
+    id: string,
+    expectedRevision: number,
+    signal?: AbortSignal,
+  ): Promise<void>;
+}
+const ObjectsContext = createContext<AppObjects | null>(null);
+export function useAppObjects(): AppObjects {
+  const value = useContext(ObjectsContext);
+  if (!value) throw new Error("AppRoot objects unavailable");
   return value;
 }
 export function useAppPresentation(): AppPresentation {
@@ -181,6 +235,10 @@ interface Pending extends AppPresentation {
     value: BridgeReportRequest,
     signal?: AbortSignal,
   ): Promise<BridgeReportResponse>;
+  requestObjects(
+    value: BridgeObjectRequest,
+    signal?: AbortSignal,
+  ): Promise<BridgeObjectResponse>;
   resolve(): void;
   reject(): void;
   signal: AbortSignal;
@@ -264,6 +322,10 @@ export function AppRoot({
             value: BridgeReportRequest,
             signal?: AbortSignal,
           ) => Promise<BridgeReportResponse>;
+          requestObjects: (
+            value: BridgeObjectRequest,
+            signal?: AbortSignal,
+          ) => Promise<BridgeObjectResponse>;
           draft(dirty: boolean): boolean;
           navigate(path: string, options?: BridgeNavigationOptions): boolean;
         }
@@ -368,6 +430,16 @@ export function AppRoot({
                     : signal,
                 );
               },
+              requestObjects: (value, requestSignal) => {
+                if (!active || stopped || !connection || signal.aborted)
+                  return Promise.reject(new BridgeObjectError("not_ready"));
+                return connection.requestObjects(
+                  value,
+                  requestSignal
+                    ? AbortSignal.any([signal, requestSignal])
+                    : signal,
+                );
+              },
             };
           }
           let settled = false;
@@ -396,6 +468,7 @@ export function AppRoot({
             requestBackend: backendForSignal.request,
             requestNetwork: backendForSignal.requestNetwork,
             requestReports: backendForSignal.requestReports,
+            requestObjects: backendForSignal.requestObjects,
             setDraftDirty: backendForSignal.draft,
             navigate: backendForSignal.navigate,
             resolve: () => {
@@ -741,6 +814,172 @@ function PresentationFrame({
       }),
     [reportsAvailable, backendReady, pending.requestReports, pending.signal],
   );
+  const objectsAvailable =
+    pending.context.capabilities.includes("storage.files");
+  const objects = useMemo<AppObjects>(
+    () =>
+      Object.freeze({
+        available: objectsAvailable,
+        ready: backendReady && objectsAvailable,
+        list: (
+          collection: string,
+          cursor?: string,
+          limit?: number,
+          signal?: AbortSignal,
+        ): Promise<AppObjectList> => {
+          if (!objectsAvailable)
+            return Promise.reject(new BridgeObjectError("unsupported"));
+          if (!backendReady || pending.signal.aborted)
+            return Promise.reject(new BridgeObjectError("not_ready"));
+          return pending
+            .requestObjects(
+              {
+                action: "list",
+                collection,
+                ...(cursor === undefined ? {} : { cursor }),
+                ...(limit === undefined ? {} : { limit }),
+              },
+              signal,
+            )
+            .then((result) =>
+              result.action === "list"
+                ? {
+                    items: result.items,
+                    ...(result.nextCursor === undefined
+                      ? {}
+                      : { nextCursor: result.nextCursor }),
+                  }
+                : Promise.reject(new BridgeObjectError("uncertain")),
+            );
+        },
+        get: (id: string, signal?: AbortSignal): Promise<AppObject> => {
+          if (!objectsAvailable)
+            return Promise.reject(new BridgeObjectError("unsupported"));
+          if (!backendReady || pending.signal.aborted)
+            return Promise.reject(new BridgeObjectError("not_ready"));
+          return pending
+            .requestObjects({ action: "get", id }, signal)
+            .then((result) => {
+              if (result.action !== "get")
+                return Promise.reject(new BridgeObjectError("uncertain"));
+              try {
+                return {
+                  ...result.object,
+                  content: decodeNetworkBody(result.contentBase64),
+                };
+              } catch {
+                return Promise.reject(new BridgeObjectError("uncertain"));
+              }
+            });
+        },
+        create: (
+          value: AppObjectCreate,
+          signal?: AbortSignal,
+        ): Promise<AppObjectSummary> => {
+          if (!objectsAvailable)
+            return Promise.reject(new BridgeObjectError("unsupported"));
+          if (!backendReady || pending.signal.aborted)
+            return Promise.reject(new BridgeObjectError("not_ready"));
+          if (
+            !(value.content instanceof Uint8Array) &&
+            Object.prototype.toString.call(value.content) !==
+              "[object Uint8Array]"
+          )
+            return Promise.reject(new BridgeObjectError("invalid_request"));
+          let contentBase64: string;
+          try {
+            contentBase64 = encodeNetworkBody(
+              value.content instanceof Uint8Array
+                ? value.content
+                : new Uint8Array(value.content),
+            );
+          } catch {
+            return Promise.reject(new BridgeObjectError("invalid_request"));
+          }
+          return pending
+            .requestObjects(
+              {
+                action: "create",
+                requestId: value.requestId,
+                collection: value.collection,
+                label: value.label,
+                mediaType: value.mediaType,
+                contentBase64,
+              },
+              signal,
+            )
+            .then((result) =>
+              result.action === "create"
+                ? result.object
+                : Promise.reject(new BridgeObjectError("uncertain")),
+            );
+        },
+        update: (
+          id: string,
+          value: AppObjectUpdate,
+          signal?: AbortSignal,
+        ): Promise<AppObjectSummary> => {
+          if (!objectsAvailable)
+            return Promise.reject(new BridgeObjectError("unsupported"));
+          if (!backendReady || pending.signal.aborted)
+            return Promise.reject(new BridgeObjectError("not_ready"));
+          if (
+            !(value.content instanceof Uint8Array) &&
+            Object.prototype.toString.call(value.content) !==
+              "[object Uint8Array]"
+          )
+            return Promise.reject(new BridgeObjectError("invalid_request"));
+          let contentBase64: string;
+          try {
+            contentBase64 = encodeNetworkBody(
+              value.content instanceof Uint8Array
+                ? value.content
+                : new Uint8Array(value.content),
+            );
+          } catch {
+            return Promise.reject(new BridgeObjectError("invalid_request"));
+          }
+          return pending
+            .requestObjects(
+              {
+                action: "update",
+                id,
+                expectedRevision: value.expectedRevision,
+                label: value.label,
+                mediaType: value.mediaType,
+                contentBase64,
+              },
+              signal,
+            )
+            .then((result) =>
+              result.action === "update"
+                ? result.object
+                : Promise.reject(new BridgeObjectError("uncertain")),
+            );
+        },
+        delete: (
+          id: string,
+          expectedRevision: number,
+          signal?: AbortSignal,
+        ): Promise<void> => {
+          if (!objectsAvailable)
+            return Promise.reject(new BridgeObjectError("unsupported"));
+          if (!backendReady || pending.signal.aborted)
+            return Promise.reject(new BridgeObjectError("not_ready"));
+          return pending
+            .requestObjects(
+              { action: "delete", id, expectedRevision },
+              signal,
+            )
+            .then((result) =>
+              result.action === "delete"
+                ? undefined
+                : Promise.reject(new BridgeObjectError("uncertain")),
+            );
+        },
+      }),
+    [objectsAvailable, backendReady, pending.requestObjects, pending.signal],
+  );
   // Cache query values by signed definition/search and document lifetime, so
   // appearance updates do not look like a filter change to data-loading effects.
   const querySource = JSON.stringify([
@@ -780,16 +1019,18 @@ function PresentationFrame({
           <BackendContext.Provider value={backend}>
             <NetworkContext.Provider value={network}>
               <ReportsContext.Provider value={reports}>
-                <NavigationContext.Provider value={navigation}>
-                  <DraftContext.Provider value={draft.register}>
-                    <PageContext.Provider value={pageRegistry.register}>
-                      <RenderBoundary key={epoch} onFailure={onFailure}>
-                        {children}
-                        <Commit pending={pending} />
-                      </RenderBoundary>
-                    </PageContext.Provider>
-                  </DraftContext.Provider>
-                </NavigationContext.Provider>
+                <ObjectsContext.Provider value={objects}>
+                  <NavigationContext.Provider value={navigation}>
+                    <DraftContext.Provider value={draft.register}>
+                      <PageContext.Provider value={pageRegistry.register}>
+                        <RenderBoundary key={epoch} onFailure={onFailure}>
+                          {children}
+                          <Commit pending={pending} />
+                        </RenderBoundary>
+                      </PageContext.Provider>
+                    </DraftContext.Provider>
+                  </NavigationContext.Provider>
+                </ObjectsContext.Provider>
               </ReportsContext.Provider>
             </NetworkContext.Provider>
           </BackendContext.Provider>

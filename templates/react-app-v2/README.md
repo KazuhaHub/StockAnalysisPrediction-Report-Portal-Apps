@@ -65,6 +65,23 @@ automatically. Render Markdown without raw HTML injection. See
 [`docs/reports-v2.md`](../../docs/reports-v2.md) for the full lifecycle,
 authority and failure contract.
 
+Apps that declare `storage.files` use `useAppObjects` for bounded,
+current-account data. Objects are opaque IDs with revision-checked create, list,
+get, full replace and delete. The hook accepts only content and safe metadata;
+Portal fixes the installation, account identity, namespace and storage route.
+Use the 1 MiB per-object limit and handle `conflict`, `storage_full` and
+`uncertain` explicitly. Uninstall permanently clears this data.
+
+```tsx
+const objects = useAppObjects();
+const page = await objects.list("note", undefined, 20);
+const note = await objects.get(page.items[0].id);
+const body = new TextDecoder().decode(note.content);
+```
+
+See [`docs/objects-v2.md`](../../docs/objects-v2.md) for limits, lifecycle,
+revision and failure semantics.
+
 ```sh
 python3 scripts/plugin-standard.py
 npm run typecheck

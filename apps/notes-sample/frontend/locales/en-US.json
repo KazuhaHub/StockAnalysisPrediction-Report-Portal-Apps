@@ -1,0 +1,23 @@
+{
+  "title": "Notes",
+  "description": "Your private notes for this Portal account",
+  "newNote": "New note",
+  "save": "Save",
+  "home": "Back to notes",
+  "open": "Open",
+  "delete": "Delete note",
+  "deleteConfirm": "Delete this note permanently?",
+  "deleteYes": "Delete",
+  "deleteNo": "Keep",
+  "draft": "Note",
+  "draftHelp": "Saved notes remain available after refresh and reinstall requires a new note.",
+  "untitled": "Untitled note",
+  "emptyList": "No notes yet",
+  "unavailable": "Notes storage is unavailable",
+  "loading": "Loading notes",
+  "saveFailed": "Could not save this note",
+  "deleteFailed": "Could not delete this note",
+  "conflict": "This note changed in another tab. Open it again before saving.",
+  "storageFull": "Notes storage is full",
+  "uncertain": "The result is uncertain. Reopen the note before trying again."
+}

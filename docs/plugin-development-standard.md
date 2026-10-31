@@ -16,7 +16,8 @@ root; it is not the stable public default or a migration of published apps. Main
 handshake or HTTP transport. Experimental v2 backend calls use
 [`useAppBackend`](backend-v2.md), while reviewed outbound HTTP uses
 [`useAppNetwork`](network-v2.md). Current viewer reports use
-[`useAppReports`](reports-v2.md). Current viewer authority remains with the
+[`useAppReports`](reports-v2.md), and bounded current-account data uses
+[`useAppObjects`](objects-v2.md). Current viewer authority remains with the
 Portal host. Do not use this development entry point to bypass the legacy
 provider before v2 host/root acceptance.
 

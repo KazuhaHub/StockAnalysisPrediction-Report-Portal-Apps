@@ -1,0 +1,23 @@
+{
+  "title": "笔记",
+  "description": "仅当前 Portal 账号可见的私人笔记",
+  "newNote": "新建笔记",
+  "save": "保存",
+  "home": "返回笔记",
+  "open": "打开",
+  "delete": "删除笔记",
+  "deleteConfirm": "永久删除这条笔记？",
+  "deleteYes": "删除",
+  "deleteNo": "保留",
+  "draft": "笔记",
+  "draftHelp": "刷新后仍可读取；卸载应用会清空笔记，重装后从空白开始。",
+  "untitled": "无标题笔记",
+  "emptyList": "还没有笔记",
+  "unavailable": "笔记存储不可用",
+  "loading": "正在加载笔记",
+  "saveFailed": "无法保存这条笔记",
+  "deleteFailed": "无法删除这条笔记",
+  "conflict": "笔记已在其他标签页变化，请重新打开后再保存。",
+  "storageFull": "笔记存储空间已满",
+  "uncertain": "结果不确定，请重新打开笔记后再试。"
+}

@@ -35,8 +35,9 @@ installation generation and capability **hints**. Hints are not backend grants.
 The private pending-commit resolver and abort machinery are not exposed through
 the presentation context. The separate [own-backend hook](backend-v2.md),
 [reviewed network hook](network-v2.md) and
-[current-viewer reports hook](reports-v2.md) expose only bounded,
-document-bound request methods. Outside the root, a hook throws a fixed error.
+[current-viewer reports hook](reports-v2.md) and
+[application object hook](objects-v2.md) expose only bounded, document-bound
+request methods. Outside the root, a hook throws a fixed error.
 
 The SDK reuses its existing `PortalAppProvider`/Ant token palette through an internal
 appearance-only adapter. That adapter has no API/directory implementation and is
