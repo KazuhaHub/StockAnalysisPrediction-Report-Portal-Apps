@@ -99,11 +99,6 @@ export function Application() {
     // Object methods are stable across ordinary presentation changes.
   }, [objects.ready, objects.list]);
 
-  async function refreshNotes(): Promise<void> {
-    const result = await objects.list("note", undefined, 50);
-    setNotes([...result.items]);
-  }
-
   function newNote() {
     createRequest.current = crypto.randomUUID();
     setSelectedID(null);
@@ -142,6 +137,7 @@ export function Application() {
       const label = noteLabel(body, copy.untitled);
       let currentID = selectedID;
       let currentRevision = revision;
+      let currentSummary: AppObjectSummary;
       if (!currentID) {
         const created = await objects.create(
           {
@@ -158,6 +154,7 @@ export function Application() {
         createRequest.current = crypto.randomUUID();
         setSelectedID(created.id);
         setRevision(created.revision);
+        currentSummary = created;
       } else {
         const updated = await objects.update(
           currentID,
@@ -170,10 +167,14 @@ export function Application() {
           signal,
         );
         setRevision(updated.revision);
+        currentSummary = updated;
       }
       if (signal.aborted) return;
       setSaved(body);
-      await refreshNotes();
+      setNotes((previous) => [
+        currentSummary,
+        ...previous.filter((item) => item.id !== currentSummary.id),
+      ]);
       navigation.navigate("/");
     } catch (error) {
       if (!signal.aborted) setFailure(failureMessage(error));
@@ -193,7 +194,9 @@ export function Application() {
       setRevision(0);
       setDraft("");
       setSaved("");
-      await refreshNotes();
+      setNotes((previous) =>
+        previous.filter((item) => item.id !== selectedID),
+      );
       navigation.navigate("/");
     } catch (error) {
       if (!signal.aborted) setFailure(failureMessage(error));
