@@ -78,11 +78,14 @@ code.
 
 Network and own-backend request IDs are independent monotonic sequences with
 separate pending maps. Each connection allows two requests per channel. Network
-requests use exact `method/url/accept/contentType/bodyBase64` fields, UTF-8 JSON
-below 64 KiB and binary responses below 1 MiB. Parent/current binding, channel
-nonce, grant and current server-side policy are all rechecked by the host and
-Portal. Remote 401/403 statuses remain application responses; only a Portal
-session failure invokes the host's session-loss handler.
+requests use exact `method/url/accept/contentType/bodyBase64` fields plus an
+optional stable `credential` binding name, UTF-8 JSON below 64 KiB and binary
+responses below 1 MiB. A credential name requires the current `secrets.use`
+grant; values and arbitrary headers never cross the channel. Parent/current
+binding, channel nonce, grants and current server-side policy/binding revisions
+are all rechecked by the host and Portal. Remote 401/403 statuses remain
+application responses; only a Portal session failure invokes the host's
+session-loss handler.
 
 An `uncertain` network result may follow a completed remote write. Neither side
 retries automatically. Closing, capability changes or a replacement document

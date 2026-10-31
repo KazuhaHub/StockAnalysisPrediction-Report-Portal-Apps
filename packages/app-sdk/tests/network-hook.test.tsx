@@ -97,7 +97,7 @@ test("useAppNetwork converts binary bodies and retires old requests with the pre
     frameWindow: w.child,
     binding,
     presentation,
-    capabilities: ["network.http"],
+    capabilities: ["network.http", "secrets.use"],
     onNetworkRequest: dispatch,
   });
   disposals.push(() => host.close());
@@ -135,7 +135,11 @@ test("useAppNetwork converts binary bodies and retires old requests with the pre
     </AppRoot>,
   );
   await waitFor(() => expect(host.state()).toBe("ready"));
-  expect(observed).toMatchObject({ available: true, ready: true });
+  expect(observed).toMatchObject({
+    available: true,
+    credentialAvailable: true,
+    ready: true,
+  });
   const stableRequest = observed!.request;
   await act(async () => {
     screen.getByRole("button").click();
@@ -165,6 +169,52 @@ test("useAppNetwork converts binary bodies and retires old requests with the pre
     }),
   ).rejects.toMatchObject({ code: "not_ready", retryable: false });
   expect(dispatch).toHaveBeenCalledOnce();
+});
+
+test("useAppNetwork exposes only a stable credential binding name", async () => {
+  const w = windows();
+  const dispatch = vi.fn(async () => ({
+    status: 200,
+    contentType: "application/json",
+    bodyBase64: "e30=",
+  }));
+  const host = createBridgeHost({
+    localWindow: w.host,
+    frameWindow: w.child,
+    binding,
+    presentation,
+    capabilities: ["network.http", "secrets.use"],
+    onNetworkRequest: dispatch,
+  });
+  disposals.push(() => host.close());
+  let observed: ReturnType<typeof useAppNetwork> | undefined;
+  function NetworkApp() {
+    observed = useAppNetwork();
+    return null;
+  }
+  render(
+    <AppRoot
+      localWindow={w.child}
+      parentWindow={w.host}
+      parentOrigin="https://portal.example.invalid"
+    >
+      <NetworkApp />
+    </AppRoot>,
+  );
+  await waitFor(() => expect(host.state()).toBe("ready"));
+  await act(async () => {
+    await observed!.request({
+      method: "GET",
+      url: "https://api.example.com/v1/check",
+      credential: "upstream-api",
+    });
+  });
+  expect(dispatch.mock.calls[0][0]).toMatchObject({
+    credential: "upstream-api",
+  });
+  expect(JSON.stringify(dispatch.mock.calls[0][0])).not.toContain(
+    "disposable-secret-value",
+  );
 });
 
 test("useAppNetwork is unavailable without the exact host grant", async () => {

@@ -70,6 +70,7 @@ export interface AppNetworkRequest {
   readonly accept?: string;
   readonly contentType?: string;
   readonly body?: Uint8Array;
+  readonly credential?: string;
 }
 export interface AppNetworkResponse {
   readonly status: number;
@@ -78,6 +79,7 @@ export interface AppNetworkResponse {
 }
 export interface AppNetwork {
   readonly available: boolean;
+  readonly credentialAvailable: boolean;
   readonly ready: boolean;
   request(
     value: AppNetworkRequest,
@@ -741,16 +743,21 @@ function PresentationFrame({
   );
   const networkAvailable =
     pending.context.capabilities.includes("network.http");
+  const networkCredentialAvailable =
+    pending.context.capabilities.includes("secrets.use");
   const network = useMemo<AppNetwork>(
     () => {
       return Object.freeze({
         available: networkAvailable,
+        credentialAvailable: networkCredentialAvailable,
         ready: backendReady && networkAvailable,
         request: async (
           value: AppNetworkRequest,
           signal?: AbortSignal,
         ) => {
           if (!networkAvailable) throw new AppNetworkError("unsupported");
+          if (value.credential !== undefined && !networkCredentialAvailable)
+            throw new AppNetworkError("unsupported");
           if (!backendReady || pending.signal.aborted)
             throw new AppNetworkError("not_ready");
           if (value.body !== undefined && !(value.body instanceof Uint8Array))
@@ -765,6 +772,9 @@ function PresentationFrame({
                 value.contentType ??
                 (body.byteLength > 0 ? "application/octet-stream" : ""),
               bodyBase64: encodeNetworkBody(body),
+              ...(value.credential === undefined
+                ? {}
+                : { credential: value.credential }),
             },
             signal,
           );
@@ -776,7 +786,13 @@ function PresentationFrame({
         },
       });
     },
-    [networkAvailable, backendReady, pending.requestNetwork, pending.signal],
+    [
+      networkAvailable,
+      networkCredentialAvailable,
+      backendReady,
+      pending.requestNetwork,
+      pending.signal,
+    ],
   );
   const reportsAvailable =
     pending.context.capabilities.includes("reports.read");

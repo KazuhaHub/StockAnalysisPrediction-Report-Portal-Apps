@@ -48,17 +48,24 @@ export function StatusSummary() {
 }
 ```
 
-`request` accepts `{method, url, accept?, contentType?, body?}`. `body` is a
+`request` accepts `{method, url, accept?, contentType?, body?, credential?}`. `body` is a
 `Uint8Array`; the hook performs bounded Base64 conversion. `accept` defaults to
 `application/json`. The response is `{status, contentType, body}`, where `status`
 belongs to the remote service even when it is 401, 403, 429 or 500. Parse only the
 business response shape your app defines.
 
-The hook never accepts headers, actor/controller/review fields, credentials,
-private addresses or a replacement host route. HTTPS, destination, method, DNS,
-redirect and current grant checks remain server-side. A caller's AbortSignal is
-combined with the presentation lifetime. Unmount, channel replacement, capability
-change or presentation retirement rejects old closures.
+`credential` is a stable binding name, never a secret value. It is accepted only
+when both `network.http` and `secrets.use` are current; `credentialAvailable`
+reports the latter. Portal resolves the exact installation binding, reviewed
+operation and credential revision on every request, then injects one fixed
+`Authorization: Bearer` or `X-API-Key` header in the private runner exchange.
+
+The hook never accepts arbitrary headers, actor/controller/review fields,
+credential bytes, private addresses or a replacement host route. HTTPS,
+destination, method, DNS, redirect, binding and current grant checks remain
+server-side. A caller's AbortSignal is combined with the presentation lifetime.
+Unmount, channel replacement, capability change or presentation retirement
+rejects old closures.
 
 ## Failure semantics
 
@@ -90,7 +97,8 @@ npm --prefix packages/app-sdk run typecheck
 
 The shared tests cover binary boundaries, closed wire fields, unsupported and
 ungranted calls, duplicate viewport/connection envelopes, independent backend
-IDs, cancellation, timeout/late results, flood ceilings and no automatic retry.
-React tests cover ready-after-ack, binary conversion, stable hooks across
-appearance updates and rejection after document retirement. Node MessagePort and
-jsdom tests are not a substitute for the real browser/native acceptance.
+IDs, cancellation, timeout/late results, flood ceilings, credential-name-only
+requests and no automatic retry. React tests cover ready-after-ack, binary
+conversion, stable hooks across appearance updates and rejection after document
+retirement. Node MessagePort and jsdom tests are not a substitute for the real
+browser/native acceptance.
