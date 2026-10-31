@@ -8,7 +8,26 @@ bundle this stack completely; sandbox isolation does not require handwritten DOM
 
 ## Shared frontend foundation
 
-The executable presentation foundation is SDK 0.2. Maintained applications use
+The [experimental v2 presentation transport](bridge-v2.md) belongs to the shared
+SDK/root integration. The [experimental React root](root-v2.md) implements
+commit-aware presentation for isolated v2 development. An explicit
+[development v2 template](../templates/react-app-v2/README.md) now exercises this
+root; it is not the stable public default or a migration of published apps. Maintained business apps must not implement their own
+handshake or HTTP transport. Experimental v2 backend calls use
+[`useAppBackend`](backend-v2.md), while reviewed outbound HTTP uses
+[`useAppNetwork`](network-v2.md). Current viewer reports use
+[`useAppReports`](reports-v2.md), and bounded current-account data uses
+[`useAppObjects`](objects-v2.md). Current viewer authority remains with the
+Portal host. Do not use this development entry point to bypass the legacy
+provider before v2 host/root acceptance.
+
+Experimental v2 package declarations use the [shared descriptor source and
+generation workflow](descriptor-v2.md#shared-source-contract). Do not duplicate
+capability enums, edit generated products or substitute editor schema validation
+for strict parsing and admission. Existing releases still use their legacy format
+until the v2 platform is accepted and released.
+
+The executable presentation foundation is SDK 0.2. Existing legacy applications use
 `PortalAppProvider`, `PortalPage` and `usePortalLocale`; declaring the SDK as a
 dependency alone is insufficient. The checked template and both maintained
 consumers demonstrate the same composition. Read the
@@ -60,6 +79,65 @@ recoverable-error surfaces. Provider render failures use a bounded localized
 does not retry a failed write. `usePortalResource` ignores obsolete async replies
 and clears data on a failed current load; applications still own authority checks,
 freshness semantics and safe error dictionaries.
+
+## Development v2 authoring
+
+Generate an unlisted development app explicitly:
+
+```sh
+python3 scripts/create-app.py my-app --name "My app" --template v2 \
+  --parent-origin https://portal.example.invalid --publisher development-publisher
+npm install
+python3 scripts/plugin-standard.py
+npm run typecheck
+npm test --workspace=apps/my-app/frontend
+python3 scripts/build-app-v2.py my-app
+```
+
+Choose the trusted development Portal origin, never a real credential. HTTPS or
+canonical loopback HTTP is accepted. This origin is compiled from immutable
+bootstrap configuration; it is not inferred from the parent DOM, referrer, query
+or arbitrary message. Cross-deployment distribution bootstrap remains a release
+gate before promoting this provisional template to the public default.
+
+| Area | Legacy published composition | Experimental v2 composition |
+| --- | --- | --- |
+| Manifest | `app.json` | `app.v2.json` source, generated `descriptor.json` |
+| Root | PortalClient + PortalAppProvider | AppRoot with immutable trusted bootstrap |
+| Page | PortalPage inside document | useAppPage rendered by Portal |
+| Locale | usePortalLocale compatibility behavior | useAppPresentation; follows committed Portal locale |
+| Navigation | Legacy host APIs | useAppNavigation with signed routes |
+| Draft | App-specific persistence/legacy behavior | useAppDraft hint; persistence is separate |
+| Frontend build | build-app-frontend.py + legacy catalogue tooling | build-app-v2.py, unsigned local candidate only |
+
+A v2 app must not mount PortalPage/PortalAppProvider/PortalClient or expose an
+independent language selector. AppRoot already supplies the shared Ant foundation.
+Use shared field/typography components for content, and the root-v2 hooks for
+presentation, navigation, current-viewer reports, own-backend calls and page
+ownership. The checker
+requires the v2 entry points, rejects dual manifests/copied authority and verifies
+immutable origin configuration. It remains a structural check, not a JS security
+proof or complete UX acceptance.
+
+The generated sample uses a host Preview action and a labelled textarea. It
+retains text across route/language updates and uses the shared dirty-navigation
+hint. It clearly reports that its data is in memory only. A preview is not a save.
+Do not add persistent-storage claims until a granted broker/service operation
+actually commits them.
+
+The source descriptor has a zero frontend-digest placeholder. The v2 builder
+validates exact source bytes with the strict SDK parser, rebuilds local assets,
+creates a bounded deterministic ZIP and validates a new descriptor with its real
+SHA-256. It preserves the source and refuses existing output directories. Use
+`--output` with a new local directory for each subsequent candidate. Outputs are
+unsigned and unlisted; no signing, publisher trust, upload, market modification,
+backend provisioning or execution approval happens during this command.
+
+The source/parser/ZIP checks do not replace host HTML/CSP, signature,
+compatibility, resource and current permission admission. A managed declaration
+still needs independently verified immutable backend artifacts and lifecycle
+acceptance. Never rename a v2 source into legacy app.json to bypass those gates.
+Follow the [step-by-step template guide](../templates/react-app-v2/README.md).
 
 ## Interaction and information architecture
 
@@ -192,3 +270,9 @@ builds are development candidates and must never replace an existing public ZIP.
 Update the market only after immutable assets and compatible Portal downloads are
 verified. Upgrade through the market, preserve independent storage and keys, and
 check current installation identity and backend pairing before resuming operations.
+
+For experimental v2 host cards/titles, provide the signed
+[`presentation.display` metadata](descriptor-v2.md#signed-host-display-metadata)
+in all three panel languages. Choose its icon from the shared Ant vocabulary;
+never replace the host name with HTML or an external icon URL. This provisional
+extension does not publish or convert the existing legacy applications.
