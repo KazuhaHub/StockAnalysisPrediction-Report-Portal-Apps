@@ -41,8 +41,11 @@ for app security or usability: each app retains its own integration/negative tes
 
 ## Experimental v2 React root
 
-`@portal-app/sdk/root-v2` supplies `AppRoot` and `useAppPresentation` for isolated
-v2 host development. It applies host locale/theme/timezone through React/Ant and
-acknowledges only after layout commit. It grants no request API or backend
-permission and does not migrate existing apps. Read [the root contract](../../docs/root-v2.md)
-for bootstrap, host loading-cover requirements, tests and remaining browser gates.
+`@portal-app/sdk/root-v2` supplies `AppRoot`, `useAppPresentation`,
+`useAppBackend` and `useAppNetwork` for isolated v2 host development. It applies
+host locale/theme/timezone through React/Ant and acknowledges only after layout
+commit. Request hooks expose only capabilities and channels advertised by the
+current host connection; they grant no authority. Read
+[the root contract](../../docs/root-v2.md),
+[own-backend client](../../docs/backend-v2.md), and
+[reviewed network client](../../docs/network-v2.md) for boundaries and tests.

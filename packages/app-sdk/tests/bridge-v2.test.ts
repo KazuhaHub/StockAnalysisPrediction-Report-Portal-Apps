@@ -8,6 +8,7 @@ import {
   BRIDGE_DEADLINE_MS,
   type BridgeBinding,
   BridgeBackendError,
+  BridgeObjectError,
 } from "../src/bridge-v2";
 
 const cleanup: (() => void)[] = [];
@@ -1464,16 +1465,220 @@ test("page descriptions require exact current binding, revision, scope and close
   );
 });
 
-async function networkPair(onNetworkRequest?: Parameters<typeof createBridgeHost>[0]["onNetworkRequest"], granted=true) {
+async function networkPair(onNetworkRequest?: Parameters<typeof createBridgeHost>[0]["onNetworkRequest"], granted=true, extraCapabilities: readonly string[]=[]) {
  vi.stubGlobal("MessageChannel",NodeMessageChannel);
  const w=windows();
- const host=createBridgeHost({localWindow:w.host,frameWindow:w.child,binding,presentation,capabilities:granted?["network.http"]:[],onNetworkRequest});
+ const host=createBridgeHost({localWindow:w.host,frameWindow:w.child,binding,presentation,capabilities:granted?["network.http",...extraCapabilities]:[],onNetworkRequest});
  const client=createBridgeClient({localWindow:w.child,parentWindow:w.host,parentOrigin:"https://portal.example.invalid",onPresentation:()=>{}});
  cleanup.push(()=>client.close(),()=>host.close());
  await vi.waitFor(()=>expect(host.state()).toBe("ready"));
  return {...w,host,client};
 }
+const reportSummary = {
+ id:42,runId:"run-42",symbol:"600100",name:"Example",date:"2026-10-30",
+ time:"09:30",kind:"research",subtype:"daily",title:"Current report",
+ source:"analysis",version:"report-version",
+};
+async function reportsPair(
+ onReportRequest?: Parameters<typeof createBridgeHost>[0]["onReportRequest"],
+ granted=true,
+) {
+ vi.stubGlobal("MessageChannel",NodeMessageChannel);
+ const w=windows();
+ const host=createBridgeHost({
+  localWindow:w.host,
+  frameWindow:w.child,
+  binding,
+  presentation,
+  capabilities:granted?["reports.read"]:[],
+  onReportRequest,
+ });
+ const client=createBridgeClient({
+  localWindow:w.child,
+  parentWindow:w.host,
+  parentOrigin:"https://portal.example.invalid",
+  onPresentation:()=>{},
+ });
+ cleanup.push(()=>client.close(),()=>host.close());
+ await vi.waitFor(()=>expect(host.state()).toBe("ready"));
+ return {...w,host,client};
+}
+test("report channel preserves query, detail and Markdown results",async()=>{
+ const dispatch=vi.fn(async(request:{kind:string},_signal:AbortSignal)=>request.kind==="get"
+  ? {kind:"get" as const,report:{...reportSummary,bodyMarkdown:"# Evidence"}}
+  : {kind:"query" as const,count:1,total:3,offset:0,limit:20,items:[reportSummary]});
+ const {client}=await reportsPair(dispatch);
+ expect(client.context()?.capabilities).toEqual(["reports.read"]);
+ await expect(client.requestReports({kind:"query",query:{q:"current",limit:20}})).resolves.toEqual({
+  kind:"query",count:1,total:3,offset:0,limit:20,items:[reportSummary],
+ });
+ await expect(client.requestReports({kind:"get",id:42})).resolves.toEqual({
+  kind:"get",report:{...reportSummary,bodyMarkdown:"# Evidence"},
+ });
+ expect(dispatch).toHaveBeenCalledTimes(2);
+ expect(dispatch.mock.calls[0][0]).toEqual({kind:"query",query:{q:"current",limit:20}});
+ expect(dispatch.mock.calls[0][1]).toBeInstanceOf(AbortSignal);
+});
+test("report requests fail closed without grant, transport or valid input",async()=>{
+ const dispatch=vi.fn(async()=>({kind:"query" as const,count:0,total:0,offset:0,limit:20,items:[]}));
+ const ungranted=await reportsPair(dispatch,false);
+ await expect(ungranted.client.requestReports({kind:"query",query:{limit:20}})).rejects.toMatchObject({code:"unsupported",retryable:false});
+ const unsupported=await reportsPair();
+ await expect(unsupported.client.requestReports({kind:"query",query:{limit:20}})).rejects.toMatchObject({code:"unsupported"});
+ const ready=await reportsPair(dispatch);
+ for(const request of [
+  {kind:"query",query:{limit:51}},
+  {kind:"get",id:0},
+  {kind:"query",query:{headers:{}}},
+  {kind:"query",query:{limit:20},extra:true},
+ ]) await expect(ready.client.requestReports(request as never)).rejects.toMatchObject({code:"invalid_request"});
+ expect(dispatch).not.toHaveBeenCalled();
+});
+test("report failures stay bounded and a closed host aborts pending reads",async()=>{
+ let signal:AbortSignal|undefined;
+ const dispatch=vi.fn((_request:unknown,abort:AbortSignal)=>{
+  signal=abort;
+  return new Promise<never>(()=>{});
+ });
+ const {client,host}=await reportsPair(dispatch);
+ const pending=client.requestReports({kind:"query",query:{limit:20}});
+ const rejected=expect(pending).rejects.toMatchObject({code:"uncertain",retryable:false});
+ await vi.waitFor(()=>expect(dispatch).toHaveBeenCalledOnce());
+ host.close();
+ await vi.waitFor(()=>expect(signal?.aborted).toBe(true));
+ client.close();
+ await rejected;
+ expect(dispatch).toHaveBeenCalledOnce();
+});
+test("report failure details are replaced with stable channel codes",async()=>{
+ const dispatch=vi
+  .fn()
+  .mockRejectedValueOnce(new Error("private upstream detail"))
+  .mockResolvedValueOnce({kind:"query",count:1,total:1,offset:0,limit:20,items:[]});
+ const {client}=await reportsPair(dispatch);
+ await expect(client.requestReports({kind:"query",query:{limit:20}})).rejects.toMatchObject({code:"uncertain",retryable:false});
+ await expect(client.requestReports({kind:"query",query:{limit:20}})).rejects.toMatchObject({code:"uncertain",retryable:false});
+ expect(dispatch).toHaveBeenCalledTimes(2);
+});
+test("report request identities are isolated and cannot be replayed",async()=>{
+ const dispatch=vi.fn(()=>new Promise<never>(()=>{}));
+ const w=await reportsPair(dispatch);
+ const init=w.sent.find(item=>item.data.type==="app:init")!.data;
+ const port=w.received.find(item=>item.event.data.type==="app:init")!.event.ports[0];
+ const message={
+  ...acknowledgement(init),
+  type:"reports.request",
+  requestId:"1",
+  request:{kind:"query",query:{limit:20}},
+ };
+ delete (message as Record<string,unknown>).revision;
+ port.postMessage({...message,generation:"2"});
+ port.postMessage(message);
+ await vi.waitFor(()=>expect(dispatch).toHaveBeenCalledOnce());
+ port.postMessage(message);
+ await vi.waitFor(()=>expect(w.host.state()).toBe("failed"));
+ expect(dispatch).toHaveBeenCalledOnce();
+});
+test("report deadline is uncertain, cancels native work and never retries",async()=>{
+ let signal:AbortSignal|undefined;
+ const dispatch=vi.fn((_request:unknown,abort:AbortSignal)=>{
+  signal=abort;
+  return new Promise<never>(()=>{});
+ });
+ const {client}=await reportsPair(dispatch);
+ vi.useFakeTimers();
+ const pending=client.requestReports({kind:"query",query:{limit:20}});
+ const rejected=expect(pending).rejects.toMatchObject({code:"uncertain",retryable:false});
+ await vi.waitFor(()=>expect(dispatch).toHaveBeenCalledOnce());
+ await vi.advanceTimersByTimeAsync(20_000);
+ await rejected;
+ expect(signal?.aborted).toBe(true);
+ expect(dispatch).toHaveBeenCalledOnce();
+});
 const networkRequest=()=>({method:"GET",url:"https://api.example.com/v1",accept:"application/json",contentType:"",bodyBase64:""});
+const objectSummary={
+ id:"00000000-0000-4000-8000-000000000042",collection:"note",label:"First note",
+ mediaType:"application/json",sizeBytes:5,revision:1,createdAt:1,updatedAt:1,
+};
+async function objectsPair(
+ onObjectRequest?: Parameters<typeof createBridgeHost>[0]["onObjectRequest"],
+ granted=true,
+) {
+ vi.stubGlobal("MessageChannel",NodeMessageChannel);
+ const w=windows();
+ const host=createBridgeHost({
+  localWindow:w.host,
+  frameWindow:w.child,
+  binding,
+  presentation,
+  capabilities:granted?["storage.files"]:[],
+  onObjectRequest,
+ });
+ const client=createBridgeClient({
+  localWindow:w.child,
+  parentWindow:w.host,
+  parentOrigin:"https://portal.example.invalid",
+  onPresentation:()=>{},
+ });
+ cleanup.push(()=>client.close(),()=>host.close());
+ await vi.waitFor(()=>expect(host.state()).toBe("ready"));
+ return {...w,host,client};
+}
+test("object channel preserves closed create/list/get/update/delete results",async()=>{
+ const dispatch=vi.fn(async(request:{action:string})=>{
+  switch(request.action){
+   case "list":return {action:"list" as const,items:[objectSummary],nextCursor:"2:00000000-0000-4000-8000-000000000042"};
+   case "get":return {action:"get" as const,object:objectSummary,contentBase64:"aGVsbG8="};
+   case "delete":return {action:"delete" as const,id:objectSummary.id};
+   default:return {action:request.action as "create"|"update",object:objectSummary};
+  }
+ });
+ const {client}=await objectsPair(dispatch);
+ const create={action:"create" as const,requestId:"create-1",collection:"note",label:"First note",mediaType:"application/json",contentBase64:"aGVsbG8="};
+ await expect(client.requestObjects(create)).resolves.toEqual({action:"create",object:objectSummary});
+ await expect(client.requestObjects({action:"list",collection:"note",limit:20})).resolves.toMatchObject({action:"list",items:[objectSummary]});
+ await expect(client.requestObjects({action:"get",id:objectSummary.id})).resolves.toEqual({action:"get",object:objectSummary,contentBase64:"aGVsbG8="});
+ await expect(client.requestObjects({action:"update",id:objectSummary.id,expectedRevision:1,label:"First note",mediaType:"application/json",contentBase64:"aGVsbG8="})).resolves.toEqual({action:"update",object:objectSummary});
+ await expect(client.requestObjects({action:"delete",id:objectSummary.id,expectedRevision:1})).resolves.toEqual({action:"delete",id:objectSummary.id});
+ expect(dispatch).toHaveBeenCalledTimes(5);
+});
+test("object channel fails closed without grant, transport or valid input",async()=>{
+ const dispatch=vi.fn(async()=>({action:"list" as const,items:[]}));
+ const absent=await objectsPair(dispatch,false);
+ await expect(absent.client.requestObjects({action:"list",collection:"note"})).rejects.toMatchObject({code:"unsupported",retryable:false});
+ const unsupported=await objectsPair();
+ await expect(unsupported.client.requestObjects({action:"list",collection:"note"})).rejects.toMatchObject({code:"unsupported"});
+ const ready=await objectsPair(dispatch);
+ for(const request of [
+  {action:"list",collection:"Note"},
+  {action:"get",id:"bad"},
+  {action:"create",requestId:"create-1",collection:"note",label:"First\nnote",mediaType:"application/json",contentBase64:"aGVsbG8="},
+  {action:"delete",id:objectSummary.id,expectedRevision:0},
+  {action:"list",collection:"note",extra:true},
+ ]) await expect(ready.client.requestObjects(request as never)).rejects.toMatchObject({code:"invalid_request"});
+ expect(dispatch).not.toHaveBeenCalled();
+});
+test("object conflicts and storage full stay stable; close aborts work",async()=>{
+ let signal:AbortSignal|undefined;
+ const dispatch=vi.fn((_request:unknown,abort:AbortSignal)=>{
+  signal=abort;
+  return new Promise<never>(()=>{});
+ });
+ const {client,host}=await objectsPair(dispatch);
+ const pending=client.requestObjects({action:"create",requestId:"create-1",collection:"note",label:"First note",mediaType:"application/json",contentBase64:""});
+ const rejected=expect(pending).rejects.toMatchObject({code:"uncertain",retryable:false});
+ await vi.waitFor(()=>expect(dispatch).toHaveBeenCalledOnce());
+ host.close();
+ await vi.waitFor(()=>expect(signal?.aborted).toBe(true));
+ client.close();
+ await rejected;
+ const stable=await objectsPair(vi.fn()
+  .mockRejectedValueOnce(new BridgeObjectError("conflict"))
+  .mockRejectedValueOnce(new BridgeObjectError("storage_full")));
+ for(const code of ["conflict","storage_full"]){
+  await expect(stable.client.requestObjects({action:"list",collection:"note"})).rejects.toMatchObject({code,retryable:false});
+ }
+});
 test("reviewed network channel preserves binary response and remote auth status",async()=>{
  const dispatch=vi.fn(async(_request:unknown)=>({status:401,contentType:"application/octet-stream",bodyBase64:"AP+A"}));
  const {client}=await networkPair(dispatch);
@@ -1509,4 +1714,52 @@ test("network failures are closed and pending work has a fixed ceiling",async()=
  const first=held.client.requestNetwork(networkRequest()),second=held.client.requestNetwork(networkRequest());
  await expect(held.client.requestNetwork(networkRequest())).rejects.toMatchObject({code:"busy"});
  held.client.close();await expect(first).rejects.toMatchObject({code:"uncertain"});await expect(second).rejects.toMatchObject({code:"uncertain"});
+});
+test("credential binding name crosses only with secrets.use and no credential value",async()=>{
+ const dispatch=vi.fn(async(request:{credential?:string})=>({status:200,contentType:"application/json",bodyBase64:"e30="}));
+ const without=await networkPair(dispatch);
+ await expect(without.client.requestNetwork({...networkRequest(),credential:"upstream-api"})).rejects.toMatchObject({code:"unsupported"});
+ const withUse=await networkPair(dispatch,true,["secrets.use"]);
+ await expect(withUse.client.requestNetwork({...networkRequest(),credential:"upstream-api"})).resolves.toEqual({status:200,contentType:"application/json",bodyBase64:"e30="});
+ expect(dispatch).toHaveBeenCalledOnce();
+ expect(dispatch.mock.calls[0][0]).toMatchObject({credential:"upstream-api"});
+ expect(JSON.stringify(dispatch.mock.calls[0][0])).not.toContain("secret-value");
+});
+test("network and own-backend channels keep independent request identities and results",async()=>{
+ vi.stubGlobal("MessageChannel",NodeMessageChannel);
+ const w=windows();
+ const backend=vi.fn(async()=>({status:200,body:'{"channel":"backend"}'}));
+ const network=vi.fn(async()=>({status:200,contentType:"application/json",bodyBase64:"eyJjaGFubmVsIjoibmV0d29yayJ9"}));
+ const host=createBridgeHost({localWindow:w.host,frameWindow:w.child,binding,presentation,capabilities:["network.http"],onBackendRequest:backend,onNetworkRequest:network});
+ const client=createBridgeClient({localWindow:w.child,parentWindow:w.host,parentOrigin:"https://portal.example.invalid",onPresentation:()=>{}});
+ cleanup.push(()=>client.close(),()=>host.close());
+ await vi.waitFor(()=>expect(host.state()).toBe("ready"));
+ const [backendResult,networkResult]=await Promise.all([
+  client.requestBackend({method:"GET",path:"/v1/echo",body:""}),
+  client.requestNetwork(networkRequest()),
+ ]);
+ expect(backendResult).toEqual({status:200,body:'{"channel":"backend"}'});
+ expect(networkResult).toEqual({status:200,contentType:"application/json",bodyBase64:"eyJjaGFubmVsIjoibmV0d29yayJ9"});
+ expect(backend).toHaveBeenCalledOnce();expect(network).toHaveBeenCalledOnce();
+});
+test("network results with extra fields are rejected as uncertain",async()=>{
+ const dispatch=vi.fn(async()=>({status:200,contentType:"",bodyBase64:"",headers:{cookie:"private"}}));
+ const {client}=await networkPair(dispatch);
+ await expect(client.requestNetwork(networkRequest())).rejects.toMatchObject({code:"uncertain",retryable:false});
+ expect(dispatch).toHaveBeenCalledOnce();
+});
+test("network deadline reports uncertainty once and ignores a late response",async()=>{
+ let resolve!: (value:{status:number;contentType:string;bodyBase64:string})=>void;
+ const dispatch=vi.fn(()=>new Promise<{status:number;contentType:string;bodyBase64:string}>(done=>{resolve=done;}));
+ const {client}=await networkPair(dispatch);
+ vi.useFakeTimers();
+ const pending=client.requestNetwork(networkRequest());
+ const rejected=expect(pending).rejects.toMatchObject({code:"uncertain",retryable:false});
+ await vi.advanceTimersByTimeAsync(0);
+ expect(dispatch).toHaveBeenCalledOnce();
+ await vi.advanceTimersByTimeAsync(30_000);
+ await rejected;
+ resolve({status:200,contentType:"",bodyBase64:""});
+ await vi.advanceTimersByTimeAsync(10_000);
+ expect(dispatch).toHaveBeenCalledOnce();
 });

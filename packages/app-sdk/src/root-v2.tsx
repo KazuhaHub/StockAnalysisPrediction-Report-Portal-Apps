@@ -1,5 +1,6 @@
-// Experimental React root with a bounded own-backend channel. No credential,
-// generic network authority or legacy-protocol fallback is granted here.
+// Experimental React root with bounded own-backend and reviewed network
+// channels. No credential, ambient authority or legacy-protocol fallback is
+// granted here.
 import {
   Component,
   createContext,
@@ -21,6 +22,11 @@ import {
   BRIDGE_DOCUMENT_MAX_HEIGHT,
   type BridgeBackendRequest,
   type BridgeBackendResponse,
+  AppNetworkError,
+  encodeNetworkBody,
+  decodeNetworkBody,
+  type NetworkRequest as WireNetworkRequest,
+  type NetworkResponse as WireNetworkResponse,
 } from "./bridge-v2";
 import { parseAppPage, type AppPage, type AppPageAction } from "./page-v2";
 import { parseRouteSearch, type RouteQueryValues } from "./route-query-v2";
@@ -44,6 +50,32 @@ const BackendContext = createContext<AppBackend | null>(null);
 export function useAppBackend(): AppBackend {
   const value = useContext(BackendContext);
   if (!value) throw new Error("AppRoot backend unavailable");
+  return value;
+}
+export interface AppNetworkRequest {
+  readonly method: string;
+  readonly url: string;
+  readonly accept?: string;
+  readonly contentType?: string;
+  readonly body?: Uint8Array;
+}
+export interface AppNetworkResponse {
+  readonly status: number;
+  readonly contentType: string;
+  readonly body: Uint8Array;
+}
+export interface AppNetwork {
+  readonly available: boolean;
+  readonly ready: boolean;
+  request(
+    value: AppNetworkRequest,
+    signal?: AbortSignal,
+  ): Promise<AppNetworkResponse>;
+}
+const NetworkContext = createContext<AppNetwork | null>(null);
+export function useAppNetwork(): AppNetwork {
+  const value = useContext(NetworkContext);
+  if (!value) throw new Error("AppRoot network unavailable");
   return value;
 }
 export function useAppPresentation(): AppPresentation {
@@ -111,6 +143,10 @@ interface Pending extends AppPresentation {
     value: BridgeBackendRequest,
     signal?: AbortSignal,
   ): Promise<BridgeBackendResponse>;
+  requestNetwork(
+    value: WireNetworkRequest,
+    signal?: AbortSignal,
+  ): Promise<WireNetworkResponse>;
   resolve(): void;
   reject(): void;
   signal: AbortSignal;
@@ -186,6 +222,10 @@ export function AppRoot({
           signal: AbortSignal;
           page: Pending["describePage"];
           request: AppBackend["request"];
+          requestNetwork: (
+            value: WireNetworkRequest,
+            signal?: AbortSignal,
+          ) => Promise<WireNetworkResponse>;
           draft(dirty: boolean): boolean;
           navigate(path: string, options?: BridgeNavigationOptions): boolean;
         }
@@ -270,6 +310,16 @@ export function AppRoot({
                     : signal,
                 );
               },
+              requestNetwork: (value, requestSignal) => {
+                if (!active || stopped || !connection || signal.aborted)
+                  return Promise.reject(new AppNetworkError("not_ready"));
+                return connection.requestNetwork(
+                  value,
+                  requestSignal
+                    ? AbortSignal.any([signal, requestSignal])
+                    : signal,
+                );
+              },
             };
           }
           let settled = false;
@@ -296,6 +346,7 @@ export function AppRoot({
               ),
             describePage: backendForSignal.page,
             requestBackend: backendForSignal.request,
+            requestNetwork: backendForSignal.requestNetwork,
             setDraftDirty: backendForSignal.draft,
             navigate: backendForSignal.navigate,
             resolve: () => {
@@ -566,6 +617,45 @@ function PresentationFrame({
       }),
     [pending, backendReady],
   );
+  const networkAvailable =
+    pending.context.capabilities.includes("network.http");
+  const network = useMemo<AppNetwork>(
+    () => {
+      return Object.freeze({
+        available: networkAvailable,
+        ready: backendReady && networkAvailable,
+        request: async (
+          value: AppNetworkRequest,
+          signal?: AbortSignal,
+        ) => {
+          if (!networkAvailable) throw new AppNetworkError("unsupported");
+          if (!backendReady || pending.signal.aborted)
+            throw new AppNetworkError("not_ready");
+          if (value.body !== undefined && !(value.body instanceof Uint8Array))
+            throw new AppNetworkError("invalid_request");
+          const body = value.body ?? new Uint8Array();
+          const response = await pending.requestNetwork(
+            {
+              method: value.method,
+              url: value.url,
+              accept: value.accept ?? "application/json",
+              contentType:
+                value.contentType ??
+                (body.byteLength > 0 ? "application/octet-stream" : ""),
+              bodyBase64: encodeNetworkBody(body),
+            },
+            signal,
+          );
+          return Object.freeze({
+            status: response.status,
+            contentType: response.contentType,
+            body: decodeNetworkBody(response.bodyBase64),
+          });
+        },
+      });
+    },
+    [networkAvailable, backendReady, pending.requestNetwork, pending.signal],
+  );
   // Cache query values by signed definition/search and document lifetime, so
   // appearance updates do not look like a filter change to data-loading effects.
   const querySource = JSON.stringify([
@@ -603,16 +693,18 @@ function PresentationFrame({
       <PortalAppProvider client={client} locale={pending.presentation.locale}>
         <PresentationContext.Provider value={value}>
           <BackendContext.Provider value={backend}>
-            <NavigationContext.Provider value={navigation}>
-              <DraftContext.Provider value={draft.register}>
-                <PageContext.Provider value={pageRegistry.register}>
-                  <RenderBoundary key={epoch} onFailure={onFailure}>
-                    {children}
-                    <Commit pending={pending} />
-                  </RenderBoundary>
-                </PageContext.Provider>
-              </DraftContext.Provider>
-            </NavigationContext.Provider>
+            <NetworkContext.Provider value={network}>
+              <NavigationContext.Provider value={navigation}>
+                <DraftContext.Provider value={draft.register}>
+                  <PageContext.Provider value={pageRegistry.register}>
+                    <RenderBoundary key={epoch} onFailure={onFailure}>
+                      {children}
+                      <Commit pending={pending} />
+                    </RenderBoundary>
+                  </PageContext.Provider>
+                </DraftContext.Provider>
+              </NavigationContext.Provider>
+            </NetworkContext.Provider>
           </BackendContext.Provider>
         </PresentationContext.Provider>
       </PortalAppProvider>
