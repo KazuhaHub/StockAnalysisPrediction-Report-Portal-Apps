@@ -226,10 +226,61 @@ export interface AppPageOptions {
 }
 type PageRegistry = (owner: symbol, value: AppPageOptions | undefined) => void;
 const PageContext = createContext<PageRegistry | null>(null);
+function validatePageOptions(value: AppPageOptions): void {
+  const candidate = value as unknown as Record<string, unknown>;
+  if (
+    !candidate ||
+    typeof candidate !== "object" ||
+    Array.isArray(candidate) ||
+    Object.keys(candidate).some(
+      (key) => !["title", "description", "actions"].includes(key),
+    )
+  )
+    throw new Error("Invalid page descriptor");
+  const actions = candidate.actions ?? [];
+  if (!Array.isArray(actions)) throw new Error("Invalid page descriptor");
+  const normalized = actions.map((action) => {
+    if (
+      !action ||
+      typeof action !== "object" ||
+      Array.isArray(action) ||
+      Object.keys(action).some(
+        (key) =>
+          ![
+            "id",
+            "label",
+            "variant",
+            "disabled",
+            "loading",
+            "onAction",
+          ].includes(key),
+      ) ||
+      typeof (action as Record<string, unknown>).onAction !== "function"
+    )
+      throw new Error("Invalid page action");
+    const item = action as Record<string, unknown>;
+    return {
+      id: item.id,
+      label: item.label,
+      variant: item.variant ?? "default",
+      disabled: item.disabled ?? false,
+      loading: item.loading ?? false,
+    };
+  });
+  if (
+    !parseAppPage({
+      title: candidate.title ?? "",
+      description: candidate.description ?? "",
+      actions: normalized,
+    })
+  )
+    throw new Error("Invalid page descriptor");
+}
 export function useAppPage(value: AppPageOptions): void {
   const register = useContext(PageContext),
     owner = useRef(Symbol("page"));
   if (!register) throw new Error("AppRoot page registry unavailable");
+  validatePageOptions(value);
   useLayoutEffect(() => {
     register(owner.current, value);
   });
