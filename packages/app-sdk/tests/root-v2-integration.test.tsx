@@ -369,7 +369,12 @@ test("navigation hook follows host commits without replacing mounted form state"
   act(() => screen.getByRole("button", { name: "Count 0" }).click());
   act(() => screen.getByRole("button", { name: "/" }).click());
   await waitFor(() =>
-    expect(requests).toHaveBeenCalledExactlyOnceWith("/details", false, ""),
+    expect(requests).toHaveBeenCalledExactlyOnceWith(
+      "/details",
+      false,
+      "",
+      false,
+    ),
   );
   expect(screen.getByRole("button", { name: "/" })).toBeTruthy();
   act(() =>
@@ -442,7 +447,12 @@ test("navigation query is typed only after the host commits canonical search", a
   await waitFor(() => expect(host.state()).toBe("ready"));
   act(() => screen.getByRole("button", { name: "Query 0" }).click());
   await waitFor(() =>
-    expect(requests).toHaveBeenCalledExactlyOnceWith("/", false, "?page=2"),
+    expect(requests).toHaveBeenCalledExactlyOnceWith(
+      "/",
+      false,
+      "?page=2",
+      false,
+    ),
   );
   expect(screen.getByTestId("query-value").textContent).toBe("{}");
   act(() =>

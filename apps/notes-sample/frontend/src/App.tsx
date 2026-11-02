@@ -175,7 +175,7 @@ export function Application() {
         currentSummary,
         ...previous.filter((item) => item.id !== currentSummary.id),
       ]);
-      navigation.navigate("/");
+      navigation.navigate("/", { bypassDraft: true });
     } catch (error) {
       if (!signal.aborted) setFailure(failureMessage(error));
     } finally {
@@ -197,7 +197,7 @@ export function Application() {
       setNotes((previous) =>
         previous.filter((item) => item.id !== selectedID),
       );
-      navigation.navigate("/");
+      navigation.navigate("/", { bypassDraft: true });
     } catch (error) {
       if (!signal.aborted) setFailure(failureMessage(error));
     } finally {
