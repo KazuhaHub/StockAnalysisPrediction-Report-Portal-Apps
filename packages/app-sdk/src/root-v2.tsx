@@ -37,6 +37,9 @@ import {
   type BridgeObjectRequest,
   type BridgeObjectResponse,
   type BridgeObjectSummary,
+  BridgeNotificationError,
+  type BridgeNotificationRequest,
+  type BridgeNotificationResponse,
 } from "./bridge-v2";
 import { parseAppPage, type AppPage, type AppPageAction } from "./page-v2";
 import { parseRouteSearch, type RouteQueryValues } from "./route-query-v2";
@@ -44,6 +47,7 @@ import { PortalAppProvider, type AppClient } from "./index";
 import "./root-v2.css";
 export { BridgeReportError } from "./bridge-v2";
 export { BridgeObjectError } from "./bridge-v2";
+export { BridgeNotificationError } from "./bridge-v2";
 
 export interface AppPresentation {
   readonly presentation: BridgePresentation;
@@ -164,6 +168,21 @@ export function useAppObjects(): AppObjects {
   if (!value) throw new Error("AppRoot objects unavailable");
   return value;
 }
+export type AppNotificationRequest = BridgeNotificationRequest;
+export interface AppNotifications {
+  readonly available: boolean;
+  readonly ready: boolean;
+  publish(
+    value: AppNotificationRequest,
+    signal?: AbortSignal,
+  ): Promise<BridgeNotificationResponse>;
+}
+const NotificationsContext = createContext<AppNotifications | null>(null);
+export function useAppNotifications(): AppNotifications {
+  const value = useContext(NotificationsContext);
+  if (!value) throw new Error("AppRoot notifications unavailable");
+  return value;
+}
 export function useAppPresentation(): AppPresentation {
   const value = useContext(PresentationContext);
   if (!value) throw new Error("AppRoot presentation unavailable");
@@ -241,6 +260,10 @@ interface Pending extends AppPresentation {
     value: BridgeObjectRequest,
     signal?: AbortSignal,
   ): Promise<BridgeObjectResponse>;
+  requestNotifications(
+    value: BridgeNotificationRequest,
+    signal?: AbortSignal,
+  ): Promise<BridgeNotificationResponse>;
   resolve(): void;
   reject(): void;
   signal: AbortSignal;
@@ -328,6 +351,10 @@ export function AppRoot({
             value: BridgeObjectRequest,
             signal?: AbortSignal,
           ) => Promise<BridgeObjectResponse>;
+          requestNotifications: (
+            value: BridgeNotificationRequest,
+            signal?: AbortSignal,
+          ) => Promise<BridgeNotificationResponse>;
           draft(dirty: boolean): boolean;
           navigate(path: string, options?: BridgeNavigationOptions): boolean;
         }
@@ -442,6 +469,18 @@ export function AppRoot({
                     : signal,
                 );
               },
+              requestNotifications: (value, requestSignal) => {
+                if (!active || stopped || !connection || signal.aborted)
+                  return Promise.reject(
+                    new BridgeNotificationError("not_ready"),
+                  );
+                return connection.requestNotifications(
+                  value,
+                  requestSignal
+                    ? AbortSignal.any([signal, requestSignal])
+                    : signal,
+                );
+              },
             };
           }
           let settled = false;
@@ -471,6 +510,7 @@ export function AppRoot({
             requestNetwork: backendForSignal.requestNetwork,
             requestReports: backendForSignal.requestReports,
             requestObjects: backendForSignal.requestObjects,
+            requestNotifications: backendForSignal.requestNotifications,
             setDraftDirty: backendForSignal.draft,
             navigate: backendForSignal.navigate,
             resolve: () => {
@@ -996,6 +1036,33 @@ function PresentationFrame({
       }),
     [objectsAvailable, backendReady, pending.requestObjects, pending.signal],
   );
+  const notificationsAvailable =
+    pending.context.capabilities.includes("notifications.publish");
+  const notifications = useMemo<AppNotifications>(
+    () =>
+      Object.freeze({
+        available: notificationsAvailable,
+        ready: backendReady && notificationsAvailable,
+        publish: (
+          value: AppNotificationRequest,
+          signal?: AbortSignal,
+        ): Promise<BridgeNotificationResponse> => {
+          if (!notificationsAvailable)
+            return Promise.reject(
+              new BridgeNotificationError("unsupported"),
+            );
+          if (!backendReady || pending.signal.aborted)
+            return Promise.reject(new BridgeNotificationError("not_ready"));
+          return pending.requestNotifications(value, signal);
+        },
+      }),
+    [
+      notificationsAvailable,
+      backendReady,
+      pending.requestNotifications,
+      pending.signal,
+    ],
+  );
   // Cache query values by signed definition/search and document lifetime, so
   // appearance updates do not look like a filter change to data-loading effects.
   const querySource = JSON.stringify([
@@ -1036,16 +1103,18 @@ function PresentationFrame({
             <NetworkContext.Provider value={network}>
               <ReportsContext.Provider value={reports}>
                 <ObjectsContext.Provider value={objects}>
-                  <NavigationContext.Provider value={navigation}>
-                    <DraftContext.Provider value={draft.register}>
-                      <PageContext.Provider value={pageRegistry.register}>
-                        <RenderBoundary key={epoch} onFailure={onFailure}>
-                          {children}
-                          <Commit pending={pending} />
-                        </RenderBoundary>
-                      </PageContext.Provider>
-                    </DraftContext.Provider>
-                  </NavigationContext.Provider>
+                  <NotificationsContext.Provider value={notifications}>
+                    <NavigationContext.Provider value={navigation}>
+                      <DraftContext.Provider value={draft.register}>
+                        <PageContext.Provider value={pageRegistry.register}>
+                          <RenderBoundary key={epoch} onFailure={onFailure}>
+                            {children}
+                            <Commit pending={pending} />
+                          </RenderBoundary>
+                        </PageContext.Provider>
+                      </DraftContext.Provider>
+                    </NavigationContext.Provider>
+                  </NotificationsContext.Provider>
                 </ObjectsContext.Provider>
               </ReportsContext.Provider>
             </NetworkContext.Provider>
