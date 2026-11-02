@@ -9,7 +9,12 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { useState } from "react";
 import { Empty, theme } from "antd";
 import type { BridgePresentation, BridgeClientOptions } from "../src/bridge-v2";
-import { AppRoot, useAppPresentation, useAppBackend } from "../src/root-v2";
+import {
+  AppRoot,
+  useAppPresentation,
+  useAppBackend,
+  useAppPage,
+} from "../src/root-v2";
 
 const control = vi.hoisted(() => ({
   options: null as BridgeClientOptions | null,
@@ -314,6 +319,40 @@ test("render failure refuses the pending acknowledgement and hides private excep
   await expect(promise!).rejects.toThrow();
   expect(view.container.textContent).not.toContain("private detail");
   expect(screen.getByRole("alert")).toBeTruthy();
+  vi.restoreAllMocks();
+});
+test("invalid page metadata fails closed before committed content or host controls", async () => {
+  vi.spyOn(console, "error").mockImplementation(() => {});
+  const failed = vi.fn();
+  function InvalidPage() {
+    useAppPage({ title: "unsafe\nmetadata", actions: [] });
+    return <span>private page content</span>;
+  }
+  const view = render(
+    <AppRoot
+      parentOrigin="https://portal.example.invalid"
+      onFailure={failed}
+    >
+      <InvalidPage />
+    </AppRoot>,
+  );
+  let promise: Promise<void>;
+  act(() => {
+    promise = Promise.resolve(
+      control.options!.onPresentation(
+        presentation,
+        context,
+        new AbortController().signal,
+      ),
+    );
+    promise.catch(() => {});
+  });
+  await expect(promise!).rejects.toThrow("Presentation cancelled");
+  expect(failed).toHaveBeenCalledWith("presentation_failed");
+  expect(screen.queryByText("private page content")).toBeNull();
+  expect(view.container.textContent).toContain(
+    "应用连接已中断，请重新打开。",
+  );
   vi.restoreAllMocks();
 });
 

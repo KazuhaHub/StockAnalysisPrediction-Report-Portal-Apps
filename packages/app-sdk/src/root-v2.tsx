@@ -295,7 +295,9 @@ function Commit({ pending }: { pending: Pending }) {
       : "light";
     document.body.style.background = pending.presentation.theme.colorBgLayout;
     document.body.style.color = pending.presentation.theme.colorText;
-    pending.resolve();
+    queueMicrotask(() => {
+      if (!pending.signal.aborted) pending.resolve();
+    });
   }, [pending]);
   return null;
 }
