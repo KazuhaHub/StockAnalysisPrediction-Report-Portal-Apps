@@ -82,6 +82,28 @@ const body = new TextDecoder().decode(note.content);
 See [`docs/objects-v2.md`](../../docs/objects-v2.md) for limits, lifecycle,
 revision and failure semantics.
 
+Apps that declare `notifications.publish` use `useAppNotifications` for
+foreground notices. The app supplies a stable occurrence ID, title, plain-text
+message and severity. It cannot select recipients, channels, routes or
+destinations; Portal applies the administrator's existing notification rules.
+
+```tsx
+const notifications = useAppNotifications();
+await notifications.publish({
+  occurrenceId: "digest:2026-11-02",
+  title: "Daily digest",
+  message: "Three reports are ready.",
+  severity: "info",
+});
+```
+
+Only call `publish` after `notifications.ready`. Reuse the same occurrence ID
+when retrying identical content; do not create a new ID merely because a reply
+was lost. Handle `conflict`, `capacity`, `unavailable` and `uncertain`
+separately. See [`docs/notifications-v2.md`](../../docs/notifications-v2.md).
+The starter keeps this capability undeclared because its sample publishes no
+notice.
+
 ```sh
 python3 scripts/plugin-standard.py
 npm run typecheck
