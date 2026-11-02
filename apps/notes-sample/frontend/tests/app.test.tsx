@@ -127,7 +127,7 @@ test("Notes creates, reopens and translates persisted objects through the SDK", 
       search: "",
       routes: [
         { id: "home", path: "/", layout: "document" },
-        { id: "editor", path: "/editor", layout: "document" },
+        { id: "editor", path: "/editor", layout: "viewport" },
       ],
     },
   };
@@ -148,8 +148,12 @@ test("Notes creates, reopens and translates persisted objects through the SDK", 
     },
     onDraftChange: dirty,
     onNavigate: (path, _replace, search) => {
+      const destination = presentation.navigation!.routes.find(
+        (route) => route.path === path,
+      )!;
       presentation = {
         ...presentation,
+        layout: destination.layout,
         navigation: { ...presentation.navigation!, path, search },
       };
       host.updatePresentation(presentation);

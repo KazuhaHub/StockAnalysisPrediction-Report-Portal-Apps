@@ -244,7 +244,8 @@ export function Application() {
   if (!objects.ready || loading) return <Spin aria-label={copy.loading} />;
 
   return (
-    <Space orientation="vertical" size="middle" style={{ width: "100%" }}>
+    <div className={editing ? "notes-editor" : undefined}>
+      <Space orientation="vertical" size="middle" style={{ width: "100%" }}>
       {failure && <Alert type="error" showIcon title={failure} />}
       {editing ? (
         <>
@@ -305,6 +306,7 @@ export function Application() {
           )}
         />
       )}
-    </Space>
+      </Space>
+    </div>
   );
 }
