@@ -429,6 +429,11 @@ export function AppRoot({
     const failure = (code: BridgeFailure) => {
       if (!active || stopped) return;
       stopped = true;
+      try {
+        connection?.reportFailure(code);
+      } catch {
+        /* The host still owns the bounded failure surface. */
+      }
       discard();
       // Let a pending apply rejection report its bounded protocol failure first.
       // Render errors after ready still close the local presentation channel.

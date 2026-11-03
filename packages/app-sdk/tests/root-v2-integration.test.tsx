@@ -558,3 +558,41 @@ test("shared page hook retains live callbacks across appearance updates and reti
   expect(old("add")).toBe(false);
   expect(screen.getByTestId("page-count").textContent).toBe("2");
 });
+test("invalid page metadata after ready closes the real bridge", async () => {
+  const w = windows();
+  const failed = vi.fn();
+  const host = createBridgeHost({
+    localWindow: w.host,
+    frameWindow: w.child,
+    binding,
+    presentation,
+    capabilities: [],
+    onFailure: failed,
+  });
+  disposals.push(() => host.close());
+  function InvalidPage() {
+    useAppPage({ title: "unsafe\nmetadata", actions: [] });
+    return null;
+  }
+  function Toggle() {
+    const [invalid, setInvalid] = useState(false);
+    return invalid ? (
+      <InvalidPage />
+    ) : (
+      <button onClick={() => setInvalid(true)}>Invalidate</button>
+    );
+  }
+  render(
+    <AppRoot
+      localWindow={w.child}
+      parentWindow={w.host}
+      parentOrigin="https://portal.example.invalid"
+    >
+      <Toggle />
+    </AppRoot>,
+  );
+  await waitFor(() => expect(host.state()).toBe("ready"));
+  act(() => screen.getByRole("button", { name: "Invalidate" }).click());
+  await waitFor(() => expect(host.state()).toBe("failed"));
+  expect(failed).toHaveBeenCalledWith("presentation_failed");
+});

@@ -19,6 +19,7 @@ import {
 const control = vi.hoisted(() => ({
   options: null as BridgeClientOptions | null,
   close: vi.fn(),
+  reportFailure: vi.fn(() => true),
   request: vi.fn(),
   measure: vi.fn(() => true),
   draft: vi.fn(() => true),
@@ -29,6 +30,7 @@ vi.mock("../src/bridge-v2", async (original) => ({
     control.options = options;
     return {
       close: control.close,
+      reportFailure: control.reportFailure,
       requestBackend: control.request,
       reportDocumentHeight: control.measure,
       setDraftDirty: control.draft,
@@ -63,6 +65,7 @@ const context = {
 };
 beforeEach(() => {
   control.close.mockClear();
+  control.reportFailure.mockClear();
   control.request.mockReset();
   control.measure.mockClear();
   control.options = null;
@@ -349,6 +352,7 @@ test("invalid page metadata fails closed before committed content or host contro
   });
   await expect(promise!).rejects.toThrow("Presentation cancelled");
   expect(failed).toHaveBeenCalledWith("presentation_failed");
+  expect(control.reportFailure).toHaveBeenCalledWith("presentation_failed");
   expect(screen.queryByText("private page content")).toBeNull();
   expect(view.container.textContent).toContain(
     "应用连接已中断，请重新打开。",
