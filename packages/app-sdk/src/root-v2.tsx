@@ -23,6 +23,8 @@ import {
   type BridgeBackendRequest,
   type BridgeBackendResponse,
   AppNetworkError,
+  type BridgeNetworkStreamOptions,
+  type BridgeNetworkStreamResult,
   encodeNetworkBody,
   decodeNetworkBody,
   type NetworkRequest as WireNetworkRequest,
@@ -81,14 +83,31 @@ export interface AppNetworkResponse {
   readonly contentType: string;
   readonly body: Uint8Array;
 }
+export interface AppNetworkStreamOptions {
+  readonly signal?: AbortSignal;
+  readonly onStart?: (
+    status: number,
+    contentType: string,
+  ) => void | Promise<void>;
+  readonly onChunk?: (
+    data: Uint8Array,
+    sequence: number,
+  ) => void | Promise<void>;
+}
 export interface AppNetwork {
   readonly available: boolean;
+  readonly streamAvailable: boolean;
   readonly credentialAvailable: boolean;
   readonly ready: boolean;
+  readonly streamReady: boolean;
   request(
     value: AppNetworkRequest,
     signal?: AbortSignal,
   ): Promise<AppNetworkResponse>;
+  stream(
+    value: AppNetworkRequest,
+    options?: AppNetworkStreamOptions,
+  ): Promise<BridgeNetworkStreamResult>;
 }
 const NetworkContext = createContext<AppNetwork | null>(null);
 export function useAppNetwork(): AppNetwork {
@@ -303,6 +322,10 @@ interface Pending extends AppPresentation {
     value: WireNetworkRequest,
     signal?: AbortSignal,
   ): Promise<WireNetworkResponse>;
+  requestNetworkStream(
+    value: WireNetworkRequest,
+    options?: BridgeNetworkStreamOptions,
+  ): Promise<BridgeNetworkStreamResult>;
   requestReports(
     value: BridgeReportRequest,
     signal?: AbortSignal,
@@ -396,6 +419,7 @@ export function AppRoot({
             value: WireNetworkRequest,
             signal?: AbortSignal,
           ) => Promise<WireNetworkResponse>;
+          requestNetworkStream: Pending["requestNetworkStream"];
           requestReports: (
             value: BridgeReportRequest,
             signal?: AbortSignal,
@@ -507,6 +531,16 @@ export function AppRoot({
                     : signal,
                 );
               },
+              requestNetworkStream: (value, options = {}) => {
+                if (!active || stopped || !connection || signal.aborted)
+                  return Promise.reject(new AppNetworkError("not_ready"));
+                return connection.requestNetworkStream(value, {
+                  ...options,
+                  signal: options.signal
+                    ? AbortSignal.any([signal, options.signal])
+                    : signal,
+                });
+              },
               requestReports: (value, requestSignal) => {
                 if (!active || stopped || !connection || signal.aborted)
                   return Promise.reject(new BridgeReportError("not_ready"));
@@ -566,6 +600,7 @@ export function AppRoot({
             describePage: backendForSignal.page,
             requestBackend: backendForSignal.request,
             requestNetwork: backendForSignal.requestNetwork,
+            requestNetworkStream: backendForSignal.requestNetworkStream,
             requestReports: backendForSignal.requestReports,
             requestObjects: backendForSignal.requestObjects,
             requestNotifications: backendForSignal.requestNotifications,
@@ -841,54 +876,70 @@ function PresentationFrame({
   );
   const networkAvailable =
     pending.context.capabilities.includes("network.http");
+  const networkStreamAvailable =
+    pending.context.capabilities.includes("network.stream");
   const networkCredentialAvailable =
     pending.context.capabilities.includes("secrets.use");
   const network = useMemo<AppNetwork>(
     () => {
+      const wireRequest = (value: AppNetworkRequest): WireNetworkRequest => {
+        if (value.credential !== undefined && !networkCredentialAvailable)
+          throw new AppNetworkError("unsupported");
+        if (value.body !== undefined && !(value.body instanceof Uint8Array))
+          throw new AppNetworkError("invalid_request");
+        const body = value.body ?? new Uint8Array();
+        return {
+          method: value.method,
+          url: value.url,
+          accept: value.accept ?? "application/json",
+          contentType:
+            value.contentType ??
+            (body.byteLength > 0 ? "application/octet-stream" : ""),
+          bodyBase64: encodeNetworkBody(body),
+          ...(value.credential === undefined
+            ? {}
+            : { credential: value.credential }),
+        };
+      };
       return Object.freeze({
         available: networkAvailable,
+        streamAvailable: networkStreamAvailable,
         credentialAvailable: networkCredentialAvailable,
         ready: backendReady && networkAvailable,
+        streamReady: backendReady && networkStreamAvailable,
         request: async (
           value: AppNetworkRequest,
           signal?: AbortSignal,
         ) => {
           if (!networkAvailable) throw new AppNetworkError("unsupported");
-          if (value.credential !== undefined && !networkCredentialAvailable)
-            throw new AppNetworkError("unsupported");
           if (!backendReady || pending.signal.aborted)
             throw new AppNetworkError("not_ready");
-          if (value.body !== undefined && !(value.body instanceof Uint8Array))
-            throw new AppNetworkError("invalid_request");
-          const body = value.body ?? new Uint8Array();
-          const response = await pending.requestNetwork(
-            {
-              method: value.method,
-              url: value.url,
-              accept: value.accept ?? "application/json",
-              contentType:
-                value.contentType ??
-                (body.byteLength > 0 ? "application/octet-stream" : ""),
-              bodyBase64: encodeNetworkBody(body),
-              ...(value.credential === undefined
-                ? {}
-                : { credential: value.credential }),
-            },
-            signal,
-          );
+          const response = await pending.requestNetwork(wireRequest(value), signal);
           return Object.freeze({
             status: response.status,
             contentType: response.contentType,
             body: decodeNetworkBody(response.bodyBase64),
           });
         },
+        stream: async (
+          value: AppNetworkRequest,
+          options: AppNetworkStreamOptions = {},
+        ) => {
+          if (!networkStreamAvailable)
+            throw new AppNetworkError("unsupported");
+          if (!backendReady || pending.signal.aborted)
+            throw new AppNetworkError("not_ready");
+          return pending.requestNetworkStream(wireRequest(value), options);
+        },
       });
     },
     [
       networkAvailable,
+      networkStreamAvailable,
       networkCredentialAvailable,
       backendReady,
       pending.requestNetwork,
+      pending.requestNetworkStream,
       pending.signal,
     ],
   );

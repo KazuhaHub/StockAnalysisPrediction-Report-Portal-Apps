@@ -250,3 +250,113 @@ test("useAppNetwork is unavailable without the exact host grant", async () => {
     }),
   ).rejects.toMatchObject({ code: "unsupported", retryable: false });
 });
+
+test("useAppNetwork streams ordered bytes through the exact host grant", async () => {
+  const w = windows();
+  const dispatch = vi.fn(async (
+    _request,
+    _signal,
+    emit: Parameters<NonNullable<Parameters<typeof createBridgeHost>[0]["onNetworkStreamRequest"]>>[2],
+  ) => {
+    await emit({ type: "start", status: 206, contentType: "application/x-ndjson" });
+    await emit({ type: "chunk", sequence: 1, bodyBase64: "AQID" });
+    await emit({ type: "end", sequence: 1, bytes: 3, sha256: "a".repeat(64) });
+  });
+  const host = createBridgeHost({
+    localWindow: w.host,
+    frameWindow: w.child,
+    binding,
+    presentation,
+    capabilities: ["network.stream"],
+    onNetworkStreamRequest: dispatch,
+  });
+  disposals.push(() => host.close());
+  let observed: ReturnType<typeof useAppNetwork> | undefined;
+  function NetworkApp() {
+    observed = useAppNetwork();
+    return null;
+  }
+  render(
+    <AppRoot
+      localWindow={w.child}
+      parentWindow={w.host}
+      parentOrigin="https://portal.example.invalid"
+    >
+      <NetworkApp />
+    </AppRoot>,
+  );
+  await waitFor(() => expect(host.state()).toBe("ready"));
+  expect(observed).toMatchObject({
+    streamAvailable: true,
+    streamReady: true,
+    available: false,
+  });
+  const chunks: number[] = [];
+  let start: [number, string] | undefined;
+  await act(async () => {
+    const result = await observed!.stream(
+      {
+        method: "POST",
+        url: "https://api.example.com/v1/stream",
+        accept: "application/x-ndjson",
+        body: new Uint8Array([1]),
+      },
+      {
+        onStart(status, contentType) {
+          start = [status, contentType];
+        },
+        onChunk(data) {
+          chunks.push(...data);
+        },
+      },
+    );
+    expect(result).toMatchObject({ status: 206, bytes: 3, frames: 1 });
+  });
+  expect(start).toEqual([206, "application/x-ndjson"]);
+  expect(chunks).toEqual([1, 2, 3]);
+  expect(dispatch.mock.calls[0][0]).toMatchObject({
+    method: "POST",
+    url: "https://api.example.com/v1/stream",
+    accept: "application/x-ndjson",
+    bodyBase64: "AQ==",
+  });
+});
+
+test("useAppNetwork stream stays unavailable without network.stream", async () => {
+  const w = windows();
+  const host = createBridgeHost({
+    localWindow: w.host,
+    frameWindow: w.child,
+    binding,
+    presentation,
+    capabilities: ["network.http"],
+    onNetworkRequest: vi.fn(),
+  });
+  disposals.push(() => host.close());
+  let observed: ReturnType<typeof useAppNetwork> | undefined;
+  function NetworkApp() {
+    observed = useAppNetwork();
+    return null;
+  }
+  render(
+    <AppRoot
+      localWindow={w.child}
+      parentWindow={w.host}
+      parentOrigin="https://portal.example.invalid"
+    >
+      <NetworkApp />
+    </AppRoot>,
+  );
+  await waitFor(() => expect(host.state()).toBe("ready"));
+  expect(observed).toMatchObject({
+    available: true,
+    streamAvailable: false,
+    streamReady: false,
+  });
+  await expect(
+    observed!.stream({
+      method: "GET",
+      url: "https://api.example.com/v1/stream",
+    }),
+  ).rejects.toMatchObject({ code: "unsupported", retryable: false });
+});
