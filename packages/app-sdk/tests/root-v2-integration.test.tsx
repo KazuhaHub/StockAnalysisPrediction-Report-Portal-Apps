@@ -2,7 +2,12 @@ import { MessageChannel as NodeMessageChannel } from "node:worker_threads";
 import { useEffect, useState, StrictMode } from "react";
 import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { createBridgeHost, type BridgePresentation } from "../src/bridge-v2";
+import {
+  BridgeBackendError,
+  createBridgeClient,
+  createBridgeHost,
+  type BridgePresentation,
+} from "../src/bridge-v2";
 import {
   AppRoot,
   useAppPresentation,
@@ -260,6 +265,78 @@ test("real React backend hook waits for ready and presentation changes do not re
     expect(screen.getByRole("button").textContent).toBe("zh-TW/2"),
   );
   expect(dispatch).toHaveBeenCalledTimes(2);
+});
+
+test("generated app harness closes changed OU, retired bridge and missing runtime", async () => {
+  let requestBackend:
+    | ((request: {
+        method: "GET" | "POST" | "PUT" | "DELETE";
+        path: string;
+        body: string;
+      }) => Promise<{ status: number; body: string }>)
+    | undefined;
+  const first = windows();
+  const host = createBridgeHost({
+    localWindow: first.host,
+    frameWindow: first.child,
+    binding,
+    presentation,
+    capabilities: [],
+    onBackendRequest: async () => {
+      throw new BridgeBackendError("unavailable");
+    },
+  });
+  disposals.push(() => host.close());
+  function App() {
+    const backend = useAppBackend();
+    requestBackend = backend.request;
+    return <span>{backend.ready ? "ready" : "waiting"}</span>;
+  }
+  const view = render(
+    <AppRoot
+      localWindow={first.child}
+      parentWindow={first.host}
+      parentOrigin="https://portal.example.invalid"
+    >
+      <App />
+    </AppRoot>,
+  );
+  await waitFor(() =>
+    expect(screen.getByText("ready")).toBeTruthy(),
+  );
+  await expect(
+    requestBackend!({ method: "GET", path: "/v1/me", body: "" }),
+  ).rejects.toMatchObject({ code: "unavailable", retryable: false });
+  host.close();
+  view.unmount();
+  await expect(
+    requestBackend!({ method: "GET", path: "/v1/me", body: "" }),
+  ).rejects.toMatchObject({ code: "not_ready", retryable: false });
+
+  const second = windows();
+  const missing = createBridgeHost({
+    localWindow: second.host,
+    frameWindow: second.child,
+    binding: { ...binding, installationId: "00000000-0000-0000-0000-000000000002" },
+    presentation,
+    capabilities: [],
+  });
+  disposals.push(() => missing.close());
+  const missingClient = createBridgeClient({
+    localWindow: second.child,
+    parentWindow: second.host,
+    parentOrigin: "https://portal.example.invalid",
+    onPresentation: () => {},
+  });
+  disposals.push(() => missingClient.close());
+  await waitFor(() => expect(missing.state()).toBe("ready"));
+  await expect(
+    missingClient.requestBackend({
+      method: "GET",
+      path: "/v1/me",
+      body: "",
+    }),
+  ).rejects.toMatchObject({ code: "unsupported", retryable: false });
 });
 
 test("draft hook aggregates forms, survives presentation changes and retires owners", async () => {
