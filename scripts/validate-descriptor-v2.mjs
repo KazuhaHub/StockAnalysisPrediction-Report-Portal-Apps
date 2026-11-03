@@ -7,7 +7,9 @@ import { execFileSync } from "node:child_process";
 import { build } from "vite";
 const output = await mkdtemp(join(tmpdir(), "portal-descriptor-check-"));
 try {
-  if (process.argv.length !== 3) throw new Error();
+  const args = process.argv.slice(2);
+  if (args.length !== 1 && !(args.length === 2 && args[0] === "--corpus"))
+    throw new Error();
   await build({
     configFile: false,
     logLevel: "error",
@@ -20,7 +22,7 @@ try {
       rollupOptions: { output: { format: "cjs", entryFileNames: "check.cjs" } },
     },
   });
-  execFileSync(process.execPath, [join(output, "check.cjs"), process.argv[2]], {
+  execFileSync(process.execPath, [join(output, "check.cjs"), ...args], {
     stdio: "inherit",
   });
 } catch {

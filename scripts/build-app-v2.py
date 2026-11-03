@@ -26,6 +26,11 @@ def validate_descriptor(raw):
         subprocess.run(['node', str(ROOT / 'scripts/validate-descriptor-v2.mjs'), str(path)], cwd=ROOT, check=True)
 
 
+def validate_descriptor_corpus(path=None):
+    corpus = Path(path) if path is not None else ROOT / 'packages/app-sdk/tests/fixtures/descriptor-v2.json'
+    subprocess.run(['node', str(ROOT / 'scripts/validate-descriptor-v2.mjs'), '--corpus', str(corpus)], cwd=ROOT, check=True)
+
+
 def package_frontend(app_id, output, root=ROOT, validator=validate_descriptor):
     app = authoring.app_folder(root, app_id)
     if (app / 'app.json').exists():

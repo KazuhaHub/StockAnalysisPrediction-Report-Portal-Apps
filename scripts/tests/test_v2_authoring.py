@@ -143,5 +143,8 @@ class V2PackagingTests(unittest.TestCase):
         with self.assertRaises(ValueError):self.candidate()
         self.assertFalse((self.root/'one').exists())
 
+    def test_package_validator_consumes_the_shared_descriptor_corpus(self):
+        self.builder.validate_descriptor_corpus()
+
 if __name__ == '__main__':
     unittest.main()
