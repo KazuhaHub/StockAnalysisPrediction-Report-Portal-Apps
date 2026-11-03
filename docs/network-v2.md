@@ -67,6 +67,49 @@ server-side. A caller's AbortSignal is combined with the presentation lifetime.
 Unmount, channel replacement, capability change or presentation retirement
 rejects old closures.
 
+## Read an approved response stream
+
+`network.stream` is a separate grant and cannot use a `network.http` policy.
+Consume it through `network.stream()` so the host retains session, target and
+credential authority:
+
+```tsx
+const decoder = new TextDecoder('utf-8', { fatal: true });
+let text = '';
+await network.stream(
+  {
+    method: 'GET',
+    url: 'https://status.example.com/v1/events',
+    accept: 'application/x-ndjson',
+    contentType: '',
+  },
+  {
+    signal: abort.signal,
+    onStart(status, contentType) {
+      if (status !== 200 || contentType !== 'application/x-ndjson')
+        throw new Error('Unexpected stream');
+    },
+    async onChunk(data) {
+      text += decoder.decode(data, { stream: true });
+    },
+  },
+);
+text += decoder.decode();
+```
+
+The reviewed stream is limited to ordinary HTTPS GET/POST responses. WebSocket,
+CONNECT, protocol upgrades and arbitrary tunnels are unavailable. The host
+accepts only the reviewed media types, 32 KiB ordered frames, 4 MiB total,
+30-second duration and 15-second idle interval. `onChunk` may return a promise;
+the next frame is not read until it resolves, which provides backpressure through
+the bridge, Portal, runner and upstream connection.
+
+The result is `{status, contentType, bytes, frames}` after the end digest has
+matched. Closing the app, aborting the signal, replacing the presentation or
+revoking the grant or credential stops future frames. Missing, repeated,
+oversized or digest-drifted frames are `uncertain`; never resume or retry that
+same stream implicitly.
+
 ## Failure semantics
 
 Errors are `AppNetworkError` values with `not_ready`, `unsupported`,
