@@ -70,12 +70,13 @@
   "capabilities": {
     "required": [
       "background.run",
-      "network.http",
       "reports.read",
       "secrets.use",
       "tasks.schedule"
     ],
-    "optional": []
+    "optional": [
+      "network.http"
+    ]
   },
   "data": {
     "schema": 1,
