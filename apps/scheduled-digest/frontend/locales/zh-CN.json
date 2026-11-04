@@ -1,0 +1,21 @@
+{
+  "title": "定时摘要",
+  "description": "来自独立应用后端的后台摘要结果",
+  "historyTitle": "摘要历史",
+  "refresh": "刷新",
+  "history": "历史",
+  "home": "摘要",
+  "backendUnavailable": "应用后端不可用。",
+  "loading": "正在加载摘要状态",
+  "empty": "尚未完成任何摘要。",
+  "itemCount": "摘要项目",
+  "occurrence": "任务标识",
+  "generated": "生成时间",
+  "digest": "摘要",
+  "feedTitle": "已审核数据源",
+  "feedHint": "凭据值只保留在 Portal 内，跨桥接的仅是绑定名称。",
+  "checkFeed": "检查已配置数据源",
+  "feedReady": "已审核数据源响应正常。",
+  "feedFailed": "已审核数据源不可用。",
+  "unavailable": "摘要状态不可用。"
+}

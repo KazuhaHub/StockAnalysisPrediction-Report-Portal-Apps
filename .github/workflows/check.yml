@@ -59,6 +59,30 @@ jobs:
       - run: go vet ./...
       - run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
       - run: go test -race ./...
+  scheduled-digest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: apps/scheduled-digest/service/go.mod
+          cache: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: npm ci
+      - run: go vet ./...
+        working-directory: apps/scheduled-digest/service
+      - run: go test -race ./...
+        working-directory: apps/scheduled-digest/service
+      - run: npm run typecheck --workspace=apps/scheduled-digest/frontend
+      - run: npm test --workspace=apps/scheduled-digest/frontend
+      - run: python3 scripts/plugin-standard.py
+      - run: python3 scripts/build-app-v2.py scheduled-digest --output "$RUNNER_TEMP/scheduled-digest-candidate"
+      - run: docker build -f apps/scheduled-digest/service/Dockerfile -t scheduled-digest-development .
   status:
     runs-on: ubuntu-latest
     steps:
