@@ -38,3 +38,17 @@ examples, error/retry behavior and review/acceptance boundaries.
 Read [the full standard](../../docs/plugin-development-standard.md) before adding
 permissions, UI flows or publication logic. SDK usage is necessary but not sufficient
 for app security or usability: each app retains its own integration/negative tests.
+
+## Experimental v2 React root
+
+`@portal-app/sdk/root-v2` supplies `AppRoot`, `useAppPresentation`,
+`useAppBackend`, `useAppNetwork`, `useAppReports` and `useAppObjects` for isolated v2 host
+development. It applies host locale/theme/timezone through React/Ant and
+acknowledges only after layout commit. Request hooks expose only capabilities
+and channels advertised by the current host connection; they grant no authority.
+Read
+[the root contract](../../docs/root-v2.md),
+[own-backend client](../../docs/backend-v2.md), and
+[reviewed network client](../../docs/network-v2.md) and
+[current-viewer reports client](../../docs/reports-v2.md) and
+[application object client](../../docs/objects-v2.md) for boundaries and tests.

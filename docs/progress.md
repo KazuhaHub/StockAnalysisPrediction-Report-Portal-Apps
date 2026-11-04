@@ -642,6 +642,34 @@ Production activation still needs matching new artifacts and pairing. Retained
 older candidate bytes do not contain this new capability.
 See [the local socket runbook](../apps/status/docs/postgresql-local-socket.md).
 
+## Scheduled Digest managed reference app (2026-11-04)
+
+Added `apps/scheduled-digest` as the second neutral v2 reference application. The
+shared React/Ant frontend reads persisted current-viewer digest state, supports
+the registered history route and uses the reviewed-network path with only the
+`digest-feed` credential binding name when both optional grants are present.
+
+The independent Go service:
+
+- serves readiness and current digest state;
+- accepts only `POST /v1/tasks/digest`;
+- validates the current app, installation, generation, policy, release, issue
+  time and required `reports.read`/`tasks.schedule` service resources;
+- persists bounded runs under the application data mount; and
+- returns the original result for duplicate task identity and refuses changed
+  task/occurrence/payload identity.
+
+The dedicated CI job runs Go vet/race tests, frontend typecheck/tests, the shared
+plugin standard, deterministic v2 package generation and a Docker build. Apps
+commit `f274e06` passed this job in check `41794178889`, job `126454249393`.
+Portal commit `998dcd0a` passed the real managed native handler matrix in quota
+run `41801011370` with `native_scheduled_digest_handler=true`.
+
+The native Portal matrix installs the exact Apps frontend candidate and uses a
+contract-compatible ready backend. Installing the exact Scheduled Digest service
+image in a neutral clean-market two-app walkthrough remains open, together with
+production deployment and update-generation service-task variants.
+
 
 ## Shared frontend standard and React migration candidate
 

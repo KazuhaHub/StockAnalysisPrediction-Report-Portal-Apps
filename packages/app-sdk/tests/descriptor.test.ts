@@ -36,6 +36,6 @@ test("oversized input fails with a bounded safe error", () => {
 test("shared corpus bytes match the host contract revision", () => {
   const bytes = corpusBytes;
   expect(createHash("sha256").update(bytes).digest("hex")).toBe(
-    "16128f031fd71d83429db6a4209f8cfb02e5209b7c4f76a202c5dda1a00d929e",
+    "fd840edca492f2e0a1ffab89b13ae0da8c626ccd7a24860f8b7f1c8a0c39e3ec",
   );
 });

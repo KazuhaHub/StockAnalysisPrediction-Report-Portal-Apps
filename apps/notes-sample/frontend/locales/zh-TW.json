@@ -1,0 +1,23 @@
+{
+  "title": "筆記",
+  "description": "僅目前 Portal 帳號可見的私人筆記",
+  "newNote": "新增筆記",
+  "save": "儲存",
+  "home": "返回筆記",
+  "open": "開啟",
+  "delete": "刪除筆記",
+  "deleteConfirm": "永久刪除這則筆記？",
+  "deleteYes": "刪除",
+  "deleteNo": "保留",
+  "draft": "筆記",
+  "draftHelp": "重新整理後仍可讀取；解除安裝應用程式會清空筆記，重新安裝後從空白開始。",
+  "untitled": "無標題筆記",
+  "emptyList": "尚無筆記",
+  "unavailable": "筆記儲存空間不可用",
+  "loading": "正在載入筆記",
+  "saveFailed": "無法儲存這則筆記",
+  "deleteFailed": "無法刪除這則筆記",
+  "conflict": "筆記已在其他分頁變更，請重新開啟後再儲存。",
+  "storageFull": "筆記儲存空間已滿",
+  "uncertain": "結果不確定，請重新開啟筆記後再試。"
+}

@@ -1,0 +1,8 @@
+/* The host gives the editor route a fixed viewport; only the editor scrolls. */
+.notes-editor {
+  box-sizing: border-box;
+  height: 100%;
+  min-height: 0;
+  overflow-y: auto;
+  padding-inline-end: 4px;
+}
