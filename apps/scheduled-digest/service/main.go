@@ -46,6 +46,14 @@ type taskRequest struct {
 	Payload      json.RawMessage `json:"payload"`
 }
 
+type taskResponse struct {
+	Format         string          `json:"format"`
+	Outcome        string          `json:"outcome"`
+	ErrorCode      string          `json:"error_code,omitempty"`
+	Result         json.RawMessage `json:"result,omitempty"`
+	EvidenceSHA256 string          `json:"evidence_sha256,omitempty"`
+}
+
 type digestRun struct {
 	OccurrenceID string `json:"occurrenceId"`
 	GeneratedAt  string `json:"generatedAt"`
@@ -501,15 +509,15 @@ func strictJSON(raw []byte, target any) error {
 }
 
 func taskSuccess(w http.ResponseWriter, result json.RawMessage, evidence string) {
-	writeJSON(w, http.StatusOK, map[string]any{
-		"format": taskResponseFormat, "outcome": "succeeded",
-		"result": result, "evidence_sha256": evidence,
+	writeJSON(w, http.StatusOK, taskResponse{
+		Format: taskResponseFormat, Outcome: "succeeded",
+		Result: result, EvidenceSHA256: evidence,
 	})
 }
 
 func taskFailure(w http.ResponseWriter, code string) {
-	writeJSON(w, http.StatusOK, map[string]any{
-		"format": taskResponseFormat, "outcome": "failed", "error_code": code,
+	writeJSON(w, http.StatusOK, taskResponse{
+		Format: taskResponseFormat, Outcome: "failed", ErrorCode: code,
 	})
 }
 

@@ -112,6 +112,7 @@ func TestDigestTaskIsIdempotentAndBoundToServiceAuthority(t *testing.T) {
 		!strings.Contains(first.Body.String(), `"itemCount":2`) {
 		t.Fatalf("first digest = %d %s", first.Code, first.Body.String())
 	}
+	requireCanonicalTaskResponse(t, first.Body.Bytes())
 	reopened := newDigestStore(app.store.path).snapshot()
 	if reopened.LastRun == nil ||
 		reopened.LastRun.OccurrenceID != "digest:2026-11-03" ||
@@ -128,6 +129,7 @@ func TestDigestTaskIsIdempotentAndBoundToServiceAuthority(t *testing.T) {
 	if !strings.Contains(changed.Body.String(), `"error_code":"digest_identity_conflict"`) {
 		t.Fatalf("changed digest identity = %s", changed.Body.String())
 	}
+	requireCanonicalTaskResponse(t, changed.Body.Bytes())
 	denied := run(body, testIdentity([]string{"tasks.schedule"}, now))
 	if !strings.Contains(denied.Body.String(), `"error_code":"digest_authority_invalid"`) {
 		t.Fatalf("missing report authority = %s", denied.Body.String())
@@ -323,4 +325,16 @@ func mustRegistrationJSON(t *testing.T, registration backendRegistration) []byte
 		t.Fatal(err)
 	}
 	return raw
+}
+
+func requireCanonicalTaskResponse(t *testing.T, raw []byte) {
+	t.Helper()
+	var response taskResponse
+	if strictJSON(raw, &response) != nil {
+		t.Fatalf("task response is not closed JSON: %s", raw)
+	}
+	canonical, err := json.Marshal(response)
+	if err != nil || !bytes.Equal(canonical, raw) {
+		t.Fatalf("task response is not canonical: %s", raw)
+	}
 }
