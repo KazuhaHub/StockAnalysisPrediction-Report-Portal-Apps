@@ -10,13 +10,16 @@ publish an image.
 The signed descriptor requires:
 
 - `background.run`;
+- `network.http`;
 - `reports.read`;
 - `secrets.use`; and
 - `tasks.schedule`.
 
-`network.http` is optional. When an administrator reviews a destination and a
-credential binding named `digest-feed`, the frontend can exercise the shared
-reviewed-network path. The credential value never enters the application.
+The required `digest-feed` credential binding completes business setup. An
+administrator reviews its destination and credential binding, the frontend can
+exercise the shared reviewed-network path, and scheduled work remains paused
+until that binding is active. The credential value never enters the
+application.
 
 The backend receives no viewer identity for scheduled work. Portal admits only
 the app-bound `scheduled-digest.run` handler and sends the fixed
