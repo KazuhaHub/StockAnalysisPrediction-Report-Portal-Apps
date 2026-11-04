@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -15,6 +16,8 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	protocol "github.com/KazuhaHub/StockAnalysisPrediction-Report-Portal-Apps/packages/extensionprotocol"
 )
 
 const (
@@ -78,13 +81,40 @@ type backendRegistration struct {
 	Format   string `json:"format"`
 	Metadata struct {
 		Identity struct {
-			AppID          string `json:"app_id"`
-			InstallationID string `json:"installation_id"`
-			Generation     string `json:"generation"`
-			PolicyRevision string `json:"policy_revision"`
-			ReleaseSHA256  string `json:"release_sha256"`
+			AppID           string `json:"app_id"`
+			DeploymentID    string `json:"deployment_id"`
+			ControllerEpoch string `json:"controller_epoch"`
+			InstallationID  string `json:"installation_id"`
+			Generation      string `json:"generation"`
+			PolicyRevision  string `json:"policy_revision"`
+			ReleaseSHA256   string `json:"release_sha256"`
 		} `json:"identity"`
+		InstanceID string `json:"instance_id"`
+		KeyID      string `json:"key_id"`
 	} `json:"metadata"`
+	Key []byte `json:"signing_key"`
+}
+
+func (r backendRegistration) signer(bootID string) (protocol.Signer, error) {
+	if r.Format != backendRegistrationFmt ||
+		r.Metadata.Identity.AppID != applicationID ||
+		r.Metadata.Identity.DeploymentID == "" ||
+		r.Metadata.Identity.InstallationID == "" ||
+		r.Metadata.InstanceID == "" ||
+		r.Metadata.KeyID == "" ||
+		len(r.Key) != 32 ||
+		bootID == "" || len(bootID) > 128 {
+		return protocol.Signer{}, errors.New("registration identity changed")
+	}
+	return protocol.Signer{
+		Issuer:     "portal.app/" + r.Metadata.Identity.DeploymentID,
+		Audience:   "portal.app/" + r.Metadata.Identity.InstallationID,
+		AppID:      r.Metadata.Identity.AppID,
+		InstanceID: r.Metadata.InstanceID,
+		BootID:     bootID,
+		KeyID:      r.Metadata.KeyID,
+		Key:        bytes.Clone(r.Key),
+	}, nil
 }
 
 type digestStore struct {
@@ -219,10 +249,13 @@ func (s *digestStore) persist() error {
 type application struct {
 	store        *digestStore
 	registration string
+	bootID       string
 }
 
 func (a application) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch {
+	case r.Method == http.MethodPost && r.URL.Path == "/v1/handshake":
+		a.handleHandshake(w, r)
 	case r.Method == http.MethodGet && r.URL.Path == "/health/ready":
 		if r.URL.RawQuery != "" || r.Header.Get("Authorization") != "" ||
 			r.Header.Get("Cookie") != "" {
@@ -244,6 +277,51 @@ func (a application) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	default:
 		http.NotFound(w, r)
 	}
+}
+
+func (a application) handleHandshake(w http.ResponseWriter, r *http.Request) {
+	if r.URL.RawQuery != "" || r.Header.Get("Cookie") != "" ||
+		r.Header.Get("Authorization") != "" ||
+		r.Header.Get("Content-Type") != "application/json" {
+		http.Error(w, "refused", http.StatusBadRequest)
+		return
+	}
+	raw, err := io.ReadAll(io.LimitReader(r.Body, maxResultBody+1))
+	if err != nil || len(raw) == 0 || len(raw) > maxResultBody {
+		http.Error(w, "refused", http.StatusBadRequest)
+		return
+	}
+	var request struct {
+		Challenge string `json:"challenge"`
+	}
+	if strictJSON(raw, &request) != nil || request.Challenge == "" ||
+		len(request.Challenge) > 4096 {
+		http.Error(w, "refused", http.StatusBadRequest)
+		return
+	}
+	registrationPath := a.registration
+	if registrationPath == "" {
+		registrationPath = "/run/portal-app/broker/registration.json"
+	}
+	registration, err := loadRegistration(registrationPath)
+	defer clear(registration.Key)
+	if err != nil {
+		http.Error(w, "refused", http.StatusServiceUnavailable)
+		return
+	}
+	signer, err := registration.signer(a.bootID)
+	if err != nil {
+		http.Error(w, "refused", http.StatusServiceUnavailable)
+		return
+	}
+	defer clear(signer.Key)
+	answer, err := signer.AnswerChallenge(
+		request.Challenge, a.bootID, time.Now())
+	if err != nil {
+		http.Error(w, "refused", http.StatusBadRequest)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"answer": answer})
 }
 
 func (a application) handleTask(w http.ResponseWriter, r *http.Request) {
@@ -270,6 +348,7 @@ func (a application) handleTask(w http.ResponseWriter, r *http.Request) {
 		registrationPath = "/run/portal-app/broker/registration.json"
 	}
 	registration, err := loadRegistration(registrationPath)
+	defer clear(registration.Key)
 	if err != nil || validateServiceIdentity(
 		r.Header.Get("X-Portal-Service-Identity"), registration) != nil {
 		taskFailure(w, "digest_authority_invalid")
@@ -305,12 +384,36 @@ func loadRegistration(path string) (backendRegistration, error) {
 	var registration backendRegistration
 	raw, err := os.ReadFile(path)
 	if err != nil || len(raw) == 0 || len(raw) > 4096 {
+		clear(registration.Key)
 		return registration, errors.New("registration unavailable")
 	}
-	if json.Unmarshal(raw, &registration) != nil ||
+	defer clear(raw)
+	if strictJSON(raw, &registration) != nil ||
 		registration.Format != backendRegistrationFmt ||
-		registration.Metadata.Identity.AppID != applicationID {
+		registration.Metadata.Identity.AppID != applicationID ||
+		registration.Metadata.Identity.InstallationID == "" ||
+		registration.Metadata.Identity.DeploymentID == "" ||
+		registration.Metadata.Identity.ControllerEpoch == "" ||
+		registration.Metadata.Identity.Generation == "" ||
+		registration.Metadata.Identity.PolicyRevision == "" ||
+		len(registration.Metadata.Identity.ReleaseSHA256) != 64 ||
+		registration.Metadata.InstanceID == "" ||
+		registration.Metadata.KeyID == "" ||
+		len(registration.Key) != 32 {
+		clear(registration.Key)
 		return backendRegistration{}, errors.New("registration changed")
+	}
+	canonical, err := json.Marshal(registration)
+	if err != nil || !bytes.Equal(canonical, raw) {
+		clear(canonical)
+		clear(registration.Key)
+		return backendRegistration{}, errors.New("registration not canonical")
+	}
+	clear(canonical)
+	digest := sha256.Sum256(registration.Key)
+	if hex.EncodeToString(digest[:]) != registration.Metadata.KeyID {
+		clear(registration.Key)
+		return backendRegistration{}, errors.New("registration key changed")
 	}
 	return registration, nil
 }
@@ -438,6 +541,10 @@ func main() {
 	if err := os.Chmod(socket, 0600); err != nil {
 		os.Exit(3)
 	}
+	var boot [16]byte
+	if _, err := rand.Read(boot[:]); err != nil {
+		os.Exit(5)
+	}
 	server := &http.Server{
 		ReadHeaderTimeout: time.Second,
 		ReadTimeout:       2 * time.Second,
@@ -446,6 +553,7 @@ func main() {
 		MaxHeaderBytes:    65536,
 		Handler: application{
 			store: newDigestStore(statePath), registration: registrationPath,
+			bootID: hex.EncodeToString(boot[:]),
 		},
 	}
 	if err := server.Serve(listener); err != nil {

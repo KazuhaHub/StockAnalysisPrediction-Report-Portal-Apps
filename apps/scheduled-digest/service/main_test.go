@@ -2,7 +2,10 @@ package main
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -21,13 +24,36 @@ const (
 	testRelease      = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 )
 
-func testApplication(t *testing.T) application {
+func testRegistration(t *testing.T) backendRegistration {
+	t.Helper()
+	key := bytes.Repeat([]byte{0x23}, 32)
+	sum := sha256.Sum256(key)
+	var registration backendRegistration
+	registration.Format = backendRegistrationFmt
+	registration.Metadata.Identity.AppID = applicationID
+	registration.Metadata.Identity.DeploymentID = "10000000-0000-4000-8000-000000000005"
+	registration.Metadata.Identity.ControllerEpoch = testEpoch
+	registration.Metadata.Identity.InstallationID = testInstallation
+	registration.Metadata.Identity.Generation = "1"
+	registration.Metadata.Identity.PolicyRevision = "1"
+	registration.Metadata.Identity.ReleaseSHA256 = testRelease
+	registration.Metadata.InstanceID = strings.Repeat("d", 64)
+	registration.Metadata.KeyID = hex.EncodeToString(sum[:])
+	registration.Key = key
+	return registration
+}
+
+func testApplication(t *testing.T) (application, backendRegistration) {
 	t.Helper()
 	root := t.TempDir()
-	registration := `{"format":"portal.managed-backend-registration/1-dev.1","metadata":{"identity":{"app_id":"scheduled-digest","installation_id":"` + testInstallation + `","deployment_id":"10000000-0000-4000-8000-000000000005","controller_epoch":"` + testEpoch + `","generation":"1","policy_revision":"1","release_sha256":"` + testRelease + `"},"instance_id":"instance","key_id":"key"},"signing_key":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="}`
+	registration := testRegistration(t)
+	raw, err := json.Marshal(registration)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(
 		filepath.Join(root, "registration.json"),
-		[]byte(registration), 0600); err != nil {
+		raw, 0600); err != nil {
 		t.Fatal(err)
 	}
 	store := newDigestStore(filepath.Join(root, "state.json"))
@@ -36,7 +62,8 @@ func testApplication(t *testing.T) application {
 	}
 	return application{
 		store: store, registration: filepath.Join(root, "registration.json"),
-	}
+		bootID: strings.Repeat("b", 32),
+	}, registration
 }
 
 func testIdentity(resources []string, now time.Time) string {
@@ -65,7 +92,7 @@ func taskBody(t *testing.T, payload string) []byte {
 }
 
 func TestDigestTaskIsIdempotentAndBoundToServiceAuthority(t *testing.T) {
-	app := testApplication(t)
+	app, _ := testApplication(t)
 	now := time.Now()
 	identity := testIdentity([]string{"reports.read", "tasks.schedule"}, now)
 	body := taskBody(t, `{"scheduleId":"daily","reportIds":[41,42]}`)
@@ -108,7 +135,7 @@ func TestDigestTaskIsIdempotentAndBoundToServiceAuthority(t *testing.T) {
 }
 
 func TestDigestStatusAndReadiness(t *testing.T) {
-	app := testApplication(t)
+	app, _ := testApplication(t)
 	health := httptest.NewRecorder()
 	app.ServeHTTP(
 		health,
@@ -128,4 +155,172 @@ func TestDigestStatusAndReadiness(t *testing.T) {
 		!strings.Contains(status.Body.String(), `"lastRun":null`) {
 		t.Fatalf("status = %d %s", status.Code, status.Body.String())
 	}
+}
+
+func TestHandshakeBindsRegistrationKeyAndBoot(t *testing.T) {
+	app, registration := testApplication(t)
+	defer clear(registration.Key)
+	signer, err := registration.signer(app.bootID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer clear(signer.Key)
+	challenge, err := signer.NewChallenge(time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := json.Marshal(map[string]string{"challenge": challenge})
+	request := httptest.NewRequest(
+		http.MethodPost, "http://portal-app.invalid/v1/handshake",
+		bytes.NewReader(body))
+	request.Header.Set("Content-Type", "application/json")
+	recorder := httptest.NewRecorder()
+	app.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("handshake = %d %s", recorder.Code, recorder.Body.String())
+	}
+	var response struct {
+		Answer string `json:"answer"`
+	}
+	if strictJSON(recorder.Body.Bytes(), &response) != nil ||
+		response.Answer == "" {
+		t.Fatalf("handshake answer = %s", recorder.Body.String())
+	}
+	bootID, err := signer.VerifyAnswer(challenge, response.Answer, time.Now())
+	if err != nil || bootID != app.bootID {
+		t.Fatalf("handshake boot = %q, %v", bootID, err)
+	}
+
+	wrong := signer
+	wrong.Key = bytes.Clone(signer.Key)
+	defer clear(wrong.Key)
+	wrong.Key[0] ^= 1
+	wrongChallenge, err := wrong.NewChallenge(time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	wrongBody, _ := json.Marshal(map[string]string{"challenge": wrongChallenge})
+	wrongRequest := httptest.NewRequest(
+		http.MethodPost, "http://portal-app.invalid/v1/handshake",
+		bytes.NewReader(wrongBody))
+	wrongRequest.Header.Set("Content-Type", "application/json")
+	wrongRecorder := httptest.NewRecorder()
+	app.ServeHTTP(wrongRecorder, wrongRequest)
+	if wrongRecorder.Code != http.StatusBadRequest {
+		t.Fatalf("wrong-key handshake = %d %s",
+			wrongRecorder.Code, wrongRecorder.Body.String())
+	}
+}
+
+func TestHandshakeRefusesChangedRegistrationAndRequestAuthority(t *testing.T) {
+	app, registration := testApplication(t)
+	defer clear(registration.Key)
+	path := app.registration
+	changed := registration
+	changed.Key = bytes.Clone(registration.Key)
+	defer clear(changed.Key)
+	changed.Key[0] ^= 1
+	raw, err := json.Marshal(changed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, raw, 0600); err != nil {
+		t.Fatal(err)
+	}
+	signer, err := registration.signer(app.bootID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer clear(signer.Key)
+	challenge, err := signer.NewChallenge(time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := json.Marshal(map[string]string{"challenge": challenge})
+	request := httptest.NewRequest(
+		http.MethodPost, "http://portal-app.invalid/v1/handshake",
+		bytes.NewReader(body))
+	request.Header.Set("Content-Type", "application/json")
+	recorder := httptest.NewRecorder()
+	app.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusServiceUnavailable {
+		t.Fatalf("changed registration handshake = %d %s",
+			recorder.Code, recorder.Body.String())
+	}
+	if err := os.WriteFile(
+		path, mustRegistrationJSON(t, registration), 0600); err != nil {
+		t.Fatal(err)
+	}
+	for name, mutate := range map[string]func(*http.Request){
+		"query": func(r *http.Request) {
+			r.URL.RawQuery = "redirect=https://example.invalid"
+		},
+		"cookie": func(r *http.Request) {
+			r.Header.Set("Cookie", "session=private")
+		},
+		"authorization": func(r *http.Request) {
+			r.Header.Set("Authorization", "Bearer private")
+		},
+		"content type": func(r *http.Request) {
+			r.Header.Set("Content-Type", "text/plain")
+		},
+		"unknown field": func(r *http.Request) {
+			r.Body = io.NopCloser(
+				bytes.NewReader(
+					[]byte(`{"challenge":"a.b","redirect":"private"}`)))
+		},
+		"invalid challenge": func(r *http.Request) {
+			r.Body = io.NopCloser(
+				bytes.NewReader([]byte(`{"challenge":"private"}`)))
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			body, _ := json.Marshal(map[string]string{"challenge": challenge})
+			request := httptest.NewRequest(
+				http.MethodPost, "http://portal-app.invalid/v1/handshake",
+				bytes.NewReader(body))
+			request.Header.Set("Content-Type", "application/json")
+			mutate(request)
+			recorder := httptest.NewRecorder()
+			app.ServeHTTP(recorder, request)
+			if recorder.Code != http.StatusBadRequest {
+				t.Fatalf("refused handshake = %d %s",
+					recorder.Code, recorder.Body.String())
+			}
+		})
+	}
+}
+
+func TestScheduledDigestOnlyRoutesFixedDigestTask(t *testing.T) {
+	app, _ := testApplication(t)
+	for _, path := range []string{
+		"/v1/tasks/run", "/v1/tasks/digest/other", "/v1/events/subscribe",
+	} {
+		request := httptest.NewRequest(
+			http.MethodPost, "http://portal-app.invalid"+path,
+			bytes.NewReader([]byte(`{}`)))
+		request.Header.Set("Content-Type", "application/json")
+		recorder := httptest.NewRecorder()
+		app.ServeHTTP(recorder, request)
+		if recorder.Code != http.StatusNotFound {
+			t.Fatalf("unexpected route %s = %d %s",
+				path, recorder.Code, recorder.Body.String())
+		}
+	}
+	request := httptest.NewRequest(
+		http.MethodGet, "http://portal-app.invalid/v1/handshake", nil)
+	recorder := httptest.NewRecorder()
+	app.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusNotFound {
+		t.Fatalf("GET handshake = %d %s", recorder.Code, recorder.Body.String())
+	}
+}
+
+func mustRegistrationJSON(t *testing.T, registration backendRegistration) []byte {
+	t.Helper()
+	raw, err := json.Marshal(registration)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return raw
 }
