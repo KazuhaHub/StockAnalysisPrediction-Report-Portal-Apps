@@ -7,6 +7,7 @@ images. Repository sharing does not merge their processes, databases or permissi
 | Application | State | Runtime |
 | --- | --- | --- |
 | demo-symbols | Existing reference app, preserved identity/version | Sandboxed frontend |
+| scheduled-digest | Development managed reference app, not in the catalogue | Sandboxed frontend and independent service |
 | status | In development, not in the install catalogue | Sandboxed frontend and separate service |
 
 `index.json` is the installation catalogue. It lists only available verified assets.
@@ -101,6 +102,16 @@ checks, OU grants, incident/outbox lifecycle and operator templates live togethe
 under `apps/status`. It remains excluded from the production catalogue until the
 [acceptance ledger](apps/status/docs/acceptance.md) and immutable release gates
 are completed. The Portal platform dependency is tracked in PR #142.
+
+## Scheduled Digest reference app
+
+[Scheduled Digest](apps/scheduled-digest/README.md) is the second neutral v2
+reference app. Its shared frontend reads current-viewer digest state from an
+independent Go service. The service persists bounded idempotent runs and accepts
+only the fixed `POST /v1/tasks/digest` handler with the current Portal service
+identity. The frontend also exercises the reviewed-network and credential-name
+path when administrators provide those optional grants. It remains unlisted and
+does not change the market catalogue.
 
 ## Shared plugin development standard
 
