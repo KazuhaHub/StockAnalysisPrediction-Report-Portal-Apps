@@ -96,7 +96,7 @@ def _closed(value, allowed, what):
     return value
 
 
-def parse_manifest(raw):
+def parse_manifest(raw, max_layer=MAX_BLOB_BYTES):
     """Return (media_type, config_descriptor, layer_descriptors) for a single
     platform image manifest. An index or manifest list is refused."""
     if not raw or len(raw) > MAX_METADATA_BYTES:
@@ -116,7 +116,7 @@ def parse_manifest(raw):
         if layer.get('mediaType') not in LAYER_TYPES:
             raise ImageError('unsupported layer media type (zstd and foreign layers are refused)')
         size = layer.get('size')
-        if not isinstance(size, int) or isinstance(size, bool) or not 1 <= size <= MAX_BLOB_BYTES:
+        if not isinstance(size, int) or isinstance(size, bool) or not 1 <= size <= max_layer:
             raise ImageError('layer size is out of bounds')
         digest_hex(layer.get('digest'))
     size = config.get('size')

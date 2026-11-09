@@ -286,6 +286,86 @@ class ExporterTests(unittest.TestCase):
         self.assertEqual(len(self.export(layout)[0]['layers']), 1)
 
 
+class DockerSaveShapeTests(unittest.TestCase):
+    """The shapes docker save writes: extra legacy members beside the layout, uncompressed layers, and a
+    manifest reached directly or through a nested index."""
+
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        self.root = Path(self.temporary.name)
+
+    def saved(self, nested):
+        layout = Layout()
+        digest, size, tars = layout.image(layer_type='application/vnd.oci.image.layer.v1.tar')
+        # Uncompressed layers: replace the gzip blobs with the raw tars the manifest should name.
+        manifest = json.loads(layout.files['blobs/sha256/' + digest])
+        for layer, raw in zip(manifest['layers'], tars):
+            layer.update({'digest': 'sha256:' + layout.blob(raw), 'size': len(raw)})
+        raw = json.dumps(manifest).encode()
+        digest = layout.blob(raw)
+        annotations = {'io.containerd.image.name': 'docker.io/library/x:latest'}
+        if nested:
+            inner = {'schemaVersion': 2, 'mediaType': OCI_INDEX, 'manifests': [entry_for(digest, len(raw), 'amd64')]}
+            inner_raw = json.dumps(inner).encode()
+            layout.index([entry_for(layout.blob(inner_raw), len(inner_raw), media_type=OCI_INDEX, annotations=annotations)])
+        else:
+            layout.index([entry_for(digest, len(raw), annotations=annotations)])
+        layout.files['manifest.json'] = b'[{"Config":"x","RepoTags":["x:latest"],"Layers":[]}]'
+        layout.files['repositories'] = b'{}'
+        return layout, tars
+
+    def export(self, layout):
+        return exporter.export_oci(layout.write_tar(self.root / 'image.tar'), ['linux/amd64'], self.root / 'out')
+
+    def test_manifest_named_directly_by_the_index(self):
+        layout, tars = self.saved(nested=False)
+        entry = self.export(layout)[0]
+        self.assertEqual([i['diff_id'] for i in entry['layers']], [sha(t) for t in tars])
+        names = {p.name for p in (self.root / 'out').rglob('*')}
+        self.assertFalse(names & {'manifest.json', 'repositories', 'index.json', 'oci-layout'})
+
+    def test_manifest_reached_through_a_nested_index(self):
+        layout, tars = self.saved(nested=True)
+        self.assertEqual(len(self.export(layout)), 1)
+
+    def test_oversize_layers_are_gzipped_deterministically_and_keep_their_diff_ids(self):
+        layout, tars = self.saved(nested=False)
+        original = exporter.oci.MAX_BLOB_BYTES
+        try:
+            exporter.oci.MAX_BLOB_BYTES = max(len(t) for t in tars) - 1
+            first = self.export(layout)[0]
+            (self.root / 'image.tar').unlink()
+            import shutil
+            shutil.rmtree(self.root / 'out')
+            second = self.export(layout)[0]
+        finally:
+            exporter.oci.MAX_BLOB_BYTES = original
+        self.assertEqual(first, second)
+        self.assertEqual([i['diff_id'] for i in first['layers']], [sha(t) for t in tars])
+        manifest = json.loads((self.root / 'out/blobs' / first['manifest_digest']).read_bytes())
+        self.assertEqual(sha((self.root / 'out/blobs' / first['manifest_digest']).read_bytes()), first['manifest_digest'])
+        for layer in manifest['layers']:
+            self.assertEqual(layer['mediaType'], 'application/vnd.oci.image.layer.v1.tar+gzip')
+            raw = (self.root / 'out/blobs' / layer['digest'][7:]).read_bytes()
+            self.assertEqual(sha(raw), layer['digest'][7:])
+            self.assertEqual(raw[:3], b'\x1f\x8b\x08')
+            self.assertEqual(raw[4:8], b'\0\0\0\0')
+            self.assertEqual(raw[3] & 8, 0)
+        self.assertEqual(len(list((self.root / 'out/blobs').iterdir())), 2 + len(manifest['layers']))
+
+    def test_a_layer_still_too_large_after_compression_is_refused(self):
+        layout, tars = self.saved(nested=False)
+        original = exporter.oci.MAX_BLOB_BYTES
+        try:
+            exporter.oci.MAX_BLOB_BYTES = 8
+            with self.assertRaises(exporter.ImageError):
+                self.export(layout)
+        finally:
+            exporter.oci.MAX_BLOB_BYTES = original
+        self.assertFalse((self.root / 'out').exists())
+
+
 class PackerTests(unittest.TestCase):
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()

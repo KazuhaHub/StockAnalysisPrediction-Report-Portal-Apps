@@ -1,18 +1,18 @@
 """Export an OCI image layout into descriptor image entries and flat blob files.
 
 Input is an OCI layout directory or a .tar (for example the output of
-`docker buildx build --platform linux/amd64 --output type=oci,dest=image.tar .`).
+`docker save <image-id> -o image.tar` on Docker 25 or later, which writes an OCI layout).
 Output is a new directory holding `images.json` (the `backend.images` entries)
 and `blobs/<sha256>` for every manifest, config and layer. The publisher's
 index.json, manifest.json and oci-layout are never forwarded.
 """
 import argparse
+import gzip
 import hashlib
 import importlib.util
 import json
 from pathlib import Path
 import shutil
-import subprocess
 import sys
 import tarfile
 
@@ -77,7 +77,10 @@ class TarLayout:
                 raise ImageError('OCI layout archive has an unsafe member name')
             if info.isdir():
                 continue
-            if not info.isreg() or name in self.members:
+            if not info.isreg():
+                # docker save may add links beside the layout; only regular files are ever read.
+                continue
+            if name in self.members:
                 raise ImageError('OCI layout archive may hold only unique regular files')
             self.members[name] = info
 
@@ -190,9 +193,9 @@ def index_entries(layout):
     return entries
 
 
-def copy_blob(layout, digest, destination, expected_size):
+def copy_blob(layout, digest, destination, expected_size, limit=oci.MAX_BLOB_BYTES):
     """Copy one blob while hashing it, so a blob is never trusted by name."""
-    if expected_size > oci.MAX_BLOB_BYTES or layout.blob_size(digest) != expected_size:
+    if expected_size > limit or layout.blob_size(digest) != expected_size:
         raise ImageError('blob size differs from its descriptor or exceeds its bound')
     target = Path(destination) / digest
     if target.exists():
@@ -209,6 +212,22 @@ def copy_blob(layout, digest, destination, expected_size):
         raise ImageError('layout blob does not match its digest')
 
 
+GZIP_OF = {
+    'application/vnd.oci.image.layer.v1.tar': 'application/vnd.oci.image.layer.v1.tar+gzip',
+    'application/vnd.docker.image.rootfs.diff.tar': 'application/vnd.docker.image.rootfs.diff.tar.gzip',
+}
+# Room left in the package for the descriptor, signature and frontend.
+PACKAGE_HEADROOM = 24 << 20
+
+
+def gzip_layer(source_path, target_path):
+    """Compress a layer deterministically: level 9, no name, fixed mtime."""
+    with source_path.open('rb') as source, target_path.open('wb') as raw:
+        with gzip.GzipFile(filename='', fileobj=raw, mode='wb', compresslevel=9, mtime=0) as out:
+            for chunk in iter(lambda: source.read(oci.CHUNK), b''):
+                out.write(chunk)
+
+
 def export_platform(layout, platform, blobs_dir):
     found = find_manifest(layout, index_entries(layout), platform)
     if not found:
@@ -217,7 +236,9 @@ def export_platform(layout, platform, blobs_dir):
         raise ImageError('more than one image manifest for ' + platform)
     manifest_digest = next(iter(found))
     manifest_raw = read_blob_bytes(layout, manifest_digest)
-    _, config_desc, layers = oci.parse_manifest(manifest_raw)
+    # Layers are read with the uncompressed-layer bound here; the host's blob bound is applied after any
+    # compression, below.
+    _, config_desc, layers = oci.parse_manifest(manifest_raw, max_layer=oci.MAX_LAYER_UNCOMPRESSED_BYTES)
     config_digest = oci.digest_hex(config_desc['digest'])
     config_raw = read_blob_bytes(layout, config_digest)
     if len(config_raw) != config_desc['size']:
@@ -225,18 +246,55 @@ def export_platform(layout, platform, blobs_dir):
     diff_ids = oci.parse_config(config_raw, platform)
     if len(diff_ids) != len(layers):
         raise ImageError('layer count differs between manifest and config')
-    entry_layers, total = [], 0
+    # Copy each layer under its original digest first, measuring it against the config diff_id.
+    originals, measured = [], []
     for layer, expected_diff in zip(layers, diff_ids):
         digest = oci.digest_hex(layer['digest'])
-        copy_blob(layout, digest, blobs_dir, layer['size'])
+        if layout.blob_size(digest) != layer['size']:
+            raise ImageError('blob size differs from its descriptor')
+        copy_blob(layout, digest, blobs_dir, layer['size'], limit=oci.MAX_LAYER_UNCOMPRESSED_BYTES)
         with (Path(blobs_dir) / digest).open('rb') as stream:
             diff_id, size = oci.measure_layer(stream, layer['mediaType'])
         if diff_id != expected_diff:
             raise ImageError('layer content does not match the config diff_id')
+        originals.append(digest)
+        measured.append((diff_id, size))
+    sizes = [layer['size'] for layer in layers]
+    needs_gzip = (any(size > oci.MAX_BLOB_BYTES for size in sizes) or
+                  sum(sizes) + len(manifest_raw) + len(config_raw) > oci.MAX_PACKAGE_BYTES - PACKAGE_HEADROOM)
+    if needs_gzip:
+        manifest = oci.strict_json(manifest_raw, True)
+        converted = {}
+        for layer in manifest['layers']:
+            if layer['mediaType'] not in GZIP_OF:
+                continue
+            original = oci.digest_hex(layer['digest'])
+            if original not in converted:
+                temporary = Path(blobs_dir) / ('.gzip-' + original)
+                gzip_layer(Path(blobs_dir) / original, temporary)
+                digest, size = oci.hash_file(temporary)
+                temporary.replace(Path(blobs_dir) / digest)
+                converted[original] = (digest, size)
+            digest, size = converted[original]
+            layer.update({'mediaType': GZIP_OF[layer['mediaType']], 'digest': 'sha256:' + digest, 'size': size})
+        kept = {oci.digest_hex(layer['digest']) for layer in manifest['layers']}
+        for original in converted:
+            if original not in kept:
+                (Path(blobs_dir) / original).unlink()
+        manifest_raw = json.dumps(manifest, separators=(',', ':')).encode()
+        manifest_digest = oci.sha256_hex(manifest_raw)
+        _, _, layers = oci.parse_manifest(manifest_raw)
+    entry_layers, total = [], 0
+    for layer, (diff_id, size) in zip(layers, measured):
+        if layer['size'] > oci.MAX_BLOB_BYTES:
+            raise ImageError('a layer is larger than the blob bound even after compression')
         total += size
         entry_layers.append({'diff_id': diff_id, 'uncompressed_bytes': size})
     if total > oci.MAX_IMAGE_UNCOMPRESSED_BYTES:
         raise ImageError('image expands beyond the allowed total')
+    on_disk = sum((Path(blobs_dir) / oci.digest_hex(layer['digest'])).stat().st_size for layer in layers)
+    if on_disk + len(manifest_raw) + len(config_raw) > oci.MAX_PACKAGE_BYTES - PACKAGE_HEADROOM:
+        raise ImageError('the image does not fit in a package even after compression')
     for digest, raw in ((manifest_digest, manifest_raw), (config_digest, config_raw)):
         (Path(blobs_dir) / digest).write_bytes(raw)
     entry = {
@@ -273,33 +331,13 @@ def export_oci(source, platforms, output):
     return entries
 
 
-def buildx_export(context, archive, platform, dockerfile=None):
-    """Thin wrapper around docker buildx; the only place Docker is invoked."""
-    command = ['docker', 'buildx', 'build', '--platform', platform, '--provenance=false',
-               '--sbom=false', '--output', 'type=oci,dest=' + str(archive)]
-    if dockerfile:
-        command += ['--file', str(dockerfile)]
-    subprocess.run(command + [str(context)], check=True)
-    return archive
-
-
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('source', type=Path, nargs='?',
-                        help='OCI layout directory or .tar; omit with --context to build')
-    parser.add_argument('--context', type=Path, help='build context; runs docker buildx to create the layout')
-    parser.add_argument('--dockerfile', type=Path)
+    parser.add_argument('source', type=Path, help='OCI layout directory or .tar (the output of docker save on Docker 25 or later)')
     parser.add_argument('--platform', action='append', required=True, choices=oci.PLATFORMS)
     parser.add_argument('--output', type=Path, required=True, help='new directory for images.json and blobs/')
     args = parser.parse_args()
     try:
-        source = args.source
-        if args.context is not None:
-            if source is None or len(args.platform) != 1:
-                parser.error('--context needs a destination archive path and exactly one --platform')
-            source = buildx_export(args.context, source, args.platform[0], args.dockerfile)
-        elif source is None:
-            parser.error('give an OCI layout or --context')
-        print(json.dumps(export_oci(source, args.platform, args.output), indent=2))
-    except (OSError, ImageError, subprocess.CalledProcessError) as err:
+        print(json.dumps(export_oci(args.source, args.platform, args.output), indent=2))
+    except (OSError, ImageError, ImageError) as err:
         parser.exit(1, 'Image export failed: ' + str(err) + '\n')

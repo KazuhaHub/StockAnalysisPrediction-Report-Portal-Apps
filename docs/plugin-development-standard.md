@@ -107,9 +107,11 @@ An app with a backend ships its image inside the package instead of naming a
 registry reference. Three commands, in order:
 
 ```sh
-# 1. Build the image as OCI content and export backend.images plus flat blobs.
-docker buildx build --platform linux/amd64 --provenance=false --sbom=false \
-  --output type=oci,dest=image.tar apps/my-app/service
+# 1. Build with the daemon's default builder, save it (Docker 25+ writes an OCI layout), and
+#    export backend.images plus flat blobs. Layers that are too large uncompressed are gzipped
+#    deterministically; the config diff_ids stay and the manifest gets a new digest.
+docker build --tag my-app:build apps/my-app/service
+docker save "$(docker image inspect my-app:build --format '{{.Id}}')" --output image.tar
 python3 scripts/export-image-oci.py image.tar --platform linux/amd64 --output .development/image
 
 # 2. Build the unsigned candidate; --images replaces backend.image with backend.images.
