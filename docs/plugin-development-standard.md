@@ -101,6 +101,35 @@ bootstrap configuration; it is not inferred from the parent DOM, referrer, query
 or arbitrary message. Cross-deployment distribution bootstrap remains a release
 gate before promoting this provisional template to the public default.
 
+### Managed image packages
+
+An app with a backend ships its image inside the package instead of naming a
+registry reference. Three commands, in order:
+
+```sh
+# 1. Build the image as OCI content and export backend.images plus flat blobs.
+docker buildx build --platform linux/amd64 --provenance=false --sbom=false \
+  --output type=oci,dest=image.tar apps/my-app/service
+python3 scripts/export-image-oci.py image.tar --platform linux/amd64 --output .development/image
+
+# 2. Build the unsigned candidate; --images replaces backend.image with backend.images.
+python3 scripts/build-app-v2.py my-app --images .development/image/images.json \
+  --output .development/candidate
+
+# 3. Sign descriptor.json (outside this repository), then pack the version 2 envelope.
+python3 scripts/pack-offline-envelope.py --descriptor .development/candidate/descriptor.json \
+  --signature descriptor.sig --frontend .development/candidate/frontend.zip \
+  --image-blobs .development/image/blobs --output my-app.portalapp
+```
+
+The `platforms` in the app declaration must equal the `--platform` values. The
+exporter accepts one image manifest per platform, OCI or Docker schema 2, with
+`tar` or `tar+gzip` layers only; zstd, foreign layers and layers with `urls` are
+refused, and the publisher's `index.json`, `manifest.json` and `oci-layout` are
+never forwarded. The packer stores each blob uncompressed as `blobs/<sha256>`
+and refuses a package over 160 entries or 384 MiB. A frontend-only descriptor
+still produces the unchanged version 1 envelope.
+
 | Area | Legacy published composition | Experimental v2 composition |
 | --- | --- | --- |
 | Manifest | `app.json` | `app.v2.json` source, generated `descriptor.json` |
