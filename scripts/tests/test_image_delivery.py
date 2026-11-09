@@ -495,8 +495,8 @@ class PackerTests(unittest.TestCase):
         self.assertNotIn('image', declaration['backend'])
         self.assertEqual(declaration['backend']['images'], self.entries)
         declaration['backend']['platforms'] = ['linux/amd64', 'linux/arm64']
-        with self.assertRaises(ValueError):
-            builder.apply_images(declaration, self.entries)
+        builder.apply_images(declaration, self.entries)
+        self.assertEqual(declaration['backend']['platforms'], [item['platform'] for item in self.entries])
         with self.assertRaises(ValueError):
             builder.apply_images({'id': 'x'}, self.entries)
 

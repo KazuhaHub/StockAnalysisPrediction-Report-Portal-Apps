@@ -59,6 +59,8 @@ def apply_images(declaration, images):
         raise ValueError('managed images need a declared backend')
     backend.pop('image', None)
     backend['images'] = images
+    # A package carries only the platforms it has an image for, so the declaration narrows to them.
+    backend['platforms'] = [item['platform'] for item in images]
     try:
         oci.validate_backend_images(backend)
     except oci.ImageError as err:
