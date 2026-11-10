@@ -101,15 +101,69 @@ function validVersion(value: unknown): boolean {
       )
   );
 }
+// Per-platform sum of declared layer sizes; the host enforces the same bound.
+const MAX_BACKEND_IMAGE_UNCOMPRESSED_BYTES = 4 * 2 ** 30;
+
+// Exactly one image form: a registry reference or managed content, one entry
+// per declared platform.
+function validBackendImageForm(backend: Record<string, unknown>): boolean {
+  if ((backend.image !== undefined) === (backend.images !== undefined))
+    return false;
+  if (backend.image !== undefined)
+    return (
+      match(backend.image, image) &&
+      !backend.image.includes("..") &&
+      !backend.image.includes("//")
+    );
+  const images = backend.images;
+  const platforms = backend.platforms as string[];
+  if (
+    !Array.isArray(images) ||
+    images.length === 0 ||
+    images.length > DESCRIPTOR_LIMITS.maxBackendImagePlatforms ||
+    images.length !== platforms.length
+  )
+    return false;
+  const seen = new Set<string>();
+  for (const entry of images) {
+    if (
+      !record(entry, DESCRIPTOR_FIELDS.BackendImage) ||
+      typeof entry.platform !== "string" ||
+      !platforms.includes(entry.platform) ||
+      seen.has(entry.platform) ||
+      !match(entry.manifest_digest, digest) ||
+      !match(entry.config_digest, digest) ||
+      !Array.isArray(entry.layers) ||
+      entry.layers.length === 0 ||
+      entry.layers.length > DESCRIPTOR_LIMITS.maxImageLayers
+    )
+      return false;
+    seen.add(entry.platform);
+    let total = 0;
+    for (const layer of entry.layers) {
+      if (
+        !record(layer, DESCRIPTOR_FIELDS.ImageLayer) ||
+        !match(layer.diff_id, digest) ||
+        !integer(
+          layer.uncompressed_bytes,
+          1,
+          DESCRIPTOR_LIMITS.maxImageLayerUncompressedBytes,
+        )
+      )
+        return false;
+      total += layer.uncompressed_bytes;
+    }
+    if (total > MAX_BACKEND_IMAGE_UNCOMPRESSED_BYTES) return false;
+  }
+  return true;
+}
 function validBackend(value: unknown): boolean {
   if (
     !record(value, DESCRIPTOR_FIELDS.Backend) ||
     value.kind !== DESCRIPTOR_CONSTANTS.descriptorBackendKind ||
     value.protocol !== DESCRIPTOR_CONSTANTS.descriptorBackendProtocol ||
-    !match(value.image, image) ||
-    value.image.includes("..") ||
-    value.image.includes("//") ||
-    !unique(value.platforms, DESCRIPTOR_PLATFORMS)
+    !unique(value.platforms, DESCRIPTOR_PLATFORMS) ||
+    !validBackendImageForm(value)
   )
     return false;
   const r = value.resources;

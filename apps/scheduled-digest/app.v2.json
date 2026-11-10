@@ -4,8 +4,8 @@
   "version": "0.1.0-dev.1",
   "publisher": "development-publisher",
   "compatibility": {
-    "platform_api": ">=2.0.0-0 <3.0.0",
-    "runner_protocol": ">=1.0.0 <2.0.0"
+    "platform_api": ">=2.0.0-0 <3.0.0-0",
+    "runner_protocol": ">=1.0.0-0 <2.0.0-0"
   },
   "presentation": {
     "name_key": "title",

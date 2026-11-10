@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 import tempfile
 import zipfile
 import re
@@ -15,6 +16,18 @@ ROOT = Path(__file__).resolve().parents[1]
 spec = importlib.util.spec_from_file_location('app_authoring', Path(__file__).with_name('app_authoring.py'))
 authoring = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(authoring)
+def shared_oci_image():
+    """Load oci_image.py once per process so every script raises the same ImageError class."""
+    cached = sys.modules.get('oci_image')
+    if cached is None:
+        spec = importlib.util.spec_from_file_location('oci_image', Path(__file__).with_name('oci_image.py'))
+        cached = importlib.util.module_from_spec(spec)
+        sys.modules['oci_image'] = cached
+        spec.loader.exec_module(cached)
+    return cached
+
+
+oci = shared_oci_image()
 # Conservative authoring bounds, not a replacement for current host admission.
 MAX_FILES, MAX_FILE_BYTES, MAX_TOTAL_BYTES = 200, 4 << 20, 10 << 20
 
@@ -31,7 +44,30 @@ def validate_descriptor_corpus(path=None):
     subprocess.run(['node', str(ROOT / 'scripts/validate-descriptor-v2.mjs'), '--corpus', str(corpus)], cwd=ROOT, check=True)
 
 
-def package_frontend(app_id, output, root=ROOT, validator=validate_descriptor):
+def read_images(path):
+    """Read the backend.images entries written by export-image-oci.py."""
+    value = authoring.read_json(path)
+    if not isinstance(value, list):
+        raise ValueError('images file must hold the list of backend.images entries')
+    return value
+
+
+def apply_images(declaration, images):
+    """Switch a declared backend to the managed form: images instead of image."""
+    backend = declaration.get('backend')
+    if not isinstance(backend, dict):
+        raise ValueError('managed images need a declared backend')
+    backend.pop('image', None)
+    backend['images'] = images
+    # A package carries only the platforms it has an image for, so the declaration narrows to them.
+    backend['platforms'] = [item['platform'] for item in images]
+    try:
+        oci.validate_backend_images(backend)
+    except oci.ImageError as err:
+        raise ValueError('managed images refused: ' + str(err)) from None
+
+
+def package_frontend(app_id, output, root=ROOT, validator=validate_descriptor, images=None):
     app = authoring.app_folder(root, app_id)
     if (app / 'app.json').exists():
         raise ValueError('The v2 builder cannot accept a legacy or dual-format application')
@@ -83,6 +119,8 @@ def package_frontend(app_id, output, root=ROOT, validator=validate_descriptor):
     archive_raw = buffer.getvalue()
     if len(archive_raw) > MAX_TOTAL_BYTES:
         raise ValueError('Frontend archive exceeds authoring bounds')
+    if images is not None:
+        apply_images(declaration, images)
     declaration['frontend']['sha256'] = hashlib.sha256(archive_raw).hexdigest()
     descriptor_raw = (json.dumps(declaration, ensure_ascii=False, indent=2) + '\n').encode()
     validator(descriptor_raw)
@@ -96,7 +134,7 @@ def package_frontend(app_id, output, root=ROOT, validator=validate_descriptor):
     return output
 
 
-def build(app_id, output=None, root=ROOT):
+def build(app_id, output=None, root=ROOT, images=None):
     app = authoring.app_folder(root, app_id)
     if (app/'app.json').exists():
         raise ValueError('The v2 builder cannot accept legacy or dual-format declarations')
@@ -113,12 +151,14 @@ def build(app_id, output=None, root=ROOT):
         raise ValueError('Candidate output already exists; choose a new --output directory')
     subprocess.run(['npm', 'run', 'build'], cwd=app / 'frontend', check=True)
     shutil.copyfile(app / 'frontend/src/index.html', app / 'frontend/dist/index.html')
-    return package_frontend(app_id, destination, root)
+    return package_frontend(app_id, destination, root, images=images)
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('app_id')
     parser.add_argument('--output', type=Path, help='New local output directory; existing outputs are never replaced')
+    parser.add_argument('--images', type=Path, help='images.json from export-image-oci.py; switches the backend to managed images')
     args = parser.parse_args()
-    print('Unsigned development candidate: ' + str(build(args.app_id, args.output)))
+    print('Unsigned development candidate: ' + str(build(
+        args.app_id, args.output, images=read_images(args.images) if args.images else None)))
