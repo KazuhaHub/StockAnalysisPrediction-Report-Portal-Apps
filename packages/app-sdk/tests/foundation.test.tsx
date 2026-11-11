@@ -1,6 +1,6 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
-import { usePortalLocale, usePortalResource, PortalPage, PortalState, PortalClient, PortalErrorBoundary, PortalTextField } from '../src/index';
+import { usePortalLocale, usePortalResource, PortalPage, PortalState, PortalClient, PortalErrorBoundary, PortalTextField, PortalAppProvider } from '../src/index';
 
 beforeEach(() => vi.stubGlobal('matchMedia', vi.fn(() => ({
   matches: false, addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {},
@@ -83,4 +83,51 @@ test('shared repeated fields retain unique real labels and secrets have no revea
   expect(secret.type).toBe('password');
   expect(secret.autocomplete).toBe('new-password');
   expect(screen.queryByRole('button')).toBeNull();
+});
+
+
+test('the document stays transparent until a trusted host theme arrives and tracks later changes', () => {
+  const parent = {} as Window, client = new PortalClient('fixture', { current: window, parent });
+  document.body.style.background = '';
+  document.documentElement.style.colorScheme = '';
+  const view = render(<PortalAppProvider client={client} locale="en-US"><PortalPage title="Startup fixture"><span>Fixture</span></PortalPage></PortalAppProvider>);
+  try {
+    expect(document.body.style.background).toBe('');
+    expect(document.documentElement.style.colorScheme).toBe('');
+    expect(screen.queryByRole('main', { name: 'Startup fixture' })).toBeNull();
+    act(() => window.dispatchEvent(new MessageEvent('message', { source: {} as Window,
+      data: { type: 'rp:init', theme: { dark: false, colorBgLayout: '#ffffff' } } })));
+    expect(document.body.style.background).toBe('');
+    act(() => window.dispatchEvent(new MessageEvent('message', { source: parent,
+      data: { type: 'rp:init', theme: { dark: false, colorBgLayout: '#f5f5f5' } } })));
+    expect(document.body.style.background).toBe('rgb(245, 245, 245)');
+    expect(screen.getByRole('main', { name: 'Startup fixture' })).toBeTruthy();
+    act(() => window.dispatchEvent(new MessageEvent('message', { source: parent,
+      data: { type: 'rp:init', theme: { dark: true, colorBgLayout: '#000000', colorText: '#eeeeee' } } })));
+    expect(document.body.style.background).toBe('rgb(0, 0, 0)');
+    expect(document.documentElement.style.colorScheme).toBe('dark');
+    act(() => window.dispatchEvent(new MessageEvent('message', { source: parent,
+      data: { type: 'rp:theme', theme: { dark: false, colorBgLayout: '#f5f5f5' } } })));
+    expect(document.body.style.background).toBe('rgb(245, 245, 245)');
+    expect(document.documentElement.style.colorScheme).toBe('light');
+  } finally {
+    view.unmount(); client.dispose();
+    document.body.style.background = ''; document.documentElement.style.colorScheme = '';
+  }
+});
+
+
+test('a missing host theme produces a bounded visible error and a late trusted theme recovers', () => {
+  vi.useFakeTimers();
+  const parent = {} as Window, client = new PortalClient('fixture', { current: window, parent });
+  const view = render(<PortalAppProvider client={client} locale="en-US"><PortalPage title="Late host">Content</PortalPage></PortalAppProvider>);
+  try {
+    expect(screen.queryByRole('main', { name: 'Late host' })).toBeNull();
+    act(() => vi.advanceTimersByTime(25000));
+    expect(screen.getByRole('alert')).toBeTruthy();
+    act(() => window.dispatchEvent(new MessageEvent('message', { source: parent,
+      data: { type: 'rp:init', theme: { dark: true, colorBgLayout: '#000000' } } })));
+    expect(screen.getByRole('main', { name: 'Late host' })).toBeTruthy();
+    expect(screen.queryByRole('alert')).toBeNull();
+  } finally { view.unmount(); client.dispose(); vi.useRealTimers(); }
 });

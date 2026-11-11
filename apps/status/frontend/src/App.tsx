@@ -18,7 +18,7 @@ import {
   Typography,
 } from "antd";
 import { ReloadOutlined, SettingOutlined } from "@ant-design/icons";
-import { PortalAppProvider, PortalPage, PortalLocaleSelect, usePortalLocale, type LocaleSelection } from "@portal-app/sdk";
+import { PortalAppProvider, PortalPage, usePortalLocale } from "@portal-app/sdk";
 import type { Client, Component, Incident, Page } from "./client";
 import {
   Check,
@@ -34,7 +34,7 @@ import contracts from "./contracts.cjs";
 
 const { compatibleBackend, safeState, percentage, monitorHint } = contracts;
 export function StatusApp({ client }: { client: Client }) {
-  const { locale, selection, setSelection } = usePortalLocale(client);
+  const { locale } = usePortalLocale(client);
   const [ready, setReady] = useState(false),
     [admin, setAdmin] = useState(false),
     [error, setError] = useState(""),
@@ -109,8 +109,6 @@ export function StatusApp({ client }: { client: Client }) {
           ready={ready}
           error={error}
           notice={notice}
-          selection={selection}
-          localeChanged={setSelection}
           refresh={() => {
             if (ready) setRevision((value) => value + 1);
             else void connect();
@@ -125,23 +123,18 @@ function StatusSurface({
   ready,
   error,
   notice,
-  localeChanged,
-  selection,
   refresh,
 }: {
   admin: boolean;
   ready: boolean;
   error: string;
   notice: string;
-  selection: LocaleSelection;
-  localeChanged(locale: LocaleSelection): void;
   refresh(): void;
 }) {
-  const { t, locale, busy } = useUI(), [tab, setTab] = useState("overview");
+  const { t, busy } = useUI(), [tab, setTab] = useState("overview");
   return (
     <PortalPage title={t("title")} description={t("subtitle")} className="status-app" busy={busy} actions={
         <Space wrap>
-          <PortalLocaleSelect locale={locale} selection={selection} onChange={localeChanged} />
           <Button
             aria-label={t("refresh")}
             icon={<ReloadOutlined />}

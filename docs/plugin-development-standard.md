@@ -34,8 +34,8 @@ layout, language state machine, field wrapper or request-state hook.
   optional trusted host locale; fall back to browser locale on older Portal versions.
   Runtime locale changes must preserve unsaved form drafts.
   `usePortalLocale` owns the default-follow/explicit-override behavior. If an app
-  needs a language selector, use `PortalLocaleSelect`, including its return-to-panel
-  option. Do not initialize a separate language state only once on mount.
+  is embedded, omit a separate language selector and follow the panel automatically.
+  Do not initialize a separate language state only once on mount.
   The host's optional top-level `locale` travels on `rp:init` and `rp:theme`;
   a host update supplying this field does not require an app-specific host hook.
 
