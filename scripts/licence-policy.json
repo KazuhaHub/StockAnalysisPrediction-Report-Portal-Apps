@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "source": "Portal docs/app-platform/167-owner-decisions-remaining-acceptance.md section 8 (DEV-04). The allow, deny and own.licences sections are a copy of the Portal policy (scripts/licence-policy.json there); keep them in sync. Elections and exclusions are Portal-only and are empty here.",
+  "allow": [
+    "MIT",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Apache-2.0",
+    "0BSD",
+    "Zlib",
+    "Unlicense",
+    "CC0-1.0",
+    "BlueOak-1.0.0",
+    "Python-2.0",
+    "MPL-2.0"
+  ],
+  "deny": [
+    "GPL-2.0-only",
+    "GPL-2.0",
+    "SSPL-1.0",
+    "BUSL-1.1",
+    "Commons-Clause",
+    "EPL-1.0",
+    "EPL-2.0",
+    "NOASSERTION",
+    "UNLICENSED"
+  ],
+  "own": {
+    "licences": [
+      "AGPL-3.0-only"
+    ],
+    "components": [
+      "github.com/KazuhaHub/",
+      "@portal-app/",
+      "portal-status-ui",
+      "portal-symbols-demo"
+    ]
+  },
+  "election_only": [
+    "FTL"
+  ],
+  "elections": [],
+  "exclusions": []
+}

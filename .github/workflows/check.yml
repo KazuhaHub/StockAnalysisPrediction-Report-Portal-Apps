@@ -14,6 +14,60 @@ jobs:
           go-version-file: apps/status/service/go.mod
           cache: false
       - run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+  licence:
+    # The licence gate of the platform policy (Portal doc 167 section 8): the production npm graph of every
+    # first-party workspace and the Go modules linked into the status service, judged against
+    # scripts/licence-policy.json. A denied, unknown or missing licence fails the run. The evaluator and the
+    # allow and deny lists are copies of the Portal's; scripts/licence_scan.py says so, keep them in sync.
+    # apps/status/tests (the browser acceptance harness) is not shipped and is not scanned. The protocol
+    # module has no third-party requirements and is covered as a component of the status service.
+    runs-on: ubuntu-latest
+    env:
+      GOWORK: 'off'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: apps/status/service/go.mod
+          cache: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Evaluator tests and first-party licence declarations
+        run: python3 -B -m unittest scripts/tests/test_licence_scan.py -v
+      - name: npm SBOM (production dependencies of every workspace)
+        run: >
+          npx --yes @cyclonedx/cyclonedx-npm@6.0.1
+          --omit dev --package-lock-only --output-format JSON --spec-version 1.6
+          --output-file "$RUNNER_TEMP/npm.cdx.json" package.json
+      - name: Go SBOM (status service, with licences)
+        working-directory: apps/status/service
+        env:
+          CGO_ENABLED: '0'
+          GOOS: linux
+          GOARCH: amd64
+        run: >
+          go run github.com/CycloneDX/cyclonedx-gomod/cmd/cyclonedx-gomod@v1.9.0
+          app -licenses -assert-licenses -json -main cmd/status
+          -output "$RUNNER_TEMP/status-go.cdx.json" .
+      - name: Licence scan
+        run: >
+          python3 -I scripts/licence_scan.py --policy scripts/licence-policy.json
+          --report "$RUNNER_TEMP/licence-report.json"
+          "$RUNNER_TEMP/npm.cdx.json" "$RUNNER_TEMP/status-go.cdx.json"
+      - name: Keep the SBOMs and the report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: licence-sboms
+          path: |
+            ${{ runner.temp }}/npm.cdx.json
+            ${{ runner.temp }}/status-go.cdx.json
+            ${{ runner.temp }}/licence-report.json
+          retention-days: 30
   frontend-standard:
     runs-on: ubuntu-latest
     steps:
