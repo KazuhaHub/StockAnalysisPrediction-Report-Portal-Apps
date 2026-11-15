@@ -60,6 +60,15 @@ jobs:
               app -licenses -assert-licenses -json -main cmd/status \
               -output "$RUNNER_TEMP/status-go-$goos-$goarch${goarm}.cdx.json" .
           done
+      - name: Go SBOMs (scheduled-digest service, the linux targets of its container image)
+        working-directory: apps/scheduled-digest/service
+        run: |
+          for target in linux/amd64 linux/arm64; do
+            IFS=/ read -r goos goarch <<< "$target"
+            CGO_ENABLED=0 GOOS="$goos" GOARCH="$goarch" "$RUNNER_TEMP/bin/cyclonedx-gomod" \
+              app -licenses -assert-licenses -json -main . \
+              -output "$RUNNER_TEMP/digest-go-$goos-$goarch.cdx.json" .
+          done
       - name: Evaluator and policy match the Portal copy
         # The evaluator and the shared policy sections are copies of the Portal's; this fails when they drift
         # from the Portal commit pinned in scripts/licence-scan.pin.
@@ -73,7 +82,7 @@ jobs:
           python3 -I scripts/licence_scan.py --policy scripts/licence-policy.json
           --go-mod-cache "$(go env GOMODCACHE)" --node-modules node_modules --workspace-root .
           --report "$RUNNER_TEMP/licence-report.json"
-          "$RUNNER_TEMP/npm.cdx.json" "$RUNNER_TEMP"/status-go-*.cdx.json
+          "$RUNNER_TEMP/npm.cdx.json" "$RUNNER_TEMP"/status-go-*.cdx.json "$RUNNER_TEMP"/digest-go-*.cdx.json
       - name: Keep the SBOMs and the report
         if: always()
         uses: actions/upload-artifact@v4
@@ -147,6 +156,8 @@ jobs:
       - run: go vet ./...
         working-directory: apps/scheduled-digest/service
       - run: go test -race ./...
+        working-directory: apps/scheduled-digest/service
+      - run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
         working-directory: apps/scheduled-digest/service
       - run: npm run typecheck --workspace=apps/scheduled-digest/frontend
       - run: npm test --workspace=apps/scheduled-digest/frontend

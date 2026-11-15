@@ -33,6 +33,8 @@
     "components": [
       "github.com/KazuhaHub/",
       "@portal-app/",
+      "portal-app-notes-sample",
+      "portal-app-scheduled-digest",
       "portal-status-ui",
       "portal-symbols-demo"
     ]
