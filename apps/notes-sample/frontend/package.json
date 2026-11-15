@@ -1,6 +1,7 @@
 {
   "name": "portal-app-notes-sample",
   "private": true,
+  "license": "AGPL-3.0-only",
   "type": "module",
   "scripts": {
     "build": "vite build",
