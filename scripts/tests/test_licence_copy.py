@@ -233,9 +233,19 @@ class TheWorkflow(unittest.TestCase):
         build = load("build_status_release", "build-status-release.py")
         targets = {(goos, goarch, goarm) for goos, goarch, goarm in build.TARGETS.values()}
         workflow = (ROOT / ".github" / "workflows" / "check.yml").read_text()
-        job = re.search(r"(?m)^  licence:\n(.*?)(?=^  [a-z-]+:\n)", workflow, re.S)[1]
-        listed = set(re.findall(r"\b(linux|darwin|windows)/(amd64|arm64|arm)(?:/(\d))?\b", job))
+        step = re.search(r"- name: Go SBOMs \(status service[^\n]*\n(.*?)(?=\n      - name:)", workflow, re.S)[1]
+        listed = set(re.findall(r"\b(linux|darwin|windows)/(amd64|arm64|arm)(?:/(\d))?\b", step))
         self.assertEqual({(a, b, c or "") for a, b, c in listed}, targets)
+
+    def test_the_go_sbom_covers_every_scheduled_digest_image_platform(self):
+        # The service ships only as a container image, for the platforms its descriptor declares.
+        descriptor = json.loads((ROOT / "apps" / "scheduled-digest" / "app.v2.json").read_text())
+        platforms = {tuple(p.split("/")[:2]) for p in descriptor["backend"]["platforms"]}
+        workflow = (ROOT / ".github" / "workflows" / "check.yml").read_text()
+        step = re.search(r"- name: Go SBOMs \(scheduled-digest[^\n]*\n(.*?)(?=\n      - name:)", workflow, re.S)[1]
+        listed = set(re.findall(r"\b(linux)/(amd64|arm64)\b", step))
+        self.assertEqual(listed, platforms)
+        self.assertIn("digest-go-*.cdx.json", workflow.split("- name: Licence scan", 1)[1].split("- name:", 1)[0])
 
     def test_the_npm_sbom_is_cross_checked_against_the_installed_tree(self):
         # The SBOM is built from package-lock.json, whose licence fields integrity does not cover, so the scan is
