@@ -16,11 +16,12 @@ jobs:
       - run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
   licence:
     # The licence gate of the platform policy (Portal doc 167 section 8): the production npm graph of every
-    # first-party workspace and the Go modules linked into the status service, judged against
+    # first-party workspace and the Go modules linked into the status and scheduled-digest services, judged against
     # scripts/licence-policy.json. A denied, unknown or missing licence fails the run. The evaluator and the
     # allow and deny lists are copies of the Portal's; scripts/licence_scan.py says so, keep them in sync.
     # apps/status/tests (the browser acceptance harness) is not shipped and is not scanned. The protocol
-    # module has no third-party requirements and is covered as a component of the status service.
+    # module has no third-party requirements; it is judged as a component of the services that require it
+    # (scheduled-digest takes it from the local directory, so packages/extensionprotocol ships its own LICENSE).
     runs-on: ubuntu-latest
     env:
       GOWORK: 'off'
@@ -91,6 +92,7 @@ jobs:
           path: |
             ${{ runner.temp }}/npm.cdx.json
             ${{ runner.temp }}/status-go-*.cdx.json
+            ${{ runner.temp }}/digest-go-*.cdx.json
             ${{ runner.temp }}/licence-report.json
           retention-days: 30
   frontend-standard:
