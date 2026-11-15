@@ -88,6 +88,16 @@ class PublicationTests(unittest.TestCase):
         for conclusion in ["skipped", "failure", "cancelled"]:
             with self.assertRaises(ValueError): publish.verified_jobs([{**jobs[0], "conclusion": conclusion}, *jobs[1:]])
 
+    def test_publication_requires_the_licence_job(self):
+        # check.yml's job id is its display name; a renamed job must fail here, not at release time.
+        self.assertIn("licence", publish.REQUIRED_JOBS)
+        jobs = [{"name": name, "status": "completed", "conclusion": "success"}
+                for name in publish.REQUIRED_JOBS if name != "licence"]
+        with self.assertRaisesRegex(ValueError, "required CI jobs"):
+            publish.verified_jobs(jobs)
+        workflow = (Path(__file__).parents[2] / ".github" / "workflows" / "check.yml").read_text()
+        self.assertRegex(workflow, r"(?m)^  licence:$")
+
     def test_publication_cannot_skip_the_shared_frontend_standard_gate(self):
         jobs = [{"name": name, "status": "completed", "conclusion": "success"}
                 for name in publish.REQUIRED_JOBS if name != "frontend-standard"]

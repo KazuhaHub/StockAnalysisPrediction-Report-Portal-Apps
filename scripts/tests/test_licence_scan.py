@@ -3,6 +3,7 @@ declarations of the first-party packages.
 
 The evaluator and its tests are a copy of the Portal repository's (scripts/licence_scan.py there); keep the
 two in sync. The CheckedInPolicyTests and FirstPartyDeclarationTests classes are specific to this repository."""
+import hashlib
 import importlib.util
 import json
 import os
@@ -51,8 +52,9 @@ def comp(name, lic=None, expr=None, group=None, version="1.0.0", lname=None):
     return c
 
 
-def run(components, verified=(), policy=POLICY):
-    return evaluate({"components": components}, policy, set(verified))
+def run(components, verified=(), policy=POLICY, files=None):
+    reader = None if files is None else (lambda c, name: files.get((c["name"], name)))
+    return evaluate({"components": components}, policy, set(verified), reader)
 
 
 def one(components, **kw):
@@ -300,6 +302,130 @@ class ExclusionTests(unittest.TestCase):
         self.assertEqual(c["status"], "fail")
 
 
+GO_TEXT = b"Copyright 2009 The Go Authors.\n\nRedistribution and use in source and binary forms...\n"
+OTHER_TEXT = GO_TEXT + b"An extra clause.\n"
+REVIEWED_POLICY = dict(POLICY, reviewed=[
+    {"components": ["golang.org/x/sys", "golang.org/x/text"], "reviewed_as": "BSD-3-Clause", "file": "LICENSE",
+     "sha256": hashlib.sha256(GO_TEXT).hexdigest(), "reason": "Standard Go BSD 3-clause text."},
+    {"components": ["khroma"], "reviewed_as": "MIT", "file": "license",
+     "sha256": hashlib.sha256(b"The MIT License (MIT)\n").hexdigest(), "reason": "MIT text, no manifest field."},
+])
+
+
+class ReviewedTests(unittest.TestCase):
+    """A reviewed-as record stands for the licence the owner read, pinned to the text that ships."""
+
+    def check(self, component, files, policy=REVIEWED_POLICY):
+        return one([component], policy=policy, files=files)
+
+    def test_matching_hash_passes(self):
+        c, r = self.check(comp("golang.org/x/sys", "BSD-Source-Code"), {("golang.org/x/sys", "LICENSE"): GO_TEXT})
+        self.assertEqual((c["status"], c["via"], c["reviewed_as"]), ("pass", "reviewed", "BSD-3-Clause"))
+        self.assertTrue(r["ok"])
+
+    def test_changed_text_fails_and_says_stale(self):
+        c, r = self.check(comp("golang.org/x/sys", "BSD-Source-Code"), {("golang.org/x/sys", "LICENSE"): OTHER_TEXT})
+        self.assertEqual(c["status"], "fail")
+        self.assertTrue(any("stale" in w and "golang.org/x/sys" in w for w in r["warnings"]))
+
+    def test_missing_licence_file_fails(self):
+        c, r = self.check(comp("golang.org/x/sys", "BSD-Source-Code"), {})
+        self.assertEqual(c["status"], "fail")
+        self.assertTrue(any("golang.org/x/sys" in w and "not found" in w for w in r["warnings"]))
+
+    def test_no_reader_means_no_file_and_so_a_failure(self):
+        c, _ = one([comp("golang.org/x/sys", "BSD-Source-Code")], policy=REVIEWED_POLICY)
+        self.assertEqual(c["status"], "fail")
+
+    def test_unlisted_component_fails_even_with_the_same_text(self):
+        c, _ = self.check(comp("golang.org/x/other", "BSD-Source-Code"), {("golang.org/x/other", "LICENSE"): GO_TEXT})
+        self.assertEqual(c["status"], "fail")
+
+    def test_one_hash_covers_every_listed_module(self):
+        r = run([comp("golang.org/x/sys", "BSD-Source-Code"), comp("golang.org/x/text", "BSD-Source-Code")],
+                policy=REVIEWED_POLICY,
+                files={("golang.org/x/sys", "LICENSE"): GO_TEXT, ("golang.org/x/text", "LICENSE"): GO_TEXT})
+        self.assertTrue(r["ok"])
+
+    def test_each_module_is_hashed_on_its_own(self):
+        r = run([comp("golang.org/x/sys", "BSD-Source-Code"), comp("golang.org/x/text", "BSD-Source-Code")],
+                policy=REVIEWED_POLICY,
+                files={("golang.org/x/sys", "LICENSE"): GO_TEXT, ("golang.org/x/text", "LICENSE"): OTHER_TEXT})
+        self.assertEqual([c["name"] for c in r["failures"]], ["golang.org/x/text"])
+
+    def test_record_applies_to_a_component_with_no_declared_licence(self):
+        c, _ = self.check(comp("khroma"), {("khroma", "license"): b"The MIT License (MIT)\n"})
+        self.assertEqual((c["status"], c["via"], c["reviewed_as"]), ("pass", "reviewed", "MIT"))
+
+    def test_record_cannot_override_a_denied_declaration(self):
+        c, r = self.check(comp("golang.org/x/sys", "GPL-2.0-only"), {("golang.org/x/sys", "LICENSE"): GO_TEXT})
+        self.assertEqual((c["status"], c["reason"]), ("fail", "denied"))
+        self.assertTrue(any("denied" in w for w in r["warnings"]))
+
+    def test_record_must_review_to_an_allowed_licence(self):
+        policy = dict(REVIEWED_POLICY, reviewed=[dict(REVIEWED_POLICY["reviewed"][0], reviewed_as="LGPL-3.0-only")])
+        c, r = self.check(comp("golang.org/x/sys", "BSD-Source-Code"), {("golang.org/x/sys", "LICENSE"): GO_TEXT}, policy)
+        self.assertEqual(c["status"], "fail")
+        self.assertTrue(any("not allowed" in w for w in r["warnings"]))
+
+    def test_unused_record_is_a_warning(self):
+        r = run([comp("left-pad", "MIT")], policy=REVIEWED_POLICY, files={})
+        self.assertTrue(r["ok"])
+        self.assertTrue(any("khroma" in w and "not present" in w for w in r["warnings"]))
+
+    def test_an_allowed_component_needs_no_record_or_file(self):
+        c, _ = self.check(comp("golang.org/x/sys", "BSD-3-Clause"), {})
+        self.assertEqual((c["status"], c["via"]), ("pass", "allow"))
+
+    def test_cli_reads_the_go_module_cache_and_node_modules(self):
+        with tempfile.TemporaryDirectory() as d:
+            mod = os.path.join(d, "gomod", "golang.org", "x", "sys@v0.1.0")
+            os.makedirs(mod)
+            with open(os.path.join(mod, "LICENSE"), "wb") as f:
+                f.write(GO_TEXT)
+            nm = os.path.join(d, "node_modules", "khroma")
+            os.makedirs(nm)
+            with open(os.path.join(nm, "license"), "wb") as f:
+                f.write(b"The MIT License (MIT)\n")
+            sbom = {"components": [
+                {"name": "golang.org/x/sys", "version": "v0.1.0", "purl": "pkg:golang/golang.org/x/sys@v0.1.0?type=module",
+                 "licenses": [{"license": {"id": "BSD-Source-Code"}}]},
+                {"name": "khroma", "version": "2.1.0", "purl": "pkg:npm/khroma@2.1.0"}]}
+            sp, pp = os.path.join(d, "s.json"), os.path.join(d, "p.json")
+            with open(sp, "w") as f:
+                json.dump(sbom, f)
+            with open(pp, "w") as f:
+                json.dump(REVIEWED_POLICY, f)
+            args = [sys.executable, "-I", os.path.join(SCRIPTS, "licence_scan.py"), "--policy", pp,
+                    "--go-mod-cache", os.path.join(d, "gomod"), "--node-modules", os.path.join(d, "node_modules"), sp]
+            p = subprocess.run(args, capture_output=True, text=True)
+            self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+            self.assertIn("2 reviewed", p.stdout)
+            with open(os.path.join(mod, "LICENSE"), "ab") as f:
+                f.write(b"tampered")
+            p = subprocess.run(args, capture_output=True, text=True)
+            self.assertEqual(p.returncode, 1)
+            self.assertIn("golang.org/x/sys", p.stdout)
+
+    def test_go_module_cache_escapes_capital_letters(self):
+        with tempfile.TemporaryDirectory() as d:
+            mod = os.path.join(d, "github.com", "!azure", "x@v1.0.0")
+            os.makedirs(mod)
+            with open(os.path.join(mod, "LICENSE"), "wb") as f:
+                f.write(GO_TEXT)
+            reader = licence_scan.make_reader(go_mod_cache=d)
+            comp_ = {"name": "github.com/Azure/x", "version": "v1.0.0", "purl": "pkg:golang/github.com/Azure/x@v1.0.0"}
+            self.assertEqual(reader(comp_, "LICENSE"), GO_TEXT)
+
+    def test_reader_refuses_to_leave_the_package_directory(self):
+        with tempfile.TemporaryDirectory() as d:
+            os.makedirs(os.path.join(d, "node_modules", "p"))
+            with open(os.path.join(d, "node_modules", "secret"), "wb") as f:
+                f.write(b"x")
+            reader = licence_scan.make_reader(node_modules=os.path.join(d, "node_modules"))
+            self.assertIsNone(reader({"name": "p", "version": "1", "purl": "pkg:npm/p@1"}, "../secret"))
+
+
 class CliTests(unittest.TestCase):
     def scan(self, sbom, *extra):
         with tempfile.TemporaryDirectory() as d:
@@ -380,6 +506,15 @@ class CheckedInPolicyTests(unittest.TestCase):
 
     def test_own_licence_is_agpl_only(self):
         self.assertEqual(self.policy["own"]["licences"], ["AGPL-3.0-only"])
+
+    def test_reviewed_records_pin_the_licence_text(self):
+        for r in self.policy["reviewed"]:
+            self.assertIn(r["reviewed_as"], self.policy["allow"])
+            self.assertRegex(r["sha256"], r"^[0-9a-f]{64}$")
+            self.assertFalse(any("*" in c for c in r["components"]), "records name modules, not patterns")
+        golang = [r for r in self.policy["reviewed"] if r["reviewed_as"] == "BSD-3-Clause"]
+        self.assertEqual([r["sha256"] for r in golang],
+                         ["911f8f5782931320f5b8d1160a76365b83aea6447ee6c04fa6d5591467db9dad"])
 
     def test_no_elections_or_exclusions_here(self):
         # They are decisions about Portal dependencies; nothing in this repository may quietly use one.

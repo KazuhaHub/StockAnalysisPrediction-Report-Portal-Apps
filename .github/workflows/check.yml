@@ -56,6 +56,7 @@ jobs:
       - name: Licence scan
         run: >
           python3 -I scripts/licence_scan.py --policy scripts/licence-policy.json
+          --go-mod-cache "$(go env GOMODCACHE)"
           --report "$RUNNER_TEMP/licence-report.json"
           "$RUNNER_TEMP/npm.cdx.json" "$RUNNER_TEMP/status-go.cdx.json"
       - name: Keep the SBOMs and the report
