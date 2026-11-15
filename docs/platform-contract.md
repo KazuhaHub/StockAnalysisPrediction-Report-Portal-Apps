@@ -169,3 +169,10 @@ read capability adds no schema and does not grant a recipient or route override.
 The backend proxy preserves safe 400/403/404/409/422/429 statuses while replacing
 upstream bodies with a fixed error envelope. Transport capacity returns 429.
 Private upstream diagnostics and credentials never become browser error text.
+
+## Toolchain follow-up (2026-11-15)
+
+Standard-library advisory GO-2026-6859 affects Go 1.26.10, so govulncheck failed the
+`protocol` and `status` check jobs. The minimum toolchain of both Go modules and the
+status image's build stage moves to Go 1.26.11, matching Portal. This changes no
+schema or endpoint. Official advisory: https://pkg.go.dev/vuln/GO-2026-6859
