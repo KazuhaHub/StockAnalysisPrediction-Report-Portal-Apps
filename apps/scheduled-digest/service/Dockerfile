@@ -1,4 +1,4 @@
-FROM golang:1.26.10-bookworm AS build
+FROM golang:1.26.11-bookworm AS build
 WORKDIR /src/apps/scheduled-digest/service
 COPY packages/extensionprotocol /src/packages/extensionprotocol
 COPY apps/scheduled-digest/service/go.mod ./
