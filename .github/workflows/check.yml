@@ -37,28 +37,35 @@ jobs:
         with:
           python-version: '3.13'
       - name: Evaluator tests and first-party licence declarations
-        run: python3 -B -m unittest scripts/tests/test_licence_scan.py -v
+        run: python3 -B -m unittest scripts/tests/test_licence_scan.py scripts/tests/test_licence_copy.py -v
       - name: npm SBOM (production dependencies of every workspace)
         run: >
           npx --yes @cyclonedx/cyclonedx-npm@6.0.1
           --omit dev --package-lock-only --output-format JSON --spec-version 1.6
           --output-file "$RUNNER_TEMP/npm.cdx.json" package.json
-      - name: Go SBOM (status service, with licences)
+      - name: Go SBOMs (status service, one per release target, with licences)
+        # The targets of build-status-release.py (a test keeps the two lists equal): a module can be linked on
+        # one GOOS/GOARCH and not on another. The tool is compiled for the runner first; the target only
+        # constrains which packages it counts.
         working-directory: apps/status/service
-        env:
-          CGO_ENABLED: '0'
-          GOOS: linux
-          GOARCH: amd64
-        run: >
-          go run github.com/CycloneDX/cyclonedx-gomod/cmd/cyclonedx-gomod@v1.9.0
-          app -licenses -assert-licenses -json -main cmd/status
-          -output "$RUNNER_TEMP/status-go.cdx.json" .
+        run: |
+          GOBIN="$RUNNER_TEMP/bin" go install github.com/CycloneDX/cyclonedx-gomod/cmd/cyclonedx-gomod@v1.9.0
+          for target in linux/amd64 linux/arm64 linux/arm/7 darwin/amd64 darwin/arm64 windows/amd64; do
+            IFS=/ read -r goos goarch goarm <<< "$target"
+            CGO_ENABLED=0 GOOS="$goos" GOARCH="$goarch" GOARM="$goarm" "$RUNNER_TEMP/bin/cyclonedx-gomod" \
+              app -licenses -assert-licenses -json -main cmd/status \
+              -output "$RUNNER_TEMP/status-go-$goos-$goarch${goarm}.cdx.json" .
+          done
+      - name: Evaluator and policy match the Portal copy
+        # The evaluator and the shared policy sections are copies of the Portal's; this fails when they drift
+        # from the Portal commit pinned in scripts/licence-scan.pin.
+        run: python3 scripts/check_licence_copy.py
       - name: Licence scan
         run: >
           python3 -I scripts/licence_scan.py --policy scripts/licence-policy.json
-          --go-mod-cache "$(go env GOMODCACHE)"
+          --go-mod-cache "$(go env GOMODCACHE)" --workspace-root .
           --report "$RUNNER_TEMP/licence-report.json"
-          "$RUNNER_TEMP/npm.cdx.json" "$RUNNER_TEMP/status-go.cdx.json"
+          "$RUNNER_TEMP/npm.cdx.json" "$RUNNER_TEMP"/status-go-*.cdx.json
       - name: Keep the SBOMs and the report
         if: always()
         uses: actions/upload-artifact@v4
@@ -66,7 +73,7 @@ jobs:
           name: licence-sboms
           path: |
             ${{ runner.temp }}/npm.cdx.json
-            ${{ runner.temp }}/status-go.cdx.json
+            ${{ runner.temp }}/status-go-*.cdx.json
             ${{ runner.temp }}/licence-report.json
           retention-days: 30
   frontend-standard:
