@@ -1,0 +1,5 @@
+# These exact-byte products are owned by the contract generator.
+packages/app-sdk/src/descriptor-contract.generated.ts
+packages/app-sdk/schema/descriptor-v2.schema.json
+packages/app-sdk/src/bridge-v2.ts
+packages/app-sdk/tests/bridge-v2.test.ts

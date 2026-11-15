@@ -1,0 +1,88 @@
+{
+  "format": "portal.app/v2",
+  "id": "scheduled-digest",
+  "version": "0.1.0-dev.1",
+  "publisher": "development-publisher",
+  "compatibility": {
+    "platform_api": ">=2.0.0-0 <3.0.0",
+    "runner_protocol": ">=1.0.0 <2.0.0"
+  },
+  "presentation": {
+    "name_key": "title",
+    "description_key": "description",
+    "entry": "index.html",
+    "locales": [
+      "en-US",
+      "zh-CN",
+      "zh-TW"
+    ],
+    "routes": [
+      {
+        "id": "home",
+        "path": "/",
+        "layout": "document"
+      },
+      {
+        "id": "history",
+        "path": "/history",
+        "layout": "document"
+      }
+    ],
+    "display": {
+      "icon": "calendar",
+      "texts": [
+        {
+          "locale": "en-US",
+          "name": "Scheduled Digest",
+          "description": "Scheduled background digest with an independent backend"
+        },
+        {
+          "locale": "zh-CN",
+          "name": "Scheduled Digest",
+          "description": "带独立后端的定时摘要示例"
+        },
+        {
+          "locale": "zh-TW",
+          "name": "Scheduled Digest",
+          "description": "帶獨立後端的定時摘要範例"
+        }
+      ]
+    }
+  },
+  "frontend": {
+    "artifact": "frontend.zip",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "backend": {
+    "kind": "oci",
+    "image": "ghcr.io/example/scheduled-digest@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "platforms": [
+      "linux/amd64",
+      "linux/arm64"
+    ],
+    "protocol": "portal.backend/1",
+    "resources": {
+      "memory_mib": 128,
+      "cpu_millis": 250,
+      "pids": 32
+    }
+  },
+  "capabilities": {
+    "required": [
+      "background.run",
+      "reports.read",
+      "secrets.use",
+      "tasks.schedule"
+    ],
+    "optional": [
+      "network.http"
+    ]
+  },
+  "data": {
+    "schema": 1,
+    "readable_schemas": [
+      1
+    ],
+    "writes_on_startup": false
+  }
+}

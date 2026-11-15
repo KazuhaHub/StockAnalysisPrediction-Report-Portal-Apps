@@ -174,5 +174,6 @@ Private upstream diagnostics and credentials never become browser error text.
 
 Standard-library advisory GO-2026-6859 affects Go 1.26.10, so govulncheck failed the
 `protocol` and `status` check jobs. The minimum toolchain of both Go modules and the
-status image's build stage moves to Go 1.26.11, matching Portal. This changes no
+status image's build stage moves to Go 1.26.11, matching Portal. The scheduled-digest
+service (go.mod and image build stage), added later, follows the same minimum. This changes no
 schema or endpoint. Official advisory: https://pkg.go.dev/vuln/GO-2026-6859

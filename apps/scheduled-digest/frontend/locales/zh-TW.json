@@ -1,0 +1,21 @@
+{
+  "title": "定時摘要",
+  "description": "來自獨立應用後端的背景摘要結果",
+  "historyTitle": "摘要歷史",
+  "refresh": "重新整理",
+  "history": "歷史",
+  "home": "摘要",
+  "backendUnavailable": "應用後端無法使用。",
+  "loading": "正在載入摘要狀態",
+  "empty": "尚未完成任何摘要。",
+  "itemCount": "摘要項目",
+  "occurrence": "任務識別",
+  "generated": "產生時間",
+  "digest": "摘要",
+  "feedTitle": "已審核資料來源",
+  "feedHint": "憑證值只保留在 Portal 內，跨越橋接的僅是綁定名稱。",
+  "checkFeed": "檢查已設定資料來源",
+  "feedReady": "已審核資料來源回應正常。",
+  "feedFailed": "已審核資料來源無法使用。",
+  "unavailable": "摘要狀態無法使用。"
+}

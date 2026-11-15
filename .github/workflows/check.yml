@@ -16,11 +16,12 @@ jobs:
       - run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
   licence:
     # The licence gate of the platform policy (Portal doc 167 section 8): the production npm graph of every
-    # first-party workspace and the Go modules linked into the status service, judged against
+    # first-party workspace and the Go modules linked into the status and scheduled-digest services, judged against
     # scripts/licence-policy.json. A denied, unknown or missing licence fails the run. The evaluator and the
     # allow and deny lists are copies of the Portal's; scripts/licence_scan.py says so, keep them in sync.
     # apps/status/tests (the browser acceptance harness) is not shipped and is not scanned. The protocol
-    # module has no third-party requirements and is covered as a component of the status service.
+    # module has no third-party requirements; it is judged as a component of the services that require it
+    # (scheduled-digest takes it from the local directory, so packages/extensionprotocol ships its own LICENSE).
     runs-on: ubuntu-latest
     env:
       GOWORK: 'off'
@@ -60,6 +61,15 @@ jobs:
               app -licenses -assert-licenses -json -main cmd/status \
               -output "$RUNNER_TEMP/status-go-$goos-$goarch${goarm}.cdx.json" .
           done
+      - name: Go SBOMs (scheduled-digest service, the linux targets of its container image)
+        working-directory: apps/scheduled-digest/service
+        run: |
+          for target in linux/amd64 linux/arm64; do
+            IFS=/ read -r goos goarch <<< "$target"
+            CGO_ENABLED=0 GOOS="$goos" GOARCH="$goarch" "$RUNNER_TEMP/bin/cyclonedx-gomod" \
+              app -licenses -assert-licenses -json -main . \
+              -output "$RUNNER_TEMP/digest-go-$goos-$goarch.cdx.json" .
+          done
       - name: Evaluator and policy match the Portal copy
         # The evaluator and the shared policy sections are copies of the Portal's; this fails when they drift
         # from the Portal commit pinned in scripts/licence-scan.pin.
@@ -73,7 +83,7 @@ jobs:
           python3 -I scripts/licence_scan.py --policy scripts/licence-policy.json
           --go-mod-cache "$(go env GOMODCACHE)" --node-modules node_modules --workspace-root .
           --report "$RUNNER_TEMP/licence-report.json"
-          "$RUNNER_TEMP/npm.cdx.json" "$RUNNER_TEMP"/status-go-*.cdx.json
+          "$RUNNER_TEMP/npm.cdx.json" "$RUNNER_TEMP"/status-go-*.cdx.json "$RUNNER_TEMP"/digest-go-*.cdx.json
       - name: Keep the SBOMs and the report
         if: always()
         uses: actions/upload-artifact@v4
@@ -82,12 +92,14 @@ jobs:
           path: |
             ${{ runner.temp }}/npm.cdx.json
             ${{ runner.temp }}/status-go-*.cdx.json
+            ${{ runner.temp }}/digest-go-*.cdx.json
             ${{ runner.temp }}/licence-report.json
           retention-days: 30
   frontend-standard:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - run: python3 scripts/generate_app_contract.py --check
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
@@ -96,6 +108,7 @@ jobs:
       - run: npm run typecheck
       - run: npm run test:sdk
       - run: python3 scripts/test-app-template.py
+      - run: python3 scripts/test-app-root-v2.py
       - run: npm test --workspace=portal-symbols-demo
       - run: npm run test:status-ui
       - run: python3 scripts/build-app-frontend.py demo-symbols
@@ -104,9 +117,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
+      - run: npm ci
       - run: python3 -m unittest discover -s scripts/tests -v
       - run: python3 scripts/catalogue.py check --verify-downloads
   protocol:
@@ -123,6 +140,32 @@ jobs:
       - run: go vet ./...
       - run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
       - run: go test -race ./...
+  scheduled-digest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: apps/scheduled-digest/service/go.mod
+          cache: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: npm ci
+      - run: go vet ./...
+        working-directory: apps/scheduled-digest/service
+      - run: go test -race ./...
+        working-directory: apps/scheduled-digest/service
+      - run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
+        working-directory: apps/scheduled-digest/service
+      - run: npm run typecheck --workspace=apps/scheduled-digest/frontend
+      - run: npm test --workspace=apps/scheduled-digest/frontend
+      - run: python3 scripts/plugin-standard.py
+      - run: python3 scripts/build-app-v2.py scheduled-digest --output "$RUNNER_TEMP/scheduled-digest-candidate"
+      - run: docker build -f apps/scheduled-digest/service/Dockerfile -t scheduled-digest-development .
   status:
     runs-on: ubuntu-latest
     steps:

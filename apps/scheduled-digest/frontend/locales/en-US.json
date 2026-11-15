@@ -1,0 +1,21 @@
+{
+  "title": "Scheduled Digest",
+  "description": "Background digest results from the independent application backend",
+  "historyTitle": "Digest history",
+  "refresh": "Refresh",
+  "history": "History",
+  "home": "Summary",
+  "backendUnavailable": "The application backend is unavailable.",
+  "loading": "Loading digest state",
+  "empty": "No digest has completed yet.",
+  "itemCount": "Digest items",
+  "occurrence": "Occurrence",
+  "generated": "Generated",
+  "digest": "Digest",
+  "feedTitle": "Reviewed feed",
+  "feedHint": "The credential value remains inside Portal. Only its binding name crosses the bridge.",
+  "checkFeed": "Check configured feed",
+  "feedReady": "The reviewed feed responded.",
+  "feedFailed": "The reviewed feed is unavailable.",
+  "unavailable": "Digest state is unavailable."
+}

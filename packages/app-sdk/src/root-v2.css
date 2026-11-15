@@ -1,0 +1,17 @@
+/* The host owns the outer title, page gutters and loading cover. */
+.portal-v2-root {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  padding: 0;
+  margin: 0;
+}
+.portal-v2-root[data-app-layout="document"] {
+  min-height: 0;
+  display: flow-root;
+}
+html, body { overflow: hidden; }
+.portal-v2-root[data-app-layout="viewport"] {
+  height: 100dvh;
+  overflow: hidden;
+}
