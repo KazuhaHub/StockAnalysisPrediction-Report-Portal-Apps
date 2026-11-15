@@ -1146,6 +1146,21 @@ class FirstPartyDeclarationTests(unittest.TestCase):
             with open(path) as f:
                 self.assertEqual(json.load(f).get("license"), "AGPL-3.0-only", os.path.relpath(path, REPO))
 
+    def test_every_shared_go_module_ships_the_repository_licence(self):
+        # A Go module that another module requires is a component of that module's SBOM, and cyclonedx-gomod
+        # finds a licence only in the module's own directory; without the file it records none and the gate
+        # fails (no-licence).
+        import glob
+        with open(os.path.join(REPO, "LICENSE"), "rb") as f:
+            repository_licence = f.read()
+        modules = sorted(glob.glob(os.path.join(REPO, "packages", "*", "go.mod")))
+        self.assertGreaterEqual(len(modules), 1)
+        for gomod in modules:
+            path = os.path.join(os.path.dirname(gomod), "LICENSE")
+            self.assertTrue(os.path.isfile(path), os.path.relpath(path, REPO))
+            with open(path, "rb") as f:
+                self.assertEqual(f.read(), repository_licence, os.path.relpath(path, REPO))
+
     def test_every_first_party_npm_package_is_covered_by_the_own_rule(self):
         policy = load_policy(os.path.join(SCRIPTS, "licence-policy.json"))
         names = []
