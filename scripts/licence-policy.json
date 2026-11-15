@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "source": "Portal docs/app-platform/167-owner-decisions-remaining-acceptance.md section 8 (DEV-04). The allow, deny, own.licences and reviewed sections are a copy of the Portal policy (scripts/licence-policy.json there); keep them in sync. Elections and exclusions are Portal-only and are empty here.",
+  "source": "Portal docs/app-platform/167-owner-decisions-remaining-acceptance.md section 8 (DEV-04). The allow, deny, election_only, own.licences and reviewed sections are a copy of the Portal policy (scripts/licence-policy.json there); keep them in sync (scripts/check_licence_copy.py). Elections and exclusions are Portal-only and are empty here.",
   "allow": [
     "MIT",
     "BSD-2-Clause",
@@ -16,14 +16,14 @@
     "MPL-2.0"
   ],
   "deny": [
-    "GPL-2.0-only",
-    "GPL-2.0",
-    "SSPL-1.0",
     "BUSL-1.1",
     "Commons-Clause",
     "EPL-1.0",
     "EPL-2.0",
+    "GPL-2.0",
+    "GPL-2.0-only",
     "NOASSERTION",
+    "SSPL-1.0",
     "UNLICENSED"
   ],
   "own": {
@@ -57,7 +57,7 @@
       "file": "LICENSE",
       "sha256": "911f8f5782931320f5b8d1160a76365b83aea6447ee6c04fa6d5591467db9dad",
       "reason": "Owner review: the LICENSE shipped in each golang.org/x module is the standard Go BSD 3-clause text (byte-identical across all of them); the licence detector reports it as BSD-Source-Code. Pinned to the file's SHA-256, so a change to the text makes the record stale.",
-      "declared": "BSD-Source-Code"
+      "declared": "id:BSD-Source-Code"
     },
     {
       "components": [

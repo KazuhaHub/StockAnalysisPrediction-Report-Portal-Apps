@@ -79,23 +79,93 @@ class Pin(unittest.TestCase):
             path.write_text(SHA + "\n")
             self.assertEqual(copy.read_pin(path), SHA)
 
-    def test_check_fetches_the_pinned_commit_and_reports_drift(self):
-        asked = []
-
-        def fetch(sha, path):
-            asked.append((sha, path))
-            return {"scripts/licence_scan.py": SOURCE, "scripts/licence-policy.json": json.dumps(POLICY)}[path]
-
-        local_policy = dict(POLICY)
-        self.assertEqual(copy.check(SHA, SOURCE, local_policy, fetch), [])
-        self.assertEqual({a[0] for a in asked}, {SHA})
-        drift = copy.check(SHA, SOURCE.replace("return 1", "return 2"), local_policy, fetch)
-        self.assertTrue(any("licence_scan.py" in d for d in drift))
-        drift = copy.check(SHA, SOURCE, dict(POLICY, allow=["MIT", "ISC"]), fetch)
-        self.assertTrue(any("allow" in d for d in drift))
-
     def test_the_failure_message_says_how_to_bump_the_pin(self):
         self.assertIn("licence-scan.pin", copy.BUMP_HELP)
+
+
+class FakePortal:
+    """The Portal repository as the check sees it: files by ref, and which branches contain which commits."""
+
+    def __init__(self, files_by_ref, contains=()):
+        self.files_by_ref, self.contains, self.asked = files_by_ref, set(contains), []
+
+    def fetch(self, ref, path):
+        self.asked.append((ref, path))
+        return self.files_by_ref.get(ref, {}).get(path)
+
+    def reachable(self, branch, sha):
+        return (branch, sha) in self.contains
+
+
+def portal_files(source=SOURCE, policy=POLICY):
+    return {"scripts/licence_scan.py": source, "scripts/licence-policy.json": json.dumps(policy)}
+
+
+INTEGRATION, MAIN = "integration/app-platform", "main"
+
+
+class DriftCheck(unittest.TestCase):
+    def check(self, portal, source=SOURCE, policy=POLICY):
+        return copy.check(SHA, source, policy, portal.fetch, portal.reachable)
+
+    def test_matching_the_pin_with_no_live_copy_yet_passes_and_says_so(self):
+        # Before the Portal merges the licence gate there is nothing live to compare with.
+        drift, notes = self.check(FakePortal({SHA: portal_files()}))
+        self.assertEqual(drift, [])
+        self.assertTrue(any("not merged" in n for n in notes))
+
+    def test_a_drifted_evaluator_is_reported_against_the_pin(self):
+        drift, _ = self.check(FakePortal({SHA: portal_files()}), source=SOURCE.replace("return 1", "return 2"))
+        self.assertTrue(any("licence_scan.py" in d and SHA[:7] in d for d in drift))
+
+    def test_a_drifted_shared_policy_section_is_reported(self):
+        drift, _ = self.check(FakePortal({SHA: portal_files()}), policy=dict(POLICY, allow=["MIT", "ISC"]))
+        self.assertTrue(any("allow" in d for d in drift))
+
+    def test_a_missing_pin_commit_is_reported(self):
+        drift, _ = self.check(FakePortal({}))
+        self.assertTrue(any("pinned commit" in d for d in drift))
+
+    def test_the_live_integration_branch_is_compared_too(self):
+        live = portal_files(SOURCE.replace("return 1", "return 7"))
+        portal = FakePortal({SHA: portal_files(), INTEGRATION: live}, contains={(INTEGRATION, SHA)})
+        drift, _ = self.check(portal)
+        self.assertTrue(any(INTEGRATION in d and "licence_scan.py" in d for d in drift))
+
+    def test_the_live_main_branch_is_compared_when_the_file_exists_there(self):
+        live = portal_files(policy=dict(POLICY, deny=[]))
+        portal = FakePortal({SHA: portal_files(), MAIN: live}, contains={(MAIN, SHA)})
+        drift, _ = self.check(portal)
+        self.assertTrue(any(MAIN in d and "deny" in d for d in drift))
+
+    def test_matching_live_branches_and_a_reachable_pin_pass(self):
+        portal = FakePortal({SHA: portal_files(), INTEGRATION: portal_files(), MAIN: portal_files()},
+                            contains={(INTEGRATION, SHA)})
+        self.assertEqual(self.check(portal), ([], []))
+
+    def test_a_pin_no_live_branch_contains_is_reported(self):
+        # What a squash merge does to a pin on a feature-branch commit: the content matches, the commit is gone.
+        portal = FakePortal({SHA: portal_files(), INTEGRATION: portal_files()})
+        drift, _ = self.check(portal)
+        self.assertTrue(any("reachable" in d for d in drift))
+
+    def test_one_branch_containing_the_pin_is_enough(self):
+        portal = FakePortal({SHA: portal_files(), INTEGRATION: portal_files(), MAIN: portal_files()},
+                            contains={(MAIN, SHA)})
+        self.assertEqual(self.check(portal)[0], [])
+
+    def test_a_branch_without_the_file_is_skipped_not_failed(self):
+        portal = FakePortal({SHA: portal_files(), INTEGRATION: portal_files()}, contains={(INTEGRATION, SHA)})
+        drift, _ = self.check(portal)
+        self.assertEqual(drift, [])
+        self.assertNotIn((MAIN, "scripts/licence-policy.json"), portal.asked)
+
+    def test_the_pin_is_fetched_by_commit_and_branches_by_name(self):
+        portal = FakePortal({SHA: portal_files()})
+        self.check(portal)
+        self.assertIn((SHA, "scripts/licence_scan.py"), portal.asked)
+        self.assertIn((INTEGRATION, "scripts/licence_scan.py"), portal.asked)
+        self.assertIn((MAIN, "scripts/licence_scan.py"), portal.asked)
 
 
 class TheWorkflow(unittest.TestCase):

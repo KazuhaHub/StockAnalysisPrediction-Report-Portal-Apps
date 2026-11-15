@@ -44,7 +44,7 @@ jobs:
           --omit dev --package-lock-only --output-format JSON --spec-version 1.6
           --output-file "$RUNNER_TEMP/npm.cdx.json" package.json
       - name: Go SBOMs (status service, one per release target, with licences)
-        # The targets of build-status-release.py (a test keeps the two lists equal): a module can be linked on
+        # The targets of build-status-release.py (scripts/tests/test_licence_copy.py, TheWorkflow, fails when the two lists differ): a module can be linked on
         # one GOOS/GOARCH and not on another. The tool is compiled for the runner first; the target only
         # constrains which packages it counts.
         working-directory: apps/status/service
