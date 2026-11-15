@@ -1,4 +1,4 @@
-FROM golang:1.26.10-bookworm AS build
+FROM golang:1.26.11-bookworm AS build
 WORKDIR /src
 COPY apps/status/service/go.mod apps/status/service/go.sum ./
 RUN go mod download
