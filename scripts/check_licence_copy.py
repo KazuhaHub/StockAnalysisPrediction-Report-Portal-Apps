@@ -3,16 +3,20 @@
 
 scripts/licence_scan.py is a copy of the file of the same name in KazuhaHub/StockAnalysisPrediction-Report-Portal,
 and the allow, deny, election-only, own-licence and reviewed-as sections of scripts/licence-policy.json are a copy of
-that repository's policy. Both repositories are public, so this reads the Portal without credentials and compares:
+that repository's policy. Both repositories are public, so this reads the Portal without credentials (or with the
+workflow's read-only GITHUB_TOKEN when one is set, which only lifts the anonymous rate limit) and checks:
 
-  * the Portal commit pinned in scripts/licence-scan.pin;
-  * the live files on the Portal branches integration/app-platform and main, each one only once the file exists there.
+  1. the local copy equals the Portal commit pinned in scripts/licence-scan.pin;
+  2. the live Portal branches are integration/app-platform and main; those that carry the file are "live". The pin
+     must be a commit one of them contains, so a pin on a feature-branch commit that a squash merge orphans fails;
+  3. the pinned files equal the live files of AT LEAST ONE live branch (evaluator line for line apart from its module
+     docstring, and the shared policy sections). While only integration/app-platform carries the file it is the
+     reference, and once main carries it too, matching either passes. The two branches may differ for weeks; the
+     check is not red by construction because of that;
+  4. a branch that does not carry the file but contains the pin has lost it, and fails. A branch that never had it
+     (the gate is not merged there yet) is skipped. Before any branch carries the file only rule 1 applies.
 
-The evaluator must match line for line apart from its module docstring, and the shared policy sections must be
-equal. Elections and exclusions are Portal-only and are not compared. Once a live branch carries the file, the pin
-must also be a commit that branch contains: a pin on a feature-branch commit that a squash merge orphans fails here,
-which is the reminder to move it. Until the Portal has merged the licence gate there is no live branch to compare
-with, and only the pin is checked.
+Elections and exclusions are Portal-only and are not compared.
 
 A copy that quietly differs is a gate that judges differently in the two repositories. To change the evaluator or
 the shared policy, change the Portal first, merge it, then in this repository copy the files from that commit,
@@ -22,6 +26,7 @@ write the commit's full SHA into scripts/licence-scan.pin, and run this script.
 """
 import ast
 import json
+import os
 import re
 import subprocess
 import sys
@@ -95,31 +100,59 @@ def check(sha, local_source, local_policy, fetch, reachable):
     drift, notes = [], []
     pinned = fetch(sha, EVALUATOR), fetch(sha, POLICY)
     if None in pinned:
-        drift.append(f"the pinned commit {sha} has no {EVALUATOR} or {POLICY} in the Portal repository")
-    else:
-        drift += _compare(sha[:7], local_source, local_policy, *pinned)
-    live = []
+        return [f"the pinned commit {sha} has no {EVALUATOR} or {POLICY} in the Portal repository"], notes
+    drift += _compare(sha[:7], local_source, local_policy, *pinned)
+    live, matching = [], []
+    differences = {}
     for branch in BRANCHES:
         evaluator = fetch(branch, EVALUATOR)
         if evaluator is None:
-            continue  # the Portal has not merged the gate into this branch yet
+            if reachable(branch, sha):
+                drift.append(f"the Portal branch {branch} contains the pinned commit but no longer has {EVALUATOR}")
+            continue  # otherwise the Portal has not merged the gate into this branch yet
         live.append(branch)
         policy = fetch(branch, POLICY)
         if policy is None:
-            drift.append(f"{POLICY} is missing on the Portal branch {branch}, which has {EVALUATOR}")
+            differences[branch] = [f"{POLICY} is missing"]
+            continue
+        found = _compare(branch, *pinned_pair(pinned), evaluator, policy)
+        if found:
+            differences[branch] = found
         else:
-            drift += _compare(branch, local_source, local_policy, evaluator, policy)
+            matching.append(branch)
     if not live:
-        notes.append("the Portal has not merged the licence gate into integration/app-platform or main yet: "
-                     "only the pinned commit was compared")
-    elif not any(reachable(branch, sha) for branch in live):
+        if not drift:
+            notes.append("the Portal has not merged the licence gate into integration/app-platform or main yet: "
+                         "only the pinned commit was compared")
+        return drift, notes
+    if not any(reachable(branch, sha) for branch in live):
         drift.append(f"the pinned commit {sha} is not reachable from {' or '.join(live)}: move the pin to a commit "
                      f"those branches contain")
+    if not matching:
+        drift.append(f"the pinned files match none of the live Portal branches ({', '.join(live)}):")
+        for branch in live:
+            drift += [f"  {line}" for line in differences[branch]]
     return drift, notes
 
 
-def _get(url, headers=()):
+def pinned_pair(pinned):
+    """The pinned evaluator and the shared policy, parsed, as _compare takes them (source, policy)."""
+    return pinned[0], json.loads(pinned[1])
+
+
+def request_headers(url, env=None):
+    """Headers for a request: the GitHub token goes only to https://api.github.com, never to another host."""
+    env = os.environ if env is None else env
+    headers = [("Accept", "application/vnd.github+json")] if url.startswith("https://api.github.com/") else []
+    token = env.get("GITHUB_TOKEN", "")
+    if token and url.startswith("https://api.github.com/"):
+        headers.append(("Authorization", f"Bearer {token}"))
+    return headers
+
+
+def _get(url):
     """(status, body). A Python without a CA bundle (a stock macOS framework build) cannot verify GitHub; curl can."""
+    headers = request_headers(url)
     request = urllib.request.Request(url, headers=dict(headers))
     try:
         with urllib.request.urlopen(request, timeout=30) as response:
@@ -148,8 +181,7 @@ def fetch_from_github(ref, path):
 
 def reachable_on_github(branch, sha):
     """Whether the Portal branch contains the commit (the branch is identical to it or ahead of it)."""
-    status, body = _get(f"https://api.github.com/repos/{PORTAL}/compare/{sha}...{branch}",
-                        headers=(("Accept", "application/vnd.github+json"),))
+    status, body = _get(f"https://api.github.com/repos/{PORTAL}/compare/{sha}...{branch}")
     if status == 404:
         return False
     if status != 200:

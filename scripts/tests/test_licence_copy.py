@@ -126,6 +126,46 @@ class DriftCheck(unittest.TestCase):
         drift, _ = self.check(FakePortal({}))
         self.assertTrue(any("pinned commit" in d for d in drift))
 
+    def test_branches_that_differ_pass_when_the_pin_matches_one_of_them(self):
+        # integration/app-platform and main can differ for weeks; the pin only has to be one of them.
+        newer = portal_files(SOURCE.replace("return 1", "return 7"))
+        for matching in (INTEGRATION, MAIN):
+            with self.subTest(matching=matching):
+                other = MAIN if matching == INTEGRATION else INTEGRATION
+                portal = FakePortal({SHA: portal_files(), matching: portal_files(), other: newer},
+                                    contains={(matching, SHA)})
+                self.assertEqual(self.check(portal), ([], []))
+
+    def test_branches_that_differ_fail_when_the_pin_matches_neither(self):
+        a = portal_files(SOURCE.replace("return 1", "return 7"))
+        b = portal_files(SOURCE.replace("return 1", "return 8"))
+        portal = FakePortal({SHA: portal_files(), INTEGRATION: a, MAIN: b}, contains={(INTEGRATION, SHA)})
+        drift, _ = self.check(portal)
+        self.assertTrue(any(INTEGRATION in d and MAIN in d for d in drift) or
+                        (any(INTEGRATION in d for d in drift) and any(MAIN in d for d in drift)))
+
+    def test_the_shared_policy_of_the_pin_may_match_a_different_branch_than_the_evaluator_does(self):
+        # Each live branch is judged as a whole: matching the evaluator of one and the policy of the other is no match.
+        a = portal_files(SOURCE, dict(POLICY, deny=[]))
+        b = portal_files(SOURCE.replace("return 1", "return 8"), POLICY)
+        portal = FakePortal({SHA: portal_files(), INTEGRATION: a, MAIN: b}, contains={(INTEGRATION, SHA)})
+        self.assertTrue(self.check(portal)[0])
+
+    def test_a_branch_that_contains_the_pin_but_lost_the_file_fails(self):
+        # The file once reached the branch (the pin is in its history) and is gone: that is a removal, not "not merged yet".
+        portal = FakePortal({SHA: portal_files(), INTEGRATION: portal_files()}, contains={(INTEGRATION, SHA), (MAIN, SHA)})
+        drift, _ = self.check(portal)
+        self.assertTrue(any(MAIN in d and "no longer" in d for d in drift))
+
+    def test_a_branch_that_never_had_the_file_is_not_a_removal(self):
+        portal = FakePortal({SHA: portal_files(), INTEGRATION: portal_files()}, contains={(INTEGRATION, SHA)})
+        self.assertEqual(self.check(portal)[0], [])
+
+    def test_when_every_branch_lost_the_file_after_containing_the_pin_it_fails(self):
+        portal = FakePortal({SHA: portal_files()}, contains={(INTEGRATION, SHA)})
+        drift, _ = self.check(portal)
+        self.assertTrue(any(INTEGRATION in d and "no longer" in d for d in drift))
+
     def test_the_live_integration_branch_is_compared_too(self):
         live = portal_files(SOURCE.replace("return 1", "return 7"))
         portal = FakePortal({SHA: portal_files(), INTEGRATION: live}, contains={(INTEGRATION, SHA)})
@@ -168,6 +208,26 @@ class DriftCheck(unittest.TestCase):
         self.assertIn((MAIN, "scripts/licence_scan.py"), portal.asked)
 
 
+class Token(unittest.TestCase):
+    def test_the_token_is_sent_only_to_the_github_api(self):
+        env = {"GITHUB_TOKEN": "t0ken"}
+        api = dict(copy.request_headers("https://api.github.com/repos/x/y/compare/a...b", env))
+        self.assertEqual(api["Authorization"], "Bearer t0ken")
+        for url in ("https://raw.githubusercontent.com/x/y/main/f", "https://example.com/", "http://api.github.com/x"):
+            self.assertNotIn("Authorization", dict(copy.request_headers(url, env)), url)
+
+    def test_without_a_token_the_request_is_anonymous(self):
+        self.assertNotIn("Authorization", dict(copy.request_headers("https://api.github.com/x", {})))
+        self.assertNotIn("Authorization", dict(copy.request_headers("https://api.github.com/x", {"GITHUB_TOKEN": ""})))
+
+    def test_the_workflow_passes_the_read_only_job_token_to_the_copy_check(self):
+        workflow = (ROOT / ".github" / "workflows" / "check.yml").read_text()
+        self.assertRegex(workflow, r"(?m)^permissions:\n  contents: read\n")
+        step = re.search(r"- name: Evaluator and policy match the Portal copy\n(.*?)(?=\n      - name:)", workflow, re.S)[1]
+        self.assertIn("GITHUB_TOKEN: ${{ github.token }}", step)
+        self.assertIn("scripts/check_licence_copy.py", step)
+
+
 class TheWorkflow(unittest.TestCase):
     def test_the_go_sbom_covers_every_status_release_target(self):
         build = load("build_status_release", "build-status-release.py")
@@ -176,6 +236,15 @@ class TheWorkflow(unittest.TestCase):
         job = re.search(r"(?m)^  licence:\n(.*?)(?=^  [a-z-]+:\n)", workflow, re.S)[1]
         listed = set(re.findall(r"\b(linux|darwin|windows)/(amd64|arm64|arm)(?:/(\d))?\b", job))
         self.assertEqual({(a, b, c or "") for a, b, c in listed}, targets)
+
+    def test_the_npm_sbom_is_cross_checked_against_the_installed_tree(self):
+        # The SBOM is built from package-lock.json, whose licence fields integrity does not cover, so the scan is
+        # given the installed node_modules and npm ci runs first.
+        workflow = (ROOT / ".github" / "workflows" / "check.yml").read_text()
+        job = re.search(r"(?m)^  licence:\n(.*?)(?=^  [a-z-]+:\n)", workflow, re.S)[1]
+        self.assertIn("npm ci --ignore-scripts", job)
+        self.assertLess(job.index("npm ci --ignore-scripts"), job.index("scripts/licence_scan.py --policy"))
+        self.assertIn("--node-modules node_modules", job)
 
     def test_the_licence_job_runs_the_copy_check(self):
         workflow = (ROOT / ".github" / "workflows" / "check.yml").read_text()
