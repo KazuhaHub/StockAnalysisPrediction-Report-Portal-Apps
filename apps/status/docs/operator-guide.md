@@ -41,7 +41,7 @@ From the Apps repository root:
 python3 scripts/build-status-frontend.py
 python3 scripts/catalogue.py package status
 cd apps/status/service
-GOWORK=off GOTOOLCHAIN=go1.26.10 go build -trimpath -o ./status ./cmd/status
+GOWORK=off GOTOOLCHAIN=go1.26.11 go build -trimpath -o ./status ./cmd/status
 ```
 
 Move the executable to your service directory. Prepare a writable data directory
@@ -147,7 +147,7 @@ module:
 
 ```sh
 PORTAL_BINARY=/absolute/path/to/compatible-report-portal \
-  GOWORK=off GOTOOLCHAIN=go1.26.10 go test -race ./internal/status \
+  GOWORK=off GOTOOLCHAIN=go1.26.11 go test -race ./internal/status \
   -run '^TestPortalNotificationCaptureAndChannelQuota$' -count=1
 ```
 
