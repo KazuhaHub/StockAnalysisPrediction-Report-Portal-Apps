@@ -2,7 +2,6 @@ package status
 
 import (
 	"bytes"
-	protocol "github.com/KazuhaHub/StockAnalysisPrediction-Report-Portal-Apps/packages/extensionprotocol"
 	"path/filepath"
 	"testing"
 	"time"
@@ -26,7 +25,7 @@ func TestFirstStartRequiresExplicitResumeBeforeProbing(t *testing.T) {
 	if _, err := s.db.Exec(`UPDATE monitors SET created_at=? WHERE component_id=?`, now.Add(-9*time.Minute).UnixMilli(), component.ID); err != nil {
 		t.Fatal(err)
 	}
-	history, err := s.History(protocol.Viewer{Subject: "admin", Role: "admin"}, component.ID, now.Add(-8*time.Minute), now.Add(-7*time.Minute))
+	history, err := s.History(fixtureAdmin(), component.ID, now.Add(-8*time.Minute), now.Add(-7*time.Minute))
 	if err != nil || len(history) != 1 || history[0].ExcludedMS != 60000 {
 		t.Fatalf("first-start pause did not exclude history=%+v %v", history, err)
 	}
@@ -37,7 +36,7 @@ func TestFirstStartRequiresExplicitResumeBeforeProbing(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.Resume(protocol.Viewer{Subject: "admin", Role: "admin"}, fingerprint, true, false); err != nil {
+	if err := s.Resume(fixtureAdmin(), fingerprint, true, false); err != nil {
 		t.Fatal(err)
 	}
 	if _, ok, err := s.ClaimDue(time.Now().Add(time.Second)); err != nil || !ok {

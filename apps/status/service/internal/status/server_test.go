@@ -17,7 +17,7 @@ func TestPrivateAPIRequiresBoundAssertionsAndCurrentBoot(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	viewer := protocol.Viewer{Subject: "viewer", Role: "user", OUs: []string{"team"}}
+	viewer := fixtureViewer("user", "viewer", "team")
 	challenge, _ := signer.NewChallenge(time.Now())
 	raw, _ := json.Marshal(map[string]string{"challenge": challenge})
 	req := httptest.NewRequest("POST", "/v1/handshake", bytes.NewReader(raw))

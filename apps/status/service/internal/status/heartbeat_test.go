@@ -15,7 +15,7 @@ import (
 
 func TestHeartbeatAuthenticatesAndPersistsReplayFence(t *testing.T) {
 	s := testStore(t)
-	admin := protocol.Viewer{Subject: "admin", Role: "admin"}
+	admin := fixtureAdmin()
 	credential, err := s.SaveCredential(admin, CredentialInput{Kind: "heartbeat", Label: "Backup job", Secret: json.RawMessage(`{"api_key":"heartbeat-secret-at-least-32-bytes"}`)})
 	if err != nil {
 		t.Fatal(err)

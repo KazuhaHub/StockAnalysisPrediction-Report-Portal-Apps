@@ -2,7 +2,6 @@ package status
 
 import (
 	"bytes"
-	protocol "github.com/KazuhaHub/StockAnalysisPrediction-Report-Portal-Apps/packages/extensionprotocol"
 	"os"
 	"path/filepath"
 	"testing"
@@ -12,7 +11,7 @@ func TestRestoreRejectsIncompatibleCandidatesWithoutReplacingLiveData(t *testing
 	for _, scenario := range []string{"wrong-key", "future-schema", "missing-product", "occupied-rollback"} {
 		t.Run(scenario, func(t *testing.T) {
 			live := testStore(t)
-			admin := protocol.Viewer{Subject: "admin", Role: "admin"}
+			admin := fixtureAdmin()
 			component, err := live.SaveComponent(admin, ComponentInput{Label: "Must survive", Enabled: true})
 			if err != nil {
 				t.Fatal(err)

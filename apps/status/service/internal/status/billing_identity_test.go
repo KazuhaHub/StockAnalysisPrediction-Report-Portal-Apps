@@ -2,7 +2,6 @@ package status
 
 import (
 	"encoding/json"
-	protocol "github.com/KazuhaHub/StockAnalysisPrediction-Report-Portal-Apps/packages/extensionprotocol"
 	"strings"
 	"testing"
 	"time"
@@ -10,7 +9,7 @@ import (
 
 func TestSharedBillingAccountCannotBecomeIndependentPools(t *testing.T) {
 	s := testStore(t)
-	admin := protocol.Viewer{Subject: "admin", Role: "admin"}
+	admin := fixtureAdmin()
 	makeCredential := func(key string) string {
 		c, err := s.SaveCredential(admin, CredentialInput{Kind: "deepseek", Label: "Billing key", Secret: json.RawMessage(`{"api_key":"` + key + `"}`)})
 		if err != nil {

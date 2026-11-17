@@ -3,7 +3,6 @@ package status
 import (
 	"encoding/json"
 	"fmt"
-	protocol "github.com/KazuhaHub/StockAnalysisPrediction-Report-Portal-Apps/packages/extensionprotocol"
 	"strings"
 	"testing"
 	"time"
@@ -11,15 +10,15 @@ import (
 
 func TestComponentPagingSearchDetailAndExportShareCurrentAuthority(t *testing.T) {
 	s := testStore(t)
-	admin := protocol.Viewer{Subject: "admin", Role: "admin"}
-	reader := protocol.Viewer{Subject: "reader", Role: "user", OUs: []string{"a"}}
+	admin := fixtureAdmin()
+	reader := fixtureViewer("user", "reader", "a")
 	var owned, hidden ComponentInput
 	for i := 0; i < 64; i++ {
 		ou := "a"
 		if i >= 61 {
 			ou = "b"
 		}
-		c, err := s.SaveComponent(admin, ComponentInput{Label: fmt.Sprintf("Component %03d", i), Enabled: true, Grants: []Grant{{Principal: "ou:" + ou, Permission: "read"}}})
+		c, err := s.SaveComponent(admin, ComponentInput{Label: fmt.Sprintf("Component %03d", i), Enabled: true, Grants: []Grant{{Principal: fixtureOU(ou), Permission: "read"}}})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -66,10 +65,10 @@ func TestComponentPagingSearchDetailAndExportShareCurrentAuthority(t *testing.T)
 
 func TestComponentExportRequiresSeparateCurrentFinanceGrant(t *testing.T) {
 	s := testStore(t)
-	admin := protocol.Viewer{Subject: "admin", Role: "admin"}
-	reader := protocol.Viewer{Subject: "reader", Role: "user", OUs: []string{"a"}}
+	admin := fixtureAdmin()
+	reader := fixtureViewer("user", "reader", "a")
 	c := monitoredComponent(t, s)
-	c.Grants = []Grant{{Principal: "ou:a", Permission: "read"}}
+	c.Grants = []Grant{{Principal: fixtureOU("a"), Permission: "read"}}
 	var err error
 	c, err = s.SaveComponent(admin, c)
 	if err != nil {
@@ -91,7 +90,7 @@ func TestComponentExportRequiresSeparateCurrentFinanceGrant(t *testing.T) {
 	if strings.Contains(string(raw), "12345.6789") || strings.Contains(string(raw), "health.example") || strings.Contains(string(raw), "_status") {
 		t.Fatal("read-only export leaked financial/configuration/evidence details")
 	}
-	if _, err := s.db.Exec(`INSERT INTO component_grants VALUES(?,'ou:a','finance')`, c.ID); err != nil {
+	if _, err := s.db.Exec(`INSERT INTO component_grants VALUES(?,?,'finance')`, c.ID, fixtureOU("a")); err != nil {
 		t.Fatal(err)
 	}
 	export, err = s.ExportComponent(reader, c.ID, now.Add(-time.Hour), now.Add(time.Second))
@@ -106,7 +105,7 @@ func TestComponentExportRequiresSeparateCurrentFinanceGrant(t *testing.T) {
 
 func TestPublicComponentPagesCountOnlyExplicitPublication(t *testing.T) {
 	s := testStore(t)
-	admin := protocol.Viewer{Subject: "admin", Role: "admin"}
+	admin := fixtureAdmin()
 	now := time.Now()
 	for i := 0; i < 3; i++ {
 		_, err := s.SaveComponent(admin, ComponentInput{Label: "Private label", PublicLabel: fmt.Sprintf("Public %d", i), PublicEnabled: i < 2, Enabled: true})

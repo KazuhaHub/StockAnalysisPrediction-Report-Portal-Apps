@@ -7,8 +7,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	protocol "github.com/KazuhaHub/StockAnalysisPrediction-Report-Portal-Apps/packages/extensionprotocol"
 )
 
 func seedHistoryMonitor(t *testing.T, s *Store, created time.Time) (ComponentInput, string) {
@@ -36,7 +34,7 @@ func TestHistoryClipsPartialHoursAndCountsUnobservedTail(t *testing.T) {
 	historySample(t, s, id, start.Add(time.Minute))
 	historySample(t, s, id, start.Add(3*time.Minute))
 	from, to := start.Add(2*time.Minute), start.Add(10*time.Minute)
-	out, err := s.History(protocol.Viewer{Subject: "admin", Role: "admin"}, c.ID, from, to)
+	out, err := s.History(fixtureAdmin(), c.ID, from, to)
 	if err != nil || len(out) != 1 {
 		t.Fatalf("history=%+v err=%v", out, err)
 	}
@@ -48,7 +46,7 @@ func TestHistoryHasNoDataBeforeMonitorCreation(t *testing.T) {
 	s := testStore(t)
 	start := time.Now().UTC().Truncate(time.Hour).Add(-2 * time.Hour)
 	c, _ := seedHistoryMonitor(t, s, start)
-	out, err := s.History(protocol.Viewer{Subject: "admin", Role: "admin"}, c.ID, start.Add(-time.Hour), start.Add(10*time.Minute))
+	out, err := s.History(fixtureAdmin(), c.ID, start.Add(-time.Hour), start.Add(10*time.Minute))
 	if err != nil || len(out) != 1 || out[0].UnknownMS != 600000 || out[0].OperationalMS != 0 {
 		t.Fatalf("invented history=%+v err=%v", out, err)
 	}
@@ -74,7 +72,7 @@ func TestHistoryExcludesPausedPeriodAndDoesNotCountOverlappingMaintenanceTwice(t
 			t.Fatal(err)
 		}
 	}
-	out, err := s.History(protocol.Viewer{Subject: "admin", Role: "admin"}, c.ID, start, start.Add(10*time.Minute))
+	out, err := s.History(fixtureAdmin(), c.ID, start, start.Add(10*time.Minute))
 	if err != nil || len(out) != 1 || out[0].ExcludedMS != 300000 || out[0].OperationalMS != 60000 || out[0].UnknownMS != 240000 {
 		raw, _ := json.Marshal(out)
 		t.Fatalf("pause/maintenance=%s err=%v", raw, err)
@@ -91,7 +89,7 @@ func TestHistoryCountsFullHoursOfPauseAndResumesWithFreshEvidence(t *testing.T) 
 	s.db.Exec(`INSERT INTO audit_events VALUES(?,?,'probes.resume','service','{}',?)`, newID(), "admin", start.Add(4*time.Hour+30*time.Minute).UnixMilli())
 	historySample(t, s, id, start.Add(4*time.Hour+31*time.Minute))
 	historySample(t, s, id, start.Add(4*time.Hour+33*time.Minute))
-	out, err := s.History(protocol.Viewer{Subject: "admin", Role: "admin"}, c.ID, start, start.Add(5*time.Hour))
+	out, err := s.History(fixtureAdmin(), c.ID, start, start.Add(5*time.Hour))
 	if err != nil || len(out) != 1 || out[0].ExcludedMS != 4*3600000 || out[0].OperationalMS != 6*60000 {
 		t.Fatalf("full pause=%+v err=%v", out, err)
 	}
@@ -129,7 +127,7 @@ func TestPauseResumeClosesEvidenceOnceAndRetentionKeepsPauseAnchor(t *testing.T)
 	c, id := seedHistoryMonitor(t, s, start)
 	historySample(t, s, id, start.Add(time.Minute))
 	historySample(t, s, id, start.Add(3*time.Minute))
-	admin := protocol.Viewer{Subject: "admin", Role: "admin"}
+	admin := fixtureAdmin()
 	if err := s.SaveSettings(admin, ServiceSettings{ProbesPaused: true}); err != nil {
 		t.Fatal(err)
 	}
@@ -172,7 +170,7 @@ func TestHistoryPauseOrderUsesCommitOrderWithinSameMillisecond(t *testing.T) {
 	at := start.Add(4 * time.Minute).UnixMilli()
 	s.db.Exec(`INSERT INTO audit_events VALUES('z-pause','admin','probes.pause','service','{}',?)`, at)
 	s.db.Exec(`INSERT INTO audit_events VALUES('a-resume','admin','probes.resume','service','{}',?)`, at)
-	out, err := s.History(protocol.Viewer{Subject: "admin", Role: "admin"}, c.ID, start, start.Add(10*time.Minute))
+	out, err := s.History(fixtureAdmin(), c.ID, start, start.Add(10*time.Minute))
 	// Resume invalidates prior green evidence, but a zero-length pause excludes no time.
 	if err != nil || len(out) != 1 || out[0].ExcludedMS != 0 || out[0].OperationalMS != 60000 {
 		t.Fatalf("same-ms order=%+v err=%v", out, err)
@@ -184,7 +182,7 @@ func TestRestoreDoesNotRewriteEarlierHistory(t *testing.T) {
 	c, id := seedHistoryMonitor(t, s, start)
 	historySample(t, s, id, start.Add(time.Minute))
 	historySample(t, s, id, start.Add(3*time.Minute))
-	admin := protocol.Viewer{Subject: "admin", Role: "admin"}
+	admin := fixtureAdmin()
 	before, err := s.History(admin, c.ID, start, start.Add(10*time.Minute))
 	if err != nil {
 		t.Fatal(err)
@@ -211,7 +209,7 @@ func TestFutureMaintenancePreservesExistingEvidence(t *testing.T) {
 	c, id := seedHistoryMonitor(t, s, start)
 	historySample(t, s, id, start.Add(time.Minute))
 	historySample(t, s, id, start.Add(3*time.Minute))
-	admin := protocol.Viewer{Subject: "admin", Role: "admin"}
+	admin := fixtureAdmin()
 	before, err := s.History(admin, c.ID, start, start.Add(10*time.Minute))
 	if err != nil {
 		t.Fatal(err)

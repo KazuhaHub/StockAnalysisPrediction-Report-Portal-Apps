@@ -2,7 +2,6 @@ package status
 
 import (
 	"fmt"
-	protocol "github.com/KazuhaHub/StockAnalysisPrediction-Report-Portal-Apps/packages/extensionprotocol"
 	"testing"
 	"time"
 )
@@ -14,7 +13,7 @@ func TestRetroactiveMaintenanceReconcilesFullHourAndMissingEvidence(t *testing.T
 	for minute := 1; minute <= 61; minute += 2 {
 		historySample(t, s, id, start.Add(time.Duration(minute)*time.Minute))
 	}
-	admin := protocol.Viewer{Subject: "admin", Role: "admin"}
+	admin := fixtureAdmin()
 	before, err := s.History(admin, c.ID, start, start.Add(time.Hour))
 	if err != nil || len(before) != 1 || before[0].OperationalMS == 0 {
 		t.Fatalf("fixture=%+v %v", before, err)
@@ -79,7 +78,7 @@ func TestRetrospectiveHistoryHandlesMoreThanOneBucketOfRawEvidence(t *testing.T)
 	if err := tx.Commit(); err != nil {
 		t.Fatal(err)
 	}
-	admin := protocol.Viewer{Subject: "admin", Role: "admin"}
+	admin := fixtureAdmin()
 	if err := s.SaveMaintenance(admin, MaintenanceInput{ComponentID: c.ID, StartsAt: start.Format(time.RFC3339), EndsAt: start.Add(time.Minute).Format(time.RFC3339), Summary: "Corrected window"}); err != nil {
 		t.Fatal(err)
 	}

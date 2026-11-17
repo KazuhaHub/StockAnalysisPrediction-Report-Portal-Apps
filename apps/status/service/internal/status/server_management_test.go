@@ -22,7 +22,7 @@ func TestManagementEndpointsKeepSettingsAndSecretsSeparate(t *testing.T) {
 	call := func(method, path, body string) *httptest.ResponseRecorder {
 		t.Helper()
 		raw := []byte(body)
-		token, err := signer.Sign(method, path, raw, protocol.Viewer{Subject: "admin", Role: "admin"}, time.Now())
+		token, err := signer.Sign(method, path, raw, fixtureAdmin(), time.Now())
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -12,9 +12,9 @@ import (
 
 func TestComponentAccessAndPublicProjection(t *testing.T) {
 	s := testStore(t)
-	admin := protocol.Viewer{Subject: "admin", Role: "admin"}
-	reader := protocol.Viewer{Subject: "reader", Role: "user", OUs: []string{"team"}}
-	c, err := s.SaveComponent(admin, ComponentInput{Label: "Internal database target", PublicLabel: "Report storage", PublicEnabled: true, Enabled: true, Grants: []Grant{{Principal: "ou:team", Permission: "read"}}})
+	admin := fixtureAdmin()
+	reader := fixtureViewer("user", "reader", "team")
+	c, err := s.SaveComponent(admin, ComponentInput{Label: "Internal database target", PublicLabel: "Report storage", PublicEnabled: true, Enabled: true, Grants: []Grant{{Principal: fixtureOU("team"), Permission: "read"}}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -35,7 +35,7 @@ func TestComponentAccessAndPublicProjection(t *testing.T) {
 	s.db.Exec(`INSERT INTO settings(key,value) VALUES('public_enabled','1')`)
 	public, err = s.Components(protocol.Viewer{}, true, time.Now())
 	raw, _ := json.Marshal(public)
-	if err != nil || len(public) != 1 || bytes.Contains(raw, []byte("Internal database")) || bytes.Contains(raw, []byte("ou:team")) {
+	if err != nil || len(public) != 1 || bytes.Contains(raw, []byte("Internal database")) || bytes.Contains(raw, []byte(fixtureOU("team"))) {
 		t.Fatalf("public projection=%s err=%v", raw, err)
 	}
 	if c.ID == "" {
@@ -44,7 +44,7 @@ func TestComponentAccessAndPublicProjection(t *testing.T) {
 }
 func TestComponentRevisionAndCredentialDeletion(t *testing.T) {
 	s := testStore(t)
-	admin := protocol.Viewer{Subject: "admin", Role: "admin"}
+	admin := fixtureAdmin()
 	credential, err := s.SaveCredential(admin, CredentialInput{Kind: "deepseek", Label: "Account A", Secret: json.RawMessage(`{"api_key":"private-key"}`)})
 	if err != nil {
 		t.Fatal(err)
@@ -62,23 +62,23 @@ func TestComponentRevisionAndCredentialDeletion(t *testing.T) {
 	if err := s.DeleteCredential(admin, credential.ID, credential.Revision); err == nil {
 		t.Fatal("referenced credential deleted")
 	}
-	reader := protocol.Viewer{Subject: "reader", Role: "user"}
+	reader := fixtureViewer("user", "reader")
 	if _, err := s.SaveComponent(reader, ComponentInput{Label: "Cannot create"}); !errors.Is(err, ErrForbidden) {
 		t.Fatal("reader changed configuration")
 	}
 }
 func TestFinanceRequiresSeparateGrant(t *testing.T) {
 	s := testStore(t)
-	admin := protocol.Viewer{Subject: "admin", Role: "admin"}
-	c, err := s.SaveComponent(admin, ComponentInput{Label: "Provider", Enabled: true, Grants: []Grant{{Principal: "ou:team", Permission: "read"}}})
+	admin := fixtureAdmin()
+	c, err := s.SaveComponent(admin, ComponentInput{Label: "Provider", Enabled: true, Grants: []Grant{{Principal: fixtureOU("team"), Permission: "read"}}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	reader := protocol.Viewer{Subject: "reader", Role: "user", OUs: []string{"team"}}
+	reader := fixtureViewer("user", "reader", "team")
 	if s.canRead(reader, c.ID, "finance") {
 		t.Fatal("read implied finance")
 	}
-	if _, err := s.db.Exec(`INSERT INTO component_grants(component_id,principal,permission) VALUES(?,?,'finance')`, c.ID, "ou:team"); err != nil {
+	if _, err := s.db.Exec(`INSERT INTO component_grants(component_id,principal,permission) VALUES(?,?,'finance')`, c.ID, fixtureOU("team")); err != nil {
 		t.Fatal(err)
 	}
 	if !s.canRead(reader, c.ID, "finance") {
@@ -89,7 +89,7 @@ func TestFinanceRequiresSeparateGrant(t *testing.T) {
 func TestSnapshotDoesNotInventAnObservationAndExposesPause(t *testing.T) {
 	s := testStore(t)
 	monitoredComponent(t, s)
-	admin := protocol.Viewer{Subject: "admin", Role: "admin"}
+	admin := fixtureAdmin()
 	components, err := s.Components(admin, false, time.Now())
 	if err != nil {
 		t.Fatal(err)
@@ -106,7 +106,7 @@ func TestSnapshotDoesNotInventAnObservationAndExposesPause(t *testing.T) {
 
 func TestLastSuccessExpiresInPrivateAndPublicSnapshotsWithoutRewritingItsTime(t *testing.T) {
 	s := testStore(t)
-	admin := protocol.Viewer{Subject: "admin", Role: "admin"}
+	admin := fixtureAdmin()
 	component := monitoredComponent(t, s)
 	component.PublicEnabled = true
 	component.PublicLabel = "Approved health"

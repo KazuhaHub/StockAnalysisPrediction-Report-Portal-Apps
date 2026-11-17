@@ -3,13 +3,11 @@ package status
 import (
 	"testing"
 	"time"
-
-	protocol "github.com/KazuhaHub/StockAnalysisPrediction-Report-Portal-Apps/packages/extensionprotocol"
 )
 
 func TestPublicationDestinationChangeRequiresPairingReview(t *testing.T) {
 	s, component := outboxFixture(t)
-	admin := protocol.Viewer{Subject: "admin", Role: "admin"}
+	admin := fixtureAdmin()
 	if err := s.SaveSettings(admin, ServiceSettings{PortalURL: "https://another.example"}); err != nil {
 		t.Fatal(err)
 	}

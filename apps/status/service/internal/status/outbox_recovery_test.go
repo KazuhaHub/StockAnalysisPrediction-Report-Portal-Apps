@@ -5,14 +5,12 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
-
-	protocol "github.com/KazuhaHub/StockAnalysisPrediction-Report-Portal-Apps/packages/extensionprotocol"
 )
 
 func recoveryNotice(t *testing.T, s *Store, start time.Time) (ComponentInput, string) {
 	t.Helper()
 	c, id := seedHistoryMonitor(t, s, start)
-	admin := protocol.Viewer{Subject: "admin", Role: "admin"}
+	admin := fixtureAdmin()
 	credential, err := s.SaveCredential(admin, CredentialInput{Kind: "notification", Label: "Recovery publisher", Secret: json.RawMessage(`{"token":"fixture-publisher-token"}`)})
 	if err != nil {
 		t.Fatal(err)
@@ -86,7 +84,7 @@ func TestRestoreUncertainPublicationRequiresExplicitDiscard(t *testing.T) {
 	if s.NoticeCurrent(first) {
 		t.Fatal("restored old lease retained authority")
 	}
-	admin := protocol.Viewer{Subject: "admin", Role: "admin"}
+	admin := fixtureAdmin()
 	fingerprint, err := s.QueueFingerprint()
 	if err != nil {
 		t.Fatal(err)

@@ -35,7 +35,6 @@ func utc(ms int64) string {
 	}
 	return time.UnixMilli(ms).UTC().Format(time.RFC3339Nano)
 }
-func isAdmin(v protocol.Viewer) bool { return v.Subject != "" && v.Role == "admin" }
 func audit(tx *sql.Tx, v protocol.Viewer, action, target string, now int64) error {
 	_, err := tx.Exec(`INSERT INTO audit_events(id,actor,action,target_id,safe_detail,created_at) VALUES(?,?,?,?,?,?)`, newID(), v.Subject, action, target, "{}", now)
 	return err
@@ -192,19 +191,16 @@ func validateMonitor(m *MonitorInput) error {
 	return nil
 }
 func (s *Store) canRead(v protocol.Viewer, component, permission string) bool {
-	if isAdmin(v) {
-		return true
-	}
-	if v.Subject == "" {
+	a, ok := authorityOf(v)
+	if !ok {
 		return false
 	}
-	principals := []string{"user:" + v.Subject}
-	for _, ou := range v.OUs {
-		principals = append(principals, "ou:"+ou)
+	if a.admin {
+		return true
 	}
-	marks := strings.TrimSuffix(strings.Repeat("?,", len(principals)), ",")
+	marks := strings.TrimSuffix(strings.Repeat("?,", len(a.principals)), ",")
 	args := []any{component, permission}
-	for _, p := range principals {
+	for _, p := range a.principals {
 		args = append(args, p)
 	}
 	var n int
