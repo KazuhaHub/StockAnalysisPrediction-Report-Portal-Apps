@@ -13,6 +13,7 @@
       : null;
   }
   function monitorHint(monitor) {
+    if (monitor.kind === "heartbeat") return "heartbeatUnavailable";
     if (monitor.stale) return "staleHint";
     return (
       {

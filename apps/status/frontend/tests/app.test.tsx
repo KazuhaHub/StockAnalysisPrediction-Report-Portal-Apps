@@ -209,6 +209,91 @@ test("without a platform principal directory the visibility step offers no looku
   expect((d.getByRole("button", { name: "Save", exact: true }) as HTMLButtonElement).disabled).toBe(false);
 });
 
+test("the grant hint no longer tells administrators to pick Portal users or OUs", () => {
+  expect(locales["en-US"].grantHint).not.toMatch(/select/i);
+  expect(locales["zh-CN"].grantHint).not.toContain("选择");
+  expect(locales["zh-TW"].grantHint).not.toContain("選擇");
+});
+
+test("public page options and the heartbeat kind are not offered for creation in this build", async () => {
+  const user = userEvent.setup();
+  const app = mount();
+  await openManagement(app);
+  await user.click(await screen.findByRole("button", { name: "New component", exact: true }));
+  const d = within(await screen.findByRole("dialog"));
+  await user.type(d.getByLabelText("Internal label", { exact: true }), "Fixture");
+  await user.click(d.getByRole("button", { name: "Next", exact: true }));
+  await user.click(d.getByLabelText("Check type", { exact: true }));
+  const options = (await screen.findAllByRole("option")).map((option) => option.textContent);
+  expect(options).toContain(locales["en-US"].dify);
+  expect(options).not.toContain(locales["en-US"].heartbeat);
+  await user.click(await screen.findByRole("option", { name: locales["en-US"].http }));
+  await user.type(d.getByLabelText("Target URL", { exact: true }), "https://fixture.invalid/health");
+  await user.click(d.getByRole("button", { name: "Next", exact: true }));
+  expect(d.queryByText(locales["en-US"].publicOptions)).toBeNull();
+  expect(d.queryByText(locales["en-US"].publicComponent)).toBeNull();
+});
+
+test("settings and credential creation offer no public page switch or heartbeat kind", async () => {
+  const user = userEvent.setup();
+  const app = mount();
+  await openManagement(app);
+  await user.click(screen.getByRole("tab", { name: "Credentials", exact: true }));
+  await user.click(screen.getByRole("button", { name: "New credential", exact: true }));
+  const dialog = within(screen.getByRole("dialog"));
+  await user.click(dialog.getByLabelText("Check type", { exact: true }));
+  const options = (await screen.findAllByRole("option")).map((option) => option.textContent);
+  expect(options).toContain(locales["en-US"].deepseek);
+  expect(options).not.toContain(locales["en-US"].heartbeat);
+});
+
+test("an existing heartbeat monitor stays visible, read-only, with an explanation", async () => {
+  const user = userEvent.setup();
+  const writes: unknown[] = [];
+  const app = mount({
+    handler: (method, path, body) => {
+      if (method === "PUT") writes.push(body);
+      return path === "/v1/manage/components"
+        ? {
+            total: 1,
+            items: [
+              {
+                id: "c1",
+                label: "Nightly backup",
+                revision: 1,
+                enabled: true,
+                public_label: "",
+                public_enabled: false,
+                grants: [],
+                monitors: [
+                  {
+                    id: "m1",
+                    label: "Backup beat",
+                    kind: "heartbeat",
+                    enabled: true,
+                    interval_seconds: 3600,
+                    timeout_seconds: 5,
+                    revision: 1,
+                    config: { version: 1 },
+                  },
+                ],
+              },
+            ],
+          }
+        : undefined;
+    },
+  });
+  await openManagement(app);
+  await user.click(await screen.findByRole("button", { name: "Edit", exact: true }));
+  const d = within(await screen.findByRole("dialog"));
+  await user.click(d.getByRole("button", { name: "Next", exact: true }));
+  expect(d.getByText(locales["en-US"].heartbeatUnavailable)).toBeTruthy();
+  expect(d.getByText("Backup beat")).toBeTruthy();
+  expect(d.queryByLabelText("Target URL")).toBeNull();
+  expect(d.queryByLabelText("Check type", { exact: true })).toBeNull();
+  expect(d.queryByRole("button", { name: "Check now" })).toBeNull();
+});
+
 test("failed saves retain the wizard draft and repeated activation cannot duplicate writes", async () => {
   const user = userEvent.setup();
   let writes = 0;

@@ -290,28 +290,6 @@ export function ComponentEditor({
                     />
                   ),
                 },
-                {
-                  key: "public",
-                  label: t("publicOptions"),
-                  children: (
-                    <>
-                      <Check
-                        checked={draft.public_enabled}
-                        onChange={(public_enabled) =>
-                          update({ public_enabled })
-                        }
-                      >
-                        {t("publicComponent")}
-                      </Check>
-                      <Field
-                        label={t("publicLabel")}
-                        value={draft.public_label}
-                        onChange={(public_label) => update({ public_label })}
-                        help={t("publicHint")}
-                      />
-                    </>
-                  ),
-                },
               ]}
             />
           </>
@@ -351,6 +329,22 @@ function MonitorEditor({
       onChange={(v) => config({ networks: v.split(/\s+/).filter(Boolean) })}
     />
   );
+  // Inbound heartbeats need a platform ingress that does not exist yet, so a
+  // heartbeat monitor cannot be created or changed here. An existing one is
+  // shown as it is, and saving the component keeps it unchanged.
+  if (m.kind === "heartbeat")
+    return (
+      <fieldset className="monitor-editor">
+        <legend>{t("monitor")}</legend>
+        <Card size="small" className="section-gap">
+          <Typography.Paragraph strong>{m.label}</Typography.Paragraph>
+          <Typography.Paragraph type="secondary">
+            {t("heartbeat")}
+          </Typography.Paragraph>
+          <Alert type="info" title={t("heartbeatUnavailable")} showIcon />
+        </Card>
+      </fieldset>
+    );
   return (
     <fieldset className="monitor-editor">
       <legend>{t("monitor")}</legend>
@@ -363,14 +357,9 @@ function MonitorEditor({
         <Choice
           label={t("kind")}
           value={m.kind}
-          options={[
-            "http",
-            "dify",
-            "postgres",
-            "deepseek",
-            "qwen",
-            "heartbeat",
-          ].map((value) => ({ value, label: t(value) }))}
+          options={["http", "dify", "postgres", "deepseek", "qwen"].map(
+            (value) => ({ value, label: t(value) }),
+          )}
           onChange={(kind) =>
             set({
               kind: String(kind),

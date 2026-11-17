@@ -56,7 +56,7 @@
   "international": "International",
   "readGrants": "Who can read this component",
   "financeGrants": "Who can see amounts",
-  "grantHint": "Select current Portal users/OUs. Descendants inherit OU read grants. Financial permission is separate.",
+  "grantHint": "Grants already on this component are listed here and can be kept or removed. Descendants inherit OU read grants. Financial permission is separate.",
   "newCredential": "New credential",
   "secretHint": "Saved values are never returned. Leave blank when editing to preserve the secret.",
   "apiKey": "API key / heartbeat signing secret",
@@ -199,6 +199,7 @@
   "configureFirst": "Create a component first.",
   "egressHint": "This monitor cannot reach its target yet: the app backend has no network path to run checks. The state is unknown, not a failure.",
   "writeUncertain": "The save may or may not have reached the app backend. Refresh and check the current configuration before saving again. Your edits are preserved.",
+  "heartbeatUnavailable": "Signed heartbeat monitors cannot receive heartbeats in this build, because Portal offers no inbound route to the app yet. The monitor is kept as it is and its state is unknown. It cannot be created or edited here.",
   "directoryUnavailable": "Selecting other users or organizational units needs the Portal principal directory, which is not available yet. Existing grants are kept; new components are visible to administrators only.",
   "backendUnavailable": "The Status backend is unavailable. No status data is shown."
 }

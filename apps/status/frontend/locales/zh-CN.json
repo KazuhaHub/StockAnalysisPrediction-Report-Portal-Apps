@@ -56,7 +56,7 @@
   "international": "国际站",
   "readGrants": "哪些人可以查看此组件",
   "financeGrants": "哪些人可以查看金额",
-  "grantHint": "选择 Portal 当前账号或 OU。OU 后代继承查看权限；金额权限单独授予。",
+  "grantHint": "此组件已有的授权列在这里，可保留或移除。OU 后代继承查看权限；金额权限单独授予。",
   "newCredential": "新建凭证",
   "secretHint": "已保存的密钥不会返回。编辑时留空表示保留。",
   "apiKey": "API Key／心跳签名密钥",
@@ -199,6 +199,7 @@
   "configureFirst": "请先创建组件。",
   "egressHint": "此监控暂时无法访问目标：应用后端目前没有可执行检查的网络通道。状态为未知，并非故障。",
   "writeUncertain": "保存请求可能已到达应用后端，也可能没有。再次保存前请先刷新并核对当前配置。您的编辑已保留。",
+  "heartbeatUnavailable": "此版本无法接收签名心跳，因为 Portal 目前没有通往应用的入站通道。该监控保持原样，状态为未知，且无法在此创建或编辑。",
   "directoryUnavailable": "选择其他用户或组织单元需要 Portal 的主体目录，目前尚不可用。已有授权保持不变；新组件仅管理员可见。",
   "backendUnavailable": "Status 后端不可用，不显示任何状态数据。"
 }

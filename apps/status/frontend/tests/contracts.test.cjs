@@ -23,6 +23,11 @@ test("a missing network path is explained and never read as a provider failure",
     "egressHint",
   );
 });
+test("a heartbeat monitor explains that no ingress exists in this build", () => {
+  assert.equal(monitorHint({ kind: "heartbeat", outcome: "unknown" }), "heartbeatUnavailable");
+  assert.equal(monitorHint({ kind: "heartbeat", stale: true }), "heartbeatUnavailable");
+  assert.equal(monitorHint({ kind: "http", stale: true }), "staleHint");
+});
 test("unsupported billing has a setup explanation and never implies zero credit", () => {
   assert.equal(
     monitorHint({ outcome: "unsupported", reason_code: "billing_unsupported" }),
