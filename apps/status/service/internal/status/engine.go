@@ -339,7 +339,7 @@ func reconcileIncident(tx *sql.Tx, component string, now time.Time) error {
 	return err
 }
 
-// Run starts four bounded workers and holds the store's offline restore gate.
+// Run starts four bounded workers.
 // Stopping the browser has no effect on this process-owned scheduler.
 func (s *Store) Run(ctx context.Context, prober *Prober) error {
 	s.maintenance.Lock()

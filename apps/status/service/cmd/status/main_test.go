@@ -6,11 +6,9 @@ import (
 	"testing"
 )
 
-func TestOfflineCommandsGenerateKeyBackupAndRestore(t *testing.T) {
+func TestKeygenRefusesToOverwriteAndOfflineSnapshotCommandsAreGone(t *testing.T) {
 	dir := t.TempDir()
 	key := filepath.Join(dir, "storage.key")
-	database := filepath.Join(dir, "status.db")
-	backup := filepath.Join(dir, "backup.db")
 	previous := os.Args
 	defer func() { os.Args = previous }()
 	invoke := func(args ...string) error { os.Args = append([]string{"status"}, args...); return run() }
@@ -20,19 +18,12 @@ func TestOfflineCommandsGenerateKeyBackupAndRestore(t *testing.T) {
 	if err := invoke("keygen", "-file", key); err == nil {
 		t.Fatal("existing key overwritten")
 	}
-	if err := invoke("backup", "-database", database, "-storage-key-file", key, "-file", backup); err != nil {
-		t.Fatal(err)
+	for _, command := range []string{"backup", "restore"} {
+		if err := invoke(command, "-database", filepath.Join(dir, "status.db"), "-storage-key-file", key, "-file", filepath.Join(dir, "x.db")); err == nil {
+			t.Fatalf("%s command still accepted", command)
+		}
 	}
-	if err := invoke("restore", "-database", database, "-storage-key-file", key, "-file", backup); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := os.Stat(database + ".pre-restore"); err != nil {
-		t.Fatal("rollback backup not retained")
-	}
-	if err := os.Chmod(key, 0644); err != nil {
-		t.Fatal(err)
-	}
-	if err := invoke("backup", "-database", database, "-storage-key-file", key, "-file", filepath.Join(dir, "unsafe.db")); err == nil {
-		t.Fatal("world-readable key file accepted")
+	if _, err := os.Stat(filepath.Join(dir, "x.db")); err == nil {
+		t.Fatal("snapshot written")
 	}
 }

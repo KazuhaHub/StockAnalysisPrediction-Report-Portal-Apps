@@ -2,7 +2,6 @@ package status
 
 import (
 	"encoding/json"
-	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -176,7 +175,7 @@ func TestHistoryPauseOrderUsesCommitOrderWithinSameMillisecond(t *testing.T) {
 		t.Fatalf("same-ms order=%+v err=%v", out, err)
 	}
 }
-func TestRestoreDoesNotRewriteEarlierHistory(t *testing.T) {
+func TestPlatformRestoreDoesNotRewriteEarlierHistory(t *testing.T) {
 	s := testStore(t)
 	start := time.Now().UTC().Truncate(time.Hour).Add(-2 * time.Hour)
 	c, id := seedHistoryMonitor(t, s, start)
@@ -187,12 +186,8 @@ func TestRestoreDoesNotRewriteEarlierHistory(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	file := filepath.Join(t.TempDir(), "snapshot.db")
-	if err := s.Backup(file); err != nil {
-		t.Fatal(err)
-	}
-	if err := s.Restore(file); err != nil {
-		t.Fatal(err)
+	if restored, err := s.ReconcilePlatform("restored-installation/epoch", time.Now()); err != nil || !restored {
+		t.Fatalf("restored=%v err=%v", restored, err)
 	}
 	after, err := s.History(admin, c.ID, start, start.Add(10*time.Minute))
 	if err != nil {

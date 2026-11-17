@@ -53,7 +53,7 @@ func run() error {
 	storageKey := flags.String("storage-key-file", "", "File containing a base64-encoded 32-byte storage key (owner-only permissions)")
 	pairFile := flags.String("pairing-file", "", "Owner-only JSON file with Portal registration pins and signing key")
 	listen := flags.String("listen", ":8791", "HTTP listen address behind the trusted gateway")
-	file := flags.String("file", "", "Backup input/output or key generation destination")
+	file := flags.String("file", "", "Key generation destination")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
@@ -83,8 +83,8 @@ func run() error {
 		}
 		return closeErr
 	}
-	if command != "serve" && command != "backup" && command != "restore" {
-		return errors.New("command must be serve, backup, restore, keygen or version")
+	if command != "serve" {
+		return errors.New("command must be serve, keygen or version")
 	}
 	raw, err := readSecret(*storageKey)
 	if err != nil {
@@ -99,18 +99,6 @@ func run() error {
 		return err
 	}
 	defer store.Close()
-	if command == "backup" {
-		if *file == "" {
-			return errors.New("backup requires -file")
-		}
-		return store.Backup(*file)
-	}
-	if command == "restore" {
-		if *file == "" {
-			return errors.New("restore requires -file")
-		}
-		return store.Restore(*file)
-	}
 	raw, err = readSecret(*pairFile)
 	if err != nil {
 		return err
