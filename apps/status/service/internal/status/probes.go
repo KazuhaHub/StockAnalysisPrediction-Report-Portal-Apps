@@ -51,6 +51,7 @@ type Monitor struct {
 	Secret                                            CredentialSecret
 }
 type Prober struct {
+	Egress        Egress
 	clientForTest func(ProbeConfig) (*http.Client, error)
 }
 
@@ -245,6 +246,9 @@ func (p *Prober) Check(ctx context.Context, m Monitor) (result Result) {
 		result.DurationMS = time.Since(start).Milliseconds()
 		result.Measurements.LatencyMS = result.DurationMS
 	}()
+	if egressUnavailable(p.Egress) {
+		return unknown("egress_unavailable")
+	}
 	if m.Kind == "postgres" {
 		return postgresCheck(ctx, m)
 	}

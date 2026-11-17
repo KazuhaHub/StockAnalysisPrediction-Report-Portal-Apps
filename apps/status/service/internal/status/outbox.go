@@ -175,6 +175,7 @@ func (s *Store) FinishNotice(n Notice, result PublishResult, now time.Time) erro
 }
 
 type Publisher struct {
+	Egress        Egress
 	Networks      []netip.Prefix
 	URL           string
 	clientForTest func(ProbeConfig) (*http.Client, error)
@@ -337,6 +338,10 @@ func (s *Store) PublishLoop(ctx context.Context, publisher *Publisher) {
 		case <-ctx.Done():
 			return
 		case now := <-ticker.C:
+			if egressUnavailable(publisher.Egress) {
+				// Without a send path a claim would only burn delivery attempts.
+				continue
+			}
 			notice, ok, err := s.ClaimNotice(now)
 			if err != nil || !ok {
 				continue
