@@ -19,12 +19,16 @@ import (
 )
 
 type Store struct {
-	db          *sql.DB
-	path        string
-	key         []byte
-	lock        *os.File
-	maintenance sync.Mutex
-	running     bool
+	db   *sql.DB
+	path string
+	key  []byte
+	lock *os.File
+	// lifecycle guards running, which keeps a second scheduler from starting on
+	// the same store, and serialises Close. It outlived the app's own backup and
+	// restore, which it once also fenced; the platform now restores /data while
+	// the application is stopped.
+	lifecycle sync.Mutex
+	running   bool
 }
 
 func Open(path string, key []byte) (*Store, error) {
@@ -94,8 +98,8 @@ func (s *Store) openDB() error {
 	return nil
 }
 func (s *Store) Close() error {
-	s.maintenance.Lock()
-	defer s.maintenance.Unlock()
+	s.lifecycle.Lock()
+	defer s.lifecycle.Unlock()
 	var err error
 	if s.db != nil {
 		err = s.db.Close()

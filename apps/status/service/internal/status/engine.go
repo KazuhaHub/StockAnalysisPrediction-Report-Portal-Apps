@@ -342,14 +342,14 @@ func reconcileIncident(tx *sql.Tx, component string, now time.Time) error {
 // Run starts four bounded workers.
 // Stopping the browser has no effect on this process-owned scheduler.
 func (s *Store) Run(ctx context.Context, prober *Prober) error {
-	s.maintenance.Lock()
+	s.lifecycle.Lock()
 	if s.running {
-		s.maintenance.Unlock()
+		s.lifecycle.Unlock()
 		return ErrConflict
 	}
 	s.running = true
-	s.maintenance.Unlock()
-	defer func() { s.maintenance.Lock(); s.running = false; s.maintenance.Unlock() }()
+	s.lifecycle.Unlock()
+	defer func() { s.lifecycle.Lock(); s.running = false; s.lifecycle.Unlock() }()
 	var workers sync.WaitGroup
 	for range 4 {
 		workers.Add(1)
