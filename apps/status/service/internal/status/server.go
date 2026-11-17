@@ -163,9 +163,11 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
+	// The relay passes a backend answer on only for 2xx and 400, 403, 404, 409,
+	// 422 and 429, so a rejected assertion or viewer is a 403, not a 401.
 	headers := r.Header.Values(protocol.Header)
 	if len(headers) != 1 {
-		write(w, 401, map[string]bool{"ok": false})
+		write(w, 403, map[string]bool{"ok": false})
 		return
 	}
 	verifier, err := s.verifierFor()
@@ -175,12 +177,12 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	claims, err := verifier.Verify(headers[0], r.Method, r.URL.RequestURI(), raw, time.Now())
 	if err != nil {
-		write(w, 401, map[string]bool{"ok": false})
+		write(w, 403, map[string]bool{"ok": false})
 		return
 	}
 	v := claims.Viewer
 	if _, ok := authorityOf(v); !ok {
-		write(w, 401, map[string]bool{"ok": false})
+		write(w, 403, map[string]bool{"ok": false})
 		return
 	}
 	if r.Method != "GET" || strings.HasPrefix(r.URL.Path, "/v1/manage/") {

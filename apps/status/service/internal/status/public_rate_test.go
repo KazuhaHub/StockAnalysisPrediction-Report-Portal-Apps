@@ -30,7 +30,7 @@ func TestAnonymousBurstIsBoundedWithoutTrustingForwardedHeaders(t *testing.T) {
 	}
 	private := httptest.NewRecorder()
 	server.ServeHTTP(private, httptest.NewRequest("GET", "/v1/components", nil))
-	if private.Code != 401 {
+	if private.Code != 403 {
 		t.Fatalf("anonymous budget interfered with private auth: %d", private.Code)
 	}
 	other := httptest.NewRequest("GET", "/public/v1/status", nil)

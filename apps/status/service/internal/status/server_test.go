@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -206,30 +207,30 @@ func TestPrivateAPIRequiresBoundAssertionsAndCurrentBoot(t *testing.T) {
 		}
 		return token
 	}
-	if w := call(server, "", "GET", "/v1/components"); w.Code != 401 {
+	if w := call(server, "", "GET", "/v1/components"); w.Code != 403 {
 		t.Fatal("unsigned request accepted")
 	}
 	assertion := sign(signer, viewer, "/v1/components")
 	if w := call(server, assertion, "GET", "/v1/components"); w.Code != 200 {
 		t.Fatalf("read=%d %s", w.Code, w.Body.String())
 	}
-	if w := call(server, assertion, "GET", "/v1/components"); w.Code != 401 {
+	if w := call(server, assertion, "GET", "/v1/components"); w.Code != 403 {
 		t.Fatal("replay accepted")
 	}
 	otherBoot := signer
 	otherBoot.BootID = strings.Repeat("c", 32)
-	if w := call(server, sign(otherBoot, viewer, "/v1/components"), "GET", "/v1/components"); w.Code != 401 {
+	if w := call(server, sign(otherBoot, viewer, "/v1/components"), "GET", "/v1/components"); w.Code != 403 {
 		t.Fatal("assertion for another boot accepted")
 	}
 	restarted := NewServer(store, server.registration, strings.Repeat("c", 32))
-	if w := call(restarted, sign(signer, viewer, "/v1/components"), "GET", "/v1/components"); w.Code != 401 {
+	if w := call(restarted, sign(signer, viewer, "/v1/components"), "GET", "/v1/components"); w.Code != 403 {
 		t.Fatal("old boot accepted after restart")
 	}
 	if w := call(server, sign(signer, viewer, "/v1/manage/components"), "GET", "/v1/manage/components"); w.Code != 403 {
 		t.Fatal("reader saw management configuration")
 	}
 	legacy := protocol.Viewer{Subject: "admin", Role: "admin"}
-	if w := call(server, sign(signer, legacy, "/v1/manage/components"), "GET", "/v1/manage/components"); w.Code != 401 {
+	if w := call(server, sign(signer, legacy, "/v1/manage/components"), "GET", "/v1/manage/components"); w.Code != 403 {
 		t.Fatalf("non-platform identity = %d", w.Code)
 	}
 	if w := call(server, sign(signer, fixtureAdmin(), "/v1/manage/components"), "GET", "/v1/manage/components"); w.Code != 200 {
@@ -253,5 +254,46 @@ func TestPrivateAPIUnavailableWithoutCurrentRegistration(t *testing.T) {
 	server.ServeHTTP(w, r)
 	if w.Code != http.StatusServiceUnavailable {
 		t.Fatalf("missing registration = %d", w.Code)
+	}
+}
+
+// The platform relay passes a backend answer on only for 2xx and 400, 403, 404,
+// 409, 422 and 429. A rejected viewer or assertion is a 403 with a JSON body;
+// a registration the service cannot read is the same 503 the handshake gives.
+func TestRejectedPrivateRequestsUseRelayableStatuses(t *testing.T) {
+	store := testStore(t)
+	server, signer := newTestServer(t, store)
+	unsigned := httptest.NewRecorder()
+	server.ServeHTTP(unsigned, httptest.NewRequest("GET", "/v1/components", nil))
+	if unsigned.Code != http.StatusForbidden || !json.Valid(unsigned.Body.Bytes()) {
+		t.Fatalf("unsigned = %d %q", unsigned.Code, unsigned.Body.String())
+	}
+	forged := httptest.NewRequest("GET", "/v1/components", nil)
+	forged.Header.Set(protocol.Header, "not-an-assertion")
+	forgedResponse := httptest.NewRecorder()
+	server.ServeHTTP(forgedResponse, forged)
+	if forgedResponse.Code != http.StatusForbidden {
+		t.Fatalf("forged = %d", forgedResponse.Code)
+	}
+	noAuthority := fixtureViewer("user", "nobody")
+	noAuthority.Subject = "not-opaque"
+	token, err := signer.Sign("GET", "/v1/components", nil, noAuthority, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	rejected := httptest.NewRequest("GET", "/v1/components", nil)
+	rejected.Header.Set(protocol.Header, token)
+	rejectedResponse := httptest.NewRecorder()
+	server.ServeHTTP(rejectedResponse, rejected)
+	if rejectedResponse.Code != http.StatusForbidden {
+		t.Fatalf("viewer without authority = %d", rejectedResponse.Code)
+	}
+	missing := NewServer(store, filepath.Join(t.TempDir(), "absent.json"), testBootID)
+	request := httptest.NewRequest("GET", "/v1/components", nil)
+	request.Header.Set(protocol.Header, "assertion")
+	response := httptest.NewRecorder()
+	missing.ServeHTTP(response, request)
+	if response.Code != http.StatusServiceUnavailable {
+		t.Fatalf("unreadable registration = %d", response.Code)
 	}
 }
