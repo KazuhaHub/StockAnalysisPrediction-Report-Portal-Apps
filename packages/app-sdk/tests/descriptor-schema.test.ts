@@ -39,6 +39,14 @@ test("the experimental schema is shipped next to the SDK", () => {
   }
 });
 
+test("schema accepts the reviewed principals.read capability and nothing near it", () => {
+  const value = fixture();
+  value.capabilities = { required: [], optional: ["principals.read"] };
+  expect(validate(value), JSON.stringify(validate.errors)).toBe(true);
+  value.capabilities = { required: ["principals.write"], optional: [] };
+  expect(validate(value)).toBe(false);
+});
+
 for (const item of validCases) {
   test(`schema accepts supported descriptor: ${item.name}`, () => {
     const value = JSON.parse(
@@ -101,6 +109,12 @@ for (const [name, mutate] of [
     "empty range",
     (d: any) => {
       d.compatibility.platform_api = " ";
+    },
+  ],
+  [
+    "required principals.read",
+    (d: any) => {
+      d.capabilities = { required: ["principals.read"], optional: [] };
     },
   ],
 ] as const) {

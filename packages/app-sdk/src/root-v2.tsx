@@ -40,6 +40,11 @@ import {
   type BridgeObjectResponse,
   type BridgeObjectSummary,
   BridgeNotificationError,
+  BridgePrincipalError,
+  type BridgePrincipalItem,
+  type BridgePrincipalKind,
+  type BridgePrincipalRequest,
+  type BridgePrincipalResponse,
   type BridgeNotificationRequest,
   type BridgeNotificationResponse,
 } from "./bridge-v2";
@@ -49,7 +54,8 @@ import { PortalAppProvider, type AppClient } from "./index";
 import "./root-v2.css";
 export { BridgeReportError } from "./bridge-v2";
 export { BridgeObjectError } from "./bridge-v2";
-export { BridgeNotificationError } from "./bridge-v2";
+export { BridgeNotificationError, BridgePrincipalError } from "./bridge-v2";
+export type { BridgePrincipalItem, BridgePrincipalKind } from "./bridge-v2";
 
 export interface AppPresentation {
   readonly presentation: BridgePresentation;
@@ -202,6 +208,40 @@ export function useAppNotifications(): AppNotifications {
   if (!value) throw new Error("AppRoot notifications unavailable");
   return value;
 }
+export interface AppPrincipalSearch {
+  readonly kind: BridgePrincipalKind;
+  readonly query?: string;
+  /** The `next` cursor of the previous page. */
+  readonly after?: string;
+  readonly limit?: number;
+}
+export interface AppPrincipalPage {
+  readonly items: readonly BridgePrincipalItem[];
+  /** Pass as `after` for the next page; null when the listing is complete. */
+  readonly next: string | null;
+}
+export interface AppPrincipalLabels {
+  readonly items: readonly BridgePrincipalItem[];
+  readonly unknown: readonly string[];
+}
+export interface AppPrincipals {
+  readonly available: boolean;
+  readonly ready: boolean;
+  search(
+    value: AppPrincipalSearch,
+    signal?: AbortSignal,
+  ): Promise<AppPrincipalPage>;
+  resolve(
+    principals: readonly string[],
+    signal?: AbortSignal,
+  ): Promise<AppPrincipalLabels>;
+}
+const PrincipalsContext = createContext<AppPrincipals | null>(null);
+export function useAppPrincipals(): AppPrincipals {
+  const value = useContext(PrincipalsContext);
+  if (!value) throw new Error("AppRoot principals unavailable");
+  return value;
+}
 export function useAppPresentation(): AppPresentation {
   const value = useContext(PresentationContext);
   if (!value) throw new Error("AppRoot presentation unavailable");
@@ -338,6 +378,10 @@ interface Pending extends AppPresentation {
     value: BridgeNotificationRequest,
     signal?: AbortSignal,
   ): Promise<BridgeNotificationResponse>;
+  requestPrincipals(
+    value: BridgePrincipalRequest,
+    signal?: AbortSignal,
+  ): Promise<BridgePrincipalResponse>;
   resolve(): void;
   reject(): void;
   signal: AbortSignal;
@@ -432,6 +476,10 @@ export function AppRoot({
             value: BridgeNotificationRequest,
             signal?: AbortSignal,
           ) => Promise<BridgeNotificationResponse>;
+          requestPrincipals: (
+            value: BridgePrincipalRequest,
+            signal?: AbortSignal,
+          ) => Promise<BridgePrincipalResponse>;
           draft(dirty: boolean): boolean;
           navigate(path: string, options?: BridgeNavigationOptions): boolean;
         }
@@ -573,6 +621,16 @@ export function AppRoot({
                     : signal,
                 );
               },
+              requestPrincipals: (value, requestSignal) => {
+                if (!active || stopped || !connection || signal.aborted)
+                  return Promise.reject(new BridgePrincipalError("not_ready"));
+                return connection.requestPrincipals(
+                  value,
+                  requestSignal
+                    ? AbortSignal.any([signal, requestSignal])
+                    : signal,
+                );
+              },
             };
           }
           let settled = false;
@@ -604,6 +662,7 @@ export function AppRoot({
             requestReports: backendForSignal.requestReports,
             requestObjects: backendForSignal.requestObjects,
             requestNotifications: backendForSignal.requestNotifications,
+            requestPrincipals: backendForSignal.requestPrincipals,
             setDraftDirty: backendForSignal.draft,
             navigate: backendForSignal.navigate,
             resolve: () => {
@@ -1172,6 +1231,60 @@ function PresentationFrame({
       pending.signal,
     ],
   );
+  const principalsAvailable =
+    pending.context.capabilities.includes("principals.read");
+  const principals = useMemo<AppPrincipals>(
+    () =>
+      Object.freeze({
+        available: principalsAvailable,
+        ready: backendReady && principalsAvailable,
+        search: async (
+          value: AppPrincipalSearch,
+          signal?: AbortSignal,
+        ): Promise<AppPrincipalPage> => {
+          if (!principalsAvailable) throw new BridgePrincipalError("unsupported");
+          if (!backendReady || pending.signal.aborted)
+            throw new BridgePrincipalError("not_ready");
+          const result = await pending.requestPrincipals(
+            {
+              action: "search",
+              kind: value.kind,
+              query: value.query ?? "",
+              after: value.after ?? "",
+              limit: value.limit ?? 50,
+            },
+            signal,
+          );
+          if (result.action !== "search")
+            throw new BridgePrincipalError("uncertain");
+          return Object.freeze({
+            items: result.items,
+            next: result.next === "" ? null : result.next,
+          });
+        },
+        resolve: async (
+          values: readonly string[],
+          signal?: AbortSignal,
+        ): Promise<AppPrincipalLabels> => {
+          if (!principalsAvailable) throw new BridgePrincipalError("unsupported");
+          if (!backendReady || pending.signal.aborted)
+            throw new BridgePrincipalError("not_ready");
+          const result = await pending.requestPrincipals(
+            { action: "resolve", principals: values },
+            signal,
+          );
+          if (result.action !== "resolve")
+            throw new BridgePrincipalError("uncertain");
+          return Object.freeze({ items: result.items, unknown: result.unknown });
+        },
+      }),
+    [
+      principalsAvailable,
+      backendReady,
+      pending.requestPrincipals,
+      pending.signal,
+    ],
+  );
   // Cache query values by signed definition/search and document lifetime, so
   // appearance updates do not look like a filter change to data-loading effects.
   const querySource = JSON.stringify([
@@ -1213,6 +1326,7 @@ function PresentationFrame({
               <ReportsContext.Provider value={reports}>
                 <ObjectsContext.Provider value={objects}>
                   <NotificationsContext.Provider value={notifications}>
+                    <PrincipalsContext.Provider value={principals}>
                     <NavigationContext.Provider value={navigation}>
                       <DraftContext.Provider value={draft.register}>
                         <PageContext.Provider value={pageRegistry.register}>
@@ -1223,6 +1337,7 @@ function PresentationFrame({
                         </PageContext.Provider>
                       </DraftContext.Provider>
                     </NavigationContext.Provider>
+                    </PrincipalsContext.Provider>
                   </NotificationsContext.Provider>
                 </ObjectsContext.Provider>
               </ReportsContext.Provider>
