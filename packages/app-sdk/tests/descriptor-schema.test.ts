@@ -136,6 +136,12 @@ for (const [name, mutate] of [
     },
   ],
   [
+    "required principals.read",
+    (d: any) => {
+      d.capabilities = { required: ["principals.read"], optional: [] };
+    },
+  ],
+  [
     "current data schema absent",
     (d: any) => {
       d.data.readable_schemas = [d.data.schema + 1];

@@ -6,6 +6,17 @@ that may use this installation, without the app's backend having any directory
 access. The frontend sends the chosen principal strings to its own backend,
 which stores them as opaque values.
 
+## Declaring it
+
+Declare `principals.read` under `capabilities.optional`. A descriptor that lists it under
+`required` is refused. Installing the app leaves the capability **off**: a Portal
+administrator enables it explicitly from the installation's settings page, after reading
+the disclosure ("The app's administrators can list the names of users and OUs that can use
+this app."), and can withdraw it at any time. Withdrawal takes effect on the very next
+directory call. A new release resets the capability to off, so the administrator reviews
+it again. Until it is enabled the hook reports `available` false and calls fail with
+`unsupported` or `not_permitted`; build the picker so it degrades to manual entry.
+
 ```tsx
 import { useAppPrincipals } from "@portal-app/sdk/root-v2";
 

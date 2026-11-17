@@ -198,6 +198,9 @@ function validCapabilities(value: unknown, backend: boolean): boolean {
     !both.every((v) => typeof v === "string" && known.has(v))
   )
     return false;
+  // principals.read is optional only (doc 181): an administrator enables it after reading the
+  // disclosure, so a descriptor cannot make it a condition of install.
+  if (required.includes("principals.read")) return false;
   for (const name of ["tasks.schedule", "events.subscribe", "background.run"])
     if (both.includes(name) && !backend) return false;
   for (const name of ["tasks.schedule", "events.subscribe"]) {
