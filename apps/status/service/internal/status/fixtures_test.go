@@ -1,8 +1,14 @@
 package status
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
 
 	protocol "github.com/KazuhaHub/StockAnalysisPrediction-Report-Portal-Apps/packages/extensionprotocol"
 )
@@ -27,3 +33,53 @@ func fixtureAdmin() protocol.Viewer { return fixtureViewer("admin", "admin") }
 
 // fixtureOU is the grant principal for a fixture OU.
 func fixtureOU(name string) string { return "ou:" + fixtureOpaque("ou", name) }
+
+const (
+	testBootID       = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+	testInstallation = "10000000-0000-4000-8000-000000000001"
+	testEpoch        = "10000000-0000-4000-8000-000000000004"
+)
+
+func testRegistration() backendRegistration {
+	key := bytes.Repeat([]byte{0x23}, 32)
+	sum := sha256.Sum256(key)
+	var registration backendRegistration
+	registration.Format = backendRegistrationFormat
+	registration.Metadata.Identity.AppID = applicationID
+	registration.Metadata.Identity.DeploymentID = "10000000-0000-4000-8000-000000000005"
+	registration.Metadata.Identity.ControllerEpoch = testEpoch
+	registration.Metadata.Identity.InstallationID = testInstallation
+	registration.Metadata.Identity.Generation = "1"
+	registration.Metadata.Identity.PolicyRevision = "1"
+	registration.Metadata.Identity.ReleaseSHA256 = strings.Repeat("a", 64)
+	registration.Metadata.InstanceID = strings.Repeat("d", 64)
+	registration.Metadata.KeyID = hex.EncodeToString(sum[:])
+	registration.Key = key
+	return registration
+}
+
+func writeTestRegistration(t *testing.T, registration backendRegistration) string {
+	t.Helper()
+	raw, err := json.Marshal(registration)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(t.TempDir(), "registration.json")
+	if err := os.WriteFile(path, raw, 0600); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+// newTestServer serves a store behind a platform registration. The returned
+// signer is the platform side: it answers for assertions bound to this boot.
+func newTestServer(t *testing.T, store *Store) (*Server, protocol.Signer) {
+	t.Helper()
+	registration := testRegistration()
+	server := NewServer(store, writeTestRegistration(t, registration), testBootID)
+	signer, err := registration.Signer(testBootID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return server, signer
+}

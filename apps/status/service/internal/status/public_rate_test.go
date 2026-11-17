@@ -1,9 +1,7 @@
 package status
 
 import (
-	"bytes"
 	"fmt"
-	protocol "github.com/KazuhaHub/StockAnalysisPrediction-Report-Portal-Apps/packages/extensionprotocol"
 	"net"
 	"net/http/httptest"
 	"net/netip"
@@ -12,10 +10,7 @@ import (
 )
 
 func TestAnonymousBurstIsBoundedWithoutTrustingForwardedHeaders(t *testing.T) {
-	server, err := NewServer(testStore(t), protocol.Signer{Issuer: "portal", Audience: "status", AppID: "status", InstanceID: "registration", KeyID: "key", Key: bytes.Repeat([]byte{8}, 32)})
-	if err != nil {
-		t.Fatal(err)
-	}
+	server, _ := newTestServer(t, testStore(t))
 	limited := 0
 	for i := 0; i < 100; i++ {
 		request := httptest.NewRequest("GET", "/public/v1/status", nil)

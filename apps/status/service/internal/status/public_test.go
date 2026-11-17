@@ -1,20 +1,14 @@
 package status
 
 import (
-	"bytes"
 	"net/http/httptest"
 	"strings"
 	"testing"
-
-	protocol "github.com/KazuhaHub/StockAnalysisPrediction-Report-Portal-Apps/packages/extensionprotocol"
 )
 
 func TestPublicWebsiteRequiresExplicitPublication(t *testing.T) {
 	store := testStore(t)
-	server, err := NewServer(store, protocol.Signer{Issuer: "portal", Audience: "status", AppID: "status", InstanceID: "one", KeyID: "key", Key: bytes.Repeat([]byte{2}, 32)})
-	if err != nil {
-		t.Fatal(err)
-	}
+	server, _ := newTestServer(t, store)
 	request := func(path string) *httptest.ResponseRecorder {
 		r := httptest.NewRequest("GET", path, nil)
 		w := httptest.NewRecorder()

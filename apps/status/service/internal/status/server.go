@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	protocol "github.com/KazuhaHub/StockAnalysisPrediction-Report-Portal-Apps/packages/extensionprotocol"
@@ -15,18 +16,46 @@ import (
 type Server struct {
 	publicBudget publicBudget
 	store        *Store
-	signer       protocol.Signer
-	verifier     *protocol.Verifier
+	registration string
+	bootID       string
 	slots        chan struct{}
+
+	verifierMu  sync.Mutex
+	verifier    *protocol.Verifier
+	verifierKey string
 }
 
-func NewServer(store *Store, signer protocol.Signer) (*Server, error) {
-	if _, err := signer.NewChallenge(time.Now()); err != nil {
+// NewServer serves the application's HTTP interface on behalf of the platform.
+// The registration file supplies the only key that can authenticate requests
+// and the boot identity binds every assertion to this process.
+func NewServer(store *Store, registration, bootID string) *Server {
+	return &Server{store: store, registration: registration, bootID: bootID, slots: make(chan struct{}, 16)}
+}
+
+// verifierFor returns the verifier for the current registration. The replay set
+// lives as long as the registration is unchanged; a rotated key replaces it, and
+// assertions made under the old key no longer verify anyway.
+func (s *Server) verifierFor() (*protocol.Verifier, error) {
+	registration, err := LoadRegistration(s.registration)
+	defer clear(registration.Key)
+	if err != nil {
 		return nil, err
 	}
-	signer.BootID = newID()
-	return &Server{store: store, signer: signer, verifier: protocol.NewVerifier(protocol.VerifyConfig{Issuer: signer.Issuer, Audience: signer.Audience, AppID: signer.AppID, InstanceID: signer.InstanceID, BootID: signer.BootID, Keys: map[string][]byte{signer.KeyID: signer.Key}}), slots: make(chan struct{}, 16)}, nil
+	signer, err := registration.Signer(s.bootID)
+	if err != nil {
+		return nil, err
+	}
+	defer clear(signer.Key)
+	fingerprint := signer.Issuer + "\x00" + signer.Audience + "\x00" + signer.InstanceID + "\x00" + signer.KeyID
+	s.verifierMu.Lock()
+	defer s.verifierMu.Unlock()
+	if s.verifier == nil || s.verifierKey != fingerprint {
+		s.verifier = protocol.NewVerifier(protocol.VerifyConfig{Issuer: signer.Issuer, Audience: signer.Audience, AppID: signer.AppID, InstanceID: signer.InstanceID, BootID: signer.BootID, Keys: map[string][]byte{signer.KeyID: signer.Key}})
+		s.verifierKey = fingerprint
+	}
+	return s.verifier, nil
 }
+
 func write(w http.ResponseWriter, status int, value any) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(status)
@@ -46,6 +75,37 @@ func apiError(w http.ResponseWriter, err error) {
 	}
 	// SQL, network and credential errors never enter wire messages.
 	write(w, status, map[string]any{"ok": false, "error": map[string]string{"code": code}})
+}
+func (s *Server) handshake(w http.ResponseWriter, r *http.Request, raw []byte) {
+	if r.URL.RawQuery != "" || r.Header.Get("Cookie") != "" || r.Header.Get("Authorization") != "" || r.Header.Get("Content-Type") != "application/json" {
+		write(w, 400, map[string]bool{"ok": false})
+		return
+	}
+	var in struct {
+		Challenge string `json:"challenge"`
+	}
+	if len(raw) == 0 || len(raw) > maxHandshakeBody || strictJSON(raw, &in) != nil || in.Challenge == "" || len(in.Challenge) > maxChallengeLength {
+		write(w, 400, map[string]bool{"ok": false})
+		return
+	}
+	registration, err := LoadRegistration(s.registration)
+	defer clear(registration.Key)
+	if err != nil {
+		write(w, 503, map[string]bool{"ok": false})
+		return
+	}
+	signer, err := registration.Signer(s.bootID)
+	if err != nil {
+		write(w, 503, map[string]bool{"ok": false})
+		return
+	}
+	defer clear(signer.Key)
+	answer, err := signer.AnswerChallenge(in.Challenge, s.bootID, time.Now())
+	if err != nil {
+		write(w, 400, map[string]bool{"ok": false})
+		return
+	}
+	write(w, 200, map[string]string{"answer": answer})
 }
 func decode(raw []byte, out any) error {
 	d := json.NewDecoder(bytes.NewReader(raw))
@@ -86,29 +146,29 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.heartbeat(w, r, raw)
 		return
 	}
-	if r.Method == "POST" && r.URL.Path == "/v1/handshake" {
-		var in struct {
-			Challenge string `json:"challenge"`
+	if r.URL.Path == "/v1/handshake" {
+		if r.Method == "POST" {
+			s.handshake(w, r, raw)
+		} else {
+			http.NotFound(w, r)
 		}
-		if len(raw) > 8192 || decode(raw, &in) != nil {
-			apiError(w, ErrInvalid)
-			return
-		}
-		answer, err := s.signer.AnswerChallenge(in.Challenge, s.signer.BootID, time.Now())
-		if err != nil {
-			write(w, 401, map[string]any{"ok": false})
-			return
-		}
-		write(w, 200, map[string]string{"answer": answer})
 		return
 	}
-	if r.Method == "GET" && r.URL.Path == "/healthz" {
+	if r.URL.Path == "/health/ready" {
+		if r.Method != "GET" {
+			http.NotFound(w, r)
+			return
+		}
+		if r.URL.RawQuery != "" || r.Header.Get("Authorization") != "" || r.Header.Get("Cookie") != "" {
+			write(w, 400, map[string]bool{"ok": false})
+			return
+		}
 		var n int
 		if err := s.store.db.QueryRowContext(r.Context(), `SELECT 1`).Scan(&n); err != nil {
 			write(w, 503, map[string]bool{"ok": false})
-		} else {
-			write(w, 200, map[string]bool{"ok": true})
+			return
 		}
+		write(w, 200, map[string]any{"protocol": backendProtocolVersion, "ready": true, "data_format": backendDataFormatVersion})
 		return
 	}
 	if r.Method == "GET" && r.URL.Path == "/public/v1/status" {
@@ -143,12 +203,21 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		write(w, 401, map[string]bool{"ok": false})
 		return
 	}
-	claims, err := s.verifier.Verify(headers[0], r.Method, r.URL.RequestURI(), raw, time.Now())
+	verifier, err := s.verifierFor()
+	if err != nil {
+		write(w, 503, map[string]bool{"ok": false})
+		return
+	}
+	claims, err := verifier.Verify(headers[0], r.Method, r.URL.RequestURI(), raw, time.Now())
 	if err != nil {
 		write(w, 401, map[string]bool{"ok": false})
 		return
 	}
 	v := claims.Viewer
+	if _, ok := authorityOf(v); !ok {
+		write(w, 401, map[string]bool{"ok": false})
+		return
+	}
 	if r.Method != "GET" || strings.HasPrefix(r.URL.Path, "/v1/manage/") {
 		if !isAdmin(v) {
 			apiError(w, ErrForbidden)

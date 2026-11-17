@@ -9,8 +9,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	protocol "github.com/KazuhaHub/StockAnalysisPrediction-Report-Portal-Apps/packages/extensionprotocol"
 )
 
 func TestHeartbeatAuthenticatesAndPersistsReplayFence(t *testing.T) {
@@ -24,11 +22,7 @@ func TestHeartbeatAuthenticatesAndPersistsReplayFence(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	signer := protocol.Signer{Issuer: "portal", Audience: "status", AppID: "status", InstanceID: "one", KeyID: "key", Key: []byte(strings.Repeat("k", 32))}
-	server, err := NewServer(s, signer)
-	if err != nil {
-		t.Fatal(err)
-	}
+	server, _ := newTestServer(t, s)
 	monitor := component.Monitors[0].ID
 	raw := `{"timestamp":"` + time.Now().UTC().Format(time.RFC3339) + `","nonce":"external-job-nonce"}`
 	mac := hmac.New(sha256.New, []byte("heartbeat-secret-at-least-32-bytes"))
