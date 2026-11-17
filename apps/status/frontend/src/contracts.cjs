@@ -23,6 +23,7 @@
         authentication_failed: "authenticationHint",
         observer_unavailable: "observerHint",
         local_socket_unavailable: "postgresSocketHint",
+        egress_unavailable: "egressHint",
       }[monitor.reason_code] || ""
     );
   }

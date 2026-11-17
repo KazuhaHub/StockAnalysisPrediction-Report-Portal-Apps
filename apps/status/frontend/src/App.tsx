@@ -17,9 +17,13 @@ import {
   Tag,
   Typography,
 } from "antd";
-import { ReloadOutlined, SettingOutlined } from "@ant-design/icons";
-import { PortalAppProvider, PortalPage, PortalLocaleSelect, usePortalLocale, type LocaleSelection } from "@portal-app/sdk";
-import type { Client, Component, Incident, Page } from "./client";
+import {
+  useAppBackend,
+  useAppNavigation,
+  useAppPage,
+  useAppPresentation,
+} from "@portal-app/sdk/root-v2";
+import { useClient, type Component, type Incident, type Page } from "./client";
 import {
   Check,
   date,
@@ -33,8 +37,22 @@ import { Management } from "./Management";
 import contracts from "./contracts.cjs";
 
 const { compatibleBackend, safeState, percentage, monitorHint } = contracts;
-export function StatusApp({ client }: { client: Client }) {
-  const { locale, selection, setSelection } = usePortalLocale(client);
+const routePaths = { overview: "/", incidents: "/incidents", manage: "/manage" };
+type Route = keyof typeof routePaths;
+const routeOf = (path: string | null): Route =>
+  path === routePaths.incidents
+    ? "incidents"
+    : path === routePaths.manage
+      ? "manage"
+      : "overview";
+
+export function Application() {
+  const { presentation } = useAppPresentation(),
+    backend = useAppBackend(),
+    navigation = useAppNavigation(),
+    client = useClient(),
+    locale = presentation.locale,
+    route = routeOf(navigation.path);
   const [ready, setReady] = useState(false),
     [admin, setAdmin] = useState(false),
     [error, setError] = useState(""),
@@ -62,8 +80,8 @@ export function StatusApp({ client }: { client: Client }) {
     }
   }, [client]);
   useEffect(() => {
-    void connect();
-  }, [connect]);
+    if (backend.ready) void connect();
+  }, [backend.ready, connect]);
   const run = async (action: () => Promise<unknown>, success = "saved") => {
     if (busyRef.current) return false;
     busyRef.current = true;
@@ -90,34 +108,72 @@ export function StatusApp({ client }: { client: Client }) {
           document.querySelector("[data-app-error]")) as HTMLElement | null
       )?.focus();
   }, [error]);
+  const refresh = () => {
+    if (ready) setRevision((value) => value + 1);
+    else void connect();
+  };
+  useAppPage({
+    title: t("title"),
+    description: t("subtitle"),
+    actions: [
+      {
+        id: "refresh",
+        label: t("refresh"),
+        disabled: busy || !backend.ready,
+        onAction: refresh,
+      },
+      ...(admin && route !== "manage"
+        ? [
+            {
+              id: "manage",
+              label: t("manage"),
+              disabled: busy || !navigation.ready,
+              onAction: () => {
+                navigation.navigate(routePaths.manage);
+              },
+            },
+          ]
+        : []),
+      ...(route === "manage"
+        ? [
+            {
+              id: "overview",
+              label: t("overview"),
+              disabled: busy || !navigation.ready,
+              onAction: () => {
+                navigation.navigate(routePaths.overview);
+              },
+            },
+          ]
+        : []),
+    ],
+  });
+  if (!backend.available)
+    return <Alert type="warning" showIcon title={t("backendUnavailable")} />;
   return (
-    <PortalAppProvider client={client} locale={locale}>
-      <UIContext.Provider
-        value={{
-          client,
-          locale,
-          t,
-          busy,
-          run,
-          revision,
-          admin,
-          error: error ? t(error) : "",
+    <UIContext.Provider
+      value={{
+        client,
+        locale,
+        t,
+        busy,
+        run,
+        revision,
+        admin,
+        error: error ? t(error) : "",
+      }}
+    >
+      <StatusSurface
+        admin={admin}
+        ready={ready}
+        error={error}
+        notice={notice}
+        route={route}
+        go={(next) => {
+          navigation.navigate(routePaths[next]);
         }}
-      >
-        <StatusSurface
-          admin={admin}
-          ready={ready}
-          error={error}
-          notice={notice}
-          selection={selection}
-          localeChanged={setSelection}
-          refresh={() => {
-            if (ready) setRevision((value) => value + 1);
-            else void connect();
-          }}
-        />
-      </UIContext.Provider>
-    </PortalAppProvider>
+      />
+    </UIContext.Provider>
   );
 }
 function StatusSurface({
@@ -125,44 +181,19 @@ function StatusSurface({
   ready,
   error,
   notice,
-  localeChanged,
-  selection,
-  refresh,
+  route,
+  go,
 }: {
   admin: boolean;
   ready: boolean;
   error: string;
   notice: string;
-  selection: LocaleSelection;
-  localeChanged(locale: LocaleSelection): void;
-  refresh(): void;
+  route: Route;
+  go(route: Route): void;
 }) {
-  const { t, locale, busy } = useUI(), [tab, setTab] = useState("overview");
+  const { t } = useUI();
   return (
-    <PortalPage title={t("title")} description={t("subtitle")} className="status-app" busy={busy} actions={
-        <Space wrap>
-          <PortalLocaleSelect locale={locale} selection={selection} onChange={localeChanged} />
-          <Button
-            aria-label={t("refresh")}
-            icon={<ReloadOutlined />}
-            onClick={refresh}
-            disabled={busy}
-          >
-            {t("refresh")}
-          </Button>
-          {admin && (
-            <Button
-              aria-label={t("manage")}
-              icon={<SettingOutlined />}
-              type={tab === "manage" ? "primary" : "default"}
-              onClick={() => setTab(tab === "manage" ? "overview" : "manage")}
-              disabled={busy}
-            >
-              {t("manage")}
-            </Button>
-          )}
-        </Space>
-      }>
+    <div className="status-app">
       {error && (
         <div data-app-error tabIndex={-1} className="section-gap">
           <Alert
@@ -187,26 +218,28 @@ function StatusSurface({
         !error && <Skeleton active className="section-gap" />
       ) : (
         <>
-          {tab !== "manage" && (
+          {route !== "manage" && (
             <Tabs
-              activeKey={tab}
-              onChange={setTab}
+              activeKey={route}
+              onChange={(key) => go(key as Route)}
               items={["overview", "incidents"].map((key) => ({
                 key,
                 label: t(key),
               }))}
             />
           )}
-          {tab === "overview" ? (
+          {route === "overview" ? (
             <Overview />
-          ) : tab === "incidents" ? (
+          ) : route === "incidents" ? (
             <Incidents />
+          ) : admin ? (
+            <Management />
           ) : (
-            admin && <Management />
+            <Alert type="error" showIcon role="alert" title={t("accessDenied")} />
           )}
         </>
       )}
-    </PortalPage>
+    </div>
   );
 }
 const stateColors: Record<string, string> = {

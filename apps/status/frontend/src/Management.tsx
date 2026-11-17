@@ -15,6 +15,7 @@ import {
   Typography,
 } from "antd";
 import { PlusOutlined, SettingOutlined } from "@ant-design/icons";
+import { useAppDraft } from "@portal-app/sdk/root-v2";
 import type {
   Component,
   Credential,
@@ -225,6 +226,11 @@ function CredentialEditor({
     [draft, setDraft] = useState(value),
     [secret, setSecret] = useState<Record<string, string>>({}),
     [confirmDelete, setConfirmDelete] = useState(false);
+  useAppDraft(
+    draft.label !== value.label ||
+      draft.kind !== value.kind ||
+      Object.values(secret).some(Boolean),
+  );
   const fields =
     draft.kind === "postgres"
       ? ["username", "password"]

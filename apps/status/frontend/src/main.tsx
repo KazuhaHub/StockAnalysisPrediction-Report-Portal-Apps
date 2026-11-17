@@ -1,9 +1,11 @@
 import { createRoot } from "react-dom/client";
-import { PortalClient } from "@portal-app/sdk";
-import { StatusApp } from "./App";
+import { AppRoot } from "@portal-app/sdk/root-v2";
+import { Application } from "./App";
+import bootstrap from "./bootstrap.json";
 import "./private.css";
 
-const client = new PortalClient("status");
 createRoot(document.getElementById("app")!).render(
-  <StatusApp client={client} />,
+  <AppRoot parentOrigin={bootstrap.parentOrigin}>
+    <Application />
+  </AppRoot>,
 );

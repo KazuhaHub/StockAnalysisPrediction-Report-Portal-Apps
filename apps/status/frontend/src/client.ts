@@ -1,10 +1,63 @@
-export { PortalClient, BridgeError } from "@portal-app/sdk";
-export type {
-  AppClient as Client,
-  Locale,
-  Method,
-  PortalTheme,
-} from "@portal-app/sdk";
+import { useMemo } from "react";
+import { requestErrorKey } from "@portal-app/sdk";
+import { BridgeBackendError } from "@portal-app/sdk/bridge-v2";
+import { useAppBackend, type AppBackend } from "@portal-app/sdk/root-v2";
+
+export type Locale = "en-US" | "zh-CN" | "zh-TW";
+export type Method = "GET" | "POST" | "PUT" | "DELETE";
+
+/** A failed request. `key` selects a localized message; nothing else is shown. */
+export class RequestError extends Error {
+  constructor(
+    public key: string,
+    public status?: number,
+  ) {
+    super(key);
+  }
+}
+export interface Client {
+  request<T = unknown>(method: Method, path: string, body?: unknown): Promise<T>;
+}
+
+const transportKeys: Record<string, string> = {
+  busy: "requestBusy",
+  // The write may have been applied; the SDK never retries it and neither do we.
+  uncertain: "writeUncertain",
+};
+
+/**
+ * Status's own service API over the platform backend relay. Replies are the
+ * service's JSON; every non-2xx reply and every transport failure becomes a
+ * RequestError with a fixed key, so no server text reaches the screen.
+ */
+export function createClient(request: AppBackend["request"]): Client {
+  return {
+    async request<T>(method: Method, path: string, body?: unknown): Promise<T> {
+      let response;
+      try {
+        response = await request({
+          method,
+          path,
+          body: body === undefined ? "" : JSON.stringify(body),
+        });
+      } catch (error) {
+        const code = error instanceof BridgeBackendError ? error.code : "unavailable";
+        throw new RequestError(transportKeys[code] ?? "unavailable");
+      }
+      if (response.status < 200 || response.status > 299)
+        throw new RequestError(requestErrorKey(response.status), response.status);
+      try {
+        return JSON.parse(response.body) as T;
+      } catch {
+        throw new RequestError("unavailable", response.status);
+      }
+    },
+  };
+}
+export function useClient(): Client {
+  const backend = useAppBackend();
+  return useMemo(() => createClient(backend.request), [backend.request]);
+}
 
 export interface Page<T> {
   items: T[];
@@ -52,10 +105,6 @@ export interface Credential {
   id?: string;
   revision: number;
   kind: string;
-  label: string;
-}
-export interface Principal {
-  principal: string;
   label: string;
 }
 export interface Incident {

@@ -17,6 +17,12 @@ test("zero coverage is not a promise of perfect uptime", () => {
   assert.equal(percentage(9, 10), "90.00%");
   assert.equal(percentage(11, 10), null);
 });
+test("a missing network path is explained and never read as a provider failure", () => {
+  assert.equal(
+    monitorHint({ outcome: "unknown", reason_code: "egress_unavailable" }),
+    "egressHint",
+  );
+});
 test("unsupported billing has a setup explanation and never implies zero credit", () => {
   assert.equal(
     monitorHint({ outcome: "unsupported", reason_code: "billing_unsupported" }),

@@ -13,6 +13,28 @@ credentials; monitoring and notification delivery remain paused until configured
 Provider configuration is not a requirement for downloading or installing the app.
 The minimum verified Portal release is `v2026.43.2`.
 
+## Platform v2 port (0.2.0-beta.1, draft)
+
+`app.v2.json` declares the application for the new Portal app platform. It is a
+fresh install, not an upgrade of `0.1.0-beta.4`, and nothing here is released.
+
+- The service listens only on the Unix socket named by `PORTAL_APP_HTTP_SOCKET`.
+  It answers `POST /v1/handshake` and `GET /health/ready`, and verifies the
+  viewer assertion on the `/v1/*` routes the browser relay forwards. There is no
+  TCP listener, pairing file or storage-key flag.
+- The viewer is the platform's opaque subject, OU identifiers and role. Grants
+  are bound to one installation and are re-entered after a reinstall.
+- The platform owns backup and restore of `/data`. When the data was written
+  under a different installation or controller epoch, probes and notification
+  delivery stay paused until an administrator reviews the queue and resumes.
+- The backend has no network. Until the platform grants a background network
+  path, probes report the unknown outcome `egress_unavailable` and queued
+  notices stay queued. Nothing is reported as healthy or failed because of it.
+- The frontend uses `AppRoot`, `useAppBackend` and `useAppPage`. `public-src`
+  is parked: it is not part of the v2 build.
+- The database shape and the credentials table are unchanged. Moving them to
+  platform custody needs an approved schema first.
+
 ## Features
 
 - Multiple components and HTTP, Dify read-access, PostgreSQL `SELECT 1`, DeepSeek
