@@ -17,7 +17,7 @@ func TestAnonymousBurstIsBoundedWithoutTrustingForwardedHeaders(t *testing.T) {
 		request.RemoteAddr = "192.0.2.10:45000"
 		request.Header.Set("X-Forwarded-For", newID())
 		response := httptest.NewRecorder()
-		server.ServeHTTP(response, request)
+		phase2Handler(server).ServeHTTP(response, request)
 		if response.Code == 429 {
 			limited++
 			if response.Header().Get("Retry-After") == "" {
@@ -36,7 +36,7 @@ func TestAnonymousBurstIsBoundedWithoutTrustingForwardedHeaders(t *testing.T) {
 	other := httptest.NewRequest("GET", "/public/v1/status", nil)
 	other.RemoteAddr = "192.0.2.11:45000"
 	response := httptest.NewRecorder()
-	server.ServeHTTP(response, other)
+	phase2Handler(server).ServeHTTP(response, other)
 	if response.Code != 200 {
 		t.Fatalf("independent origin blocked: %d", response.Code)
 	}

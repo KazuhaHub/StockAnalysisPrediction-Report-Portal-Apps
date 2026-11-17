@@ -5,6 +5,8 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -82,4 +84,15 @@ func newTestServer(t *testing.T, store *Store) (*Server, protocol.Signer) {
 		t.Fatal(err)
 	}
 	return server, signer
+}
+
+// phase2Handler serves the unregistered public and heartbeat routes so their
+// own behaviour stays under test until Phase 2 registers them.
+func phase2Handler(s *Server) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		raw, _ := io.ReadAll(http.MaxBytesReader(w, r.Body, 65536))
+		if !s.servePhase2(w, r, raw) {
+			http.NotFound(w, r)
+		}
+	})
 }

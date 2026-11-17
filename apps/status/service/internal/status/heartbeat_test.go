@@ -32,7 +32,7 @@ func TestHeartbeatAuthenticatesAndPersistsReplayFence(t *testing.T) {
 		r := httptest.NewRequest("POST", "/ingest/v1/heartbeats/"+monitor, strings.NewReader(raw))
 		r.Header.Set("X-Status-Signature", sig)
 		w := httptest.NewRecorder()
-		server.ServeHTTP(w, r)
+		phase2Handler(server).ServeHTTP(w, r)
 		return w
 	}
 	if w := call("wrong"); w.Code != 401 {

@@ -153,6 +153,22 @@ func TestOnlyPlatformRoutesAreServed(t *testing.T) {
 	if legacy.Code == http.StatusOK {
 		t.Fatal("legacy health route still served")
 	}
+	// Public pages, readiness aliases and heartbeat ingress belong to a later
+	// phase: with public publication switched on, none is reachable.
+	if _, err := server.store.db.Exec(`INSERT INTO settings VALUES('public_enabled','1')`); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct{ method, path string }{
+		{"GET", "/readyz"}, {"GET", "/public/v1/status"}, {"GET", "/public/v1/history"}, {"GET", "/public/v1/incidents"},
+		{"GET", "/"}, {"GET", "/app.js"}, {"GET", "/style.css"}, {"POST", "/ingest/v1/heartbeats/any"},
+	} {
+		request := httptest.NewRequest(c.method, "http://portal-app.invalid"+c.path, strings.NewReader(`{}`))
+		recorder := httptest.NewRecorder()
+		server.ServeHTTP(recorder, request)
+		if recorder.Code != http.StatusNotFound {
+			t.Errorf("%s %s = %d, want 404", c.method, c.path, recorder.Code)
+		}
+	}
 	// Task and event handlers belong to a later phase: even an administrator's
 	// authenticated call reaches no handler.
 	for _, path := range []string{"/v1/tasks/run", "/v1/events/subscribe"} {

@@ -134,18 +134,6 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		apiError(w, ErrInvalid)
 		return
 	}
-	if (r.URL.Path == "/" || r.URL.Path == "/app.js" || r.URL.Path == "/style.css" || strings.HasPrefix(r.URL.Path, "/public/")) && !s.publicBudget.allow(r.RemoteAddr, time.Now()) {
-		w.Header().Set("Retry-After", "1")
-		write(w, 429, map[string]bool{"ok": false})
-		return
-	}
-	if s.publicRoute(w, r) {
-		return
-	}
-	if r.Method == "POST" && strings.HasPrefix(r.URL.Path, "/ingest/v1/heartbeats/") {
-		s.heartbeat(w, r, raw)
-		return
-	}
 	if r.URL.Path == "/v1/handshake" {
 		if r.Method == "POST" {
 			s.handshake(w, r, raw)
@@ -171,31 +159,8 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		write(w, 200, map[string]any{"protocol": backendProtocolVersion, "ready": true, "data_format": backendDataFormatVersion})
 		return
 	}
-	if r.Method == "GET" && r.URL.Path == "/public/v1/status" {
-		offset, limit, err := pageParams(r)
-		if err != nil {
-			apiError(w, err)
-			return
-		}
-		page, err := s.store.PublicComponentPage(time.Now(), offset, limit)
-		if err != nil {
-			apiError(w, err)
-			return
-		}
-		// Explicit projection: adding fields to private views cannot publish them.
-		type publicComponent struct {
-			ID         string `json:"id"`
-			Label      string `json:"label"`
-			State      string `json:"state"`
-			ObservedAt string `json:"observed_at"`
-			Stale      bool   `json:"stale"`
-		}
-		out := []publicComponent{}
-		for _, c := range page.Items {
-			out = append(out, publicComponent{c.ID, c.Label, c.State, c.ObservedAt, c.Stale})
-		}
-		w.Header().Set("Cache-Control", "public, max-age=10")
-		write(w, 200, map[string]any{"ok": true, "items": out, "total": page.Total, "offset": page.Offset, "limit": page.Limit, "generated_at": time.Now().UTC().Format(time.RFC3339)})
+	if !strings.HasPrefix(r.URL.Path, "/v1/") {
+		http.NotFound(w, r)
 		return
 	}
 	headers := r.Header.Values(protocol.Header)
@@ -372,4 +337,51 @@ func (s *Store) ComponentConfigurations() ([]ComponentInput, error) {
 		}
 	}
 	return out, nil
+}
+
+// servePhase2 holds the routes that need Portal capabilities the platform does
+// not offer yet: anonymous public pages and inbound heartbeat ingress. It is
+// deliberately not called from ServeHTTP, so the platform socket serves none
+// of them. Phase 2 registers it once the platform can carry those requests.
+func (s *Server) servePhase2(w http.ResponseWriter, r *http.Request, raw []byte) bool {
+	if (r.URL.Path == "/" || r.URL.Path == "/app.js" || r.URL.Path == "/style.css" || strings.HasPrefix(r.URL.Path, "/public/")) && !s.publicBudget.allow(r.RemoteAddr, time.Now()) {
+		w.Header().Set("Retry-After", "1")
+		write(w, 429, map[string]bool{"ok": false})
+		return true
+	}
+	if s.publicRoute(w, r) {
+		return true
+	}
+	if r.Method == "POST" && strings.HasPrefix(r.URL.Path, "/ingest/v1/heartbeats/") {
+		s.heartbeat(w, r, raw)
+		return true
+	}
+	if r.Method == "GET" && r.URL.Path == "/public/v1/status" {
+		offset, limit, err := pageParams(r)
+		if err != nil {
+			apiError(w, err)
+			return true
+		}
+		page, err := s.store.PublicComponentPage(time.Now(), offset, limit)
+		if err != nil {
+			apiError(w, err)
+			return true
+		}
+		// Explicit projection: adding fields to private views cannot publish them.
+		type publicComponent struct {
+			ID         string `json:"id"`
+			Label      string `json:"label"`
+			State      string `json:"state"`
+			ObservedAt string `json:"observed_at"`
+			Stale      bool   `json:"stale"`
+		}
+		out := []publicComponent{}
+		for _, c := range page.Items {
+			out = append(out, publicComponent{c.ID, c.Label, c.State, c.ObservedAt, c.Stale})
+		}
+		w.Header().Set("Cache-Control", "public, max-age=10")
+		write(w, 200, map[string]any{"ok": true, "items": out, "total": page.Total, "offset": page.Offset, "limit": page.Limit, "generated_at": time.Now().UTC().Format(time.RFC3339)})
+		return true
+	}
+	return false
 }

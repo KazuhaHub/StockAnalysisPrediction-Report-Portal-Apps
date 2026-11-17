@@ -12,7 +12,7 @@ func TestPublicWebsiteRequiresExplicitPublication(t *testing.T) {
 	request := func(path string) *httptest.ResponseRecorder {
 		r := httptest.NewRequest("GET", path, nil)
 		w := httptest.NewRecorder()
-		server.ServeHTTP(w, r)
+		phase2Handler(server).ServeHTTP(w, r)
 		return w
 	}
 	if w := request("/"); w.Code != 404 {
