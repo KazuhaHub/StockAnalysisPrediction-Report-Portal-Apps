@@ -1,6 +1,7 @@
 package status
 
 import (
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -80,5 +81,32 @@ func TestReadGrantsFollowOpaqueUserAndOUPrincipals(t *testing.T) {
 	}
 	if byUser.ID == "" {
 		t.Fatal("missing component")
+	}
+}
+
+func TestGrantPrincipalsMustBeOpaqueUserOrOUIdentifiers(t *testing.T) {
+	s := testStore(t)
+	admin := fixtureAdmin()
+	hex64 := fixtureOpaque("account", "reader")
+	for name, principal := range map[string]string{
+		"readable name":  "user:alice",
+		"short":          "ou:" + hex64[:63],
+		"long":           "user:" + hex64 + "0",
+		"uppercase":      "user:" + strings.ToUpper(hex64),
+		"non hex":        "ou:" + strings.Repeat("g", 64),
+		"unknown prefix": "group:" + hex64,
+		"bare prefix":    "user:",
+		"newline":        "user:" + hex64 + "\n",
+		"no prefix":      hex64,
+	} {
+		_, err := s.SaveComponent(admin, ComponentInput{Label: "Grant " + name, Enabled: true, Grants: []Grant{{Principal: principal, Permission: "read"}}})
+		if !errors.Is(err, ErrInvalid) {
+			t.Errorf("%s accepted: %v", name, err)
+		}
+	}
+	for _, principal := range []string{"user:" + hex64, "ou:" + hex64} {
+		if _, err := s.SaveComponent(admin, ComponentInput{Label: "Valid " + principal[:3], Enabled: true, Grants: []Grant{{Principal: principal, Permission: "read"}}}); err != nil {
+			t.Errorf("%s refused: %v", principal[:3], err)
+		}
 	}
 }

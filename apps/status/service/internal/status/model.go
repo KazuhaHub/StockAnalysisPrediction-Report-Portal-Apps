@@ -207,6 +207,21 @@ func (s *Store) canRead(v protocol.Viewer, component, permission string) bool {
 	err := s.db.QueryRow(`SELECT COUNT(*) FROM component_grants WHERE component_id=? AND permission=? AND principal IN (`+marks+`)`, args...).Scan(&n)
 	return err == nil && n > 0
 }
+
+// validGrantPrincipal accepts the opaque identifiers the platform gives a
+// backend: "user:" or "ou:" followed by exactly 64 lowercase hex characters.
+func validGrantPrincipal(p string) bool {
+	kind, id, ok := strings.Cut(p, ":")
+	if !ok || (kind != "user" && kind != "ou") || len(id) != 64 {
+		return false
+	}
+	for _, c := range id {
+		if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
+			return false
+		}
+	}
+	return true
+}
 func (s *Store) SaveComponent(v protocol.Viewer, in ComponentInput) (ComponentInput, error) {
 	if !isAdmin(v) {
 		return ComponentInput{}, ErrForbidden
@@ -216,7 +231,7 @@ func (s *Store) SaveComponent(v protocol.Viewer, in ComponentInput) (ComponentIn
 	}
 	seen := map[string]bool{}
 	for _, g := range in.Grants {
-		if (!strings.HasPrefix(g.Principal, "user:") && !strings.HasPrefix(g.Principal, "ou:")) || len(g.Principal) > 300 || (g.Permission != "read" && g.Permission != "finance") || seen[g.Principal+":"+g.Permission] {
+		if !validGrantPrincipal(g.Principal) || (g.Permission != "read" && g.Permission != "finance") || seen[g.Principal+":"+g.Permission] {
 			return ComponentInput{}, ErrInvalid
 		}
 		seen[g.Principal+":"+g.Permission] = true
