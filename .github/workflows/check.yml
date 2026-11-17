@@ -166,7 +166,20 @@ jobs:
       - run: python3 scripts/plugin-standard.py
       - run: python3 scripts/build-app-v2.py scheduled-digest --output "$RUNNER_TEMP/scheduled-digest-candidate"
       - run: docker build -f apps/scheduled-digest/service/Dockerfile -t scheduled-digest-development .
+  status-line:
+    # The legacy Status release, container and browser jobs target app.json, the
+    # -listen/-pairing-file flags and the app's own backup and restore. They run
+    # only while app.json is the manifest; on the v2 line this job says so and
+    # the v2 packaging step replaces them.
+    runs-on: ubuntu-latest
+    outputs:
+      legacy: ${{ steps.line.outputs.legacy }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: line
+        run: python3 scripts/status_line.py --github-output "$GITHUB_OUTPUT"
   status:
+    needs: status-line
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -184,7 +197,8 @@ jobs:
       - run: node --test apps/status/frontend/tests/*.test.cjs
       - run: python3 scripts/build-status-frontend.py
       - run: git diff --exit-code -- apps/status/service/internal/status/public
-      - run: python3 scripts/catalogue.py package status
+      - if: needs.status-line.outputs.legacy == 'true'
+        run: python3 scripts/catalogue.py package status
       - run: go build ./...
         working-directory: apps/status/service
       - run: go vet ./...
@@ -194,6 +208,8 @@ jobs:
       - run: go test -race ./...
         working-directory: apps/status/service
   status-browser:
+    needs: status-line
+    if: needs.status-line.outputs.legacy == 'true'
     runs-on: ubuntu-latest
     env:
       GOWORK: 'off'
@@ -258,6 +274,8 @@ jobs:
           path: apps/status/tests/test-results/
           retention-days: 7
   status-container:
+    needs: status-line
+    if: needs.status-line.outputs.legacy == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -282,6 +300,8 @@ jobs:
           cmp "$context/linux-amd64/status" "$RUNNER_TEMP/prebuilt-status"
       - run: python3 scripts/status-container-smoke.py
   status-artifacts:
+    needs: status-line
+    if: needs.status-line.outputs.legacy == 'true'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false

@@ -24,7 +24,22 @@ env:
   GOTOOLCHAIN: local
   RELEASE_NOTES: ${{ inputs.notes }}
 jobs:
+  status-line:
+    # Releases here are legacy-line releases (apps/status/app.json). The v2 line
+    # is packaged by its own step and is never released from this workflow.
+    runs-on: ubuntu-latest
+    outputs:
+      legacy: ${{ steps.line.outputs.legacy }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - id: line
+        run: python3 scripts/status_line.py --github-output "$GITHUB_OUTPUT"
   verify:
+    needs: status-line
+    if: needs.status-line.outputs.legacy == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 35
     permissions:

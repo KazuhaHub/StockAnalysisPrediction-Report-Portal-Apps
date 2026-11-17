@@ -9,7 +9,16 @@ import tempfile
 import time
 import urllib.error
 import urllib.request
+import importlib.util
+import sys
 from pathlib import Path
+
+_line_spec = importlib.util.spec_from_file_location("status_line", Path(__file__).with_name("status_line.py"))
+status_line = importlib.util.module_from_spec(_line_spec)
+_line_spec.loader.exec_module(status_line)
+if status_line.uses_v2_line(Path(__file__).resolve().parents[1]):
+    print(status_line.skip_message("The legacy Status container smoke"))
+    sys.exit(0)
 
 
 def run(*args):
