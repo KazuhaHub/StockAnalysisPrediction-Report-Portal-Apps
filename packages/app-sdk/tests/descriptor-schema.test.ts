@@ -111,6 +111,12 @@ for (const [name, mutate] of [
       d.compatibility.platform_api = " ";
     },
   ],
+  [
+    "required principals.read",
+    (d: any) => {
+      d.capabilities = { required: ["principals.read"], optional: [] };
+    },
+  ],
 ] as const) {
   test(`schema and strict parser refuse ${name}`, () => {
     const value = fixture(true);
@@ -133,12 +139,6 @@ for (const [name, mutate] of [
     "background dependency",
     (d: any) => {
       d.capabilities = { required: ["tasks.schedule"], optional: [] };
-    },
-  ],
-  [
-    "required principals.read",
-    (d: any) => {
-      d.capabilities = { required: ["principals.read"], optional: [] };
     },
   ],
   [
