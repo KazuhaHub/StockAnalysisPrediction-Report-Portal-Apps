@@ -143,3 +143,49 @@ func TestServeRefusesAnUnreadableRegistrationBeforeListening(t *testing.T) {
 		t.Fatal("listened without a platform registration")
 	}
 }
+
+func TestStorageKeyIsCreatedOnceWithOwnerOnlyPermissions(t *testing.T) {
+	directory := t.TempDir()
+	keyPath := filepath.Join(directory, storageKeyName)
+	first, err := loadStorageKey(keyPath, filepath.Join(directory, "status.db"))
+	if err != nil || len(first) != 32 {
+		t.Fatalf("first key = %d bytes, %v", len(first), err)
+	}
+	info, err := os.Stat(keyPath)
+	if err != nil || info.Mode().Perm() != 0600 {
+		t.Fatalf("key file = %v, %v", info, err)
+	}
+	second, err := loadStorageKey(keyPath, filepath.Join(directory, "status.db"))
+	if err != nil || !bytes.Equal(first, second) {
+		t.Fatalf("key changed between loads: %v", err)
+	}
+	entries, err := os.ReadDir(directory)
+	if err != nil || len(entries) != 1 {
+		t.Fatalf("temporary key files left behind: %v %v", entries, err)
+	}
+}
+
+func TestStorageKeyIsNeverRegeneratedOverAnExistingDatabase(t *testing.T) {
+	for name, prepare := range map[string]func(string){
+		"missing": func(string) {},
+		"empty":   func(keyPath string) { os.WriteFile(keyPath, nil, 0600) },
+	} {
+		t.Run(name, func(t *testing.T) {
+			directory := t.TempDir()
+			database := filepath.Join(directory, "status.db")
+			if err := os.WriteFile(database, []byte("sealed rows"), 0600); err != nil {
+				t.Fatal(err)
+			}
+			keyPath := filepath.Join(directory, storageKeyName)
+			prepare(keyPath)
+			if key, err := loadStorageKey(keyPath, database); err == nil {
+				t.Fatalf("a key was produced beside an existing database: %d bytes", len(key))
+			}
+			if info, err := os.Stat(keyPath); name == "missing" && err == nil {
+				t.Fatalf("a key file was created: %v", info)
+			} else if name == "empty" && err == nil && info.Size() != 0 {
+				t.Fatal("the empty key file was overwritten")
+			}
+		})
+	}
+}

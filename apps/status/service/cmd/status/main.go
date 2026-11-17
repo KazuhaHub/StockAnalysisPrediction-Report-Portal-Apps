@@ -47,26 +47,32 @@ func readSecret(path string) ([]byte, error) {
 	return os.ReadFile(path)
 }
 
+var errStorageKeyLost = errors.New("status.db exists but status.key is missing or empty; restore status.key from the same platform backup as status.db, a new key would make the stored credentials unreadable")
+
 // loadStorageKey returns the key that seals credentials in the database. It
 // lives beside the database in the application's data volume, so a platform
 // restore of /data always brings back a matching pair. The platform's secret
 // custody replaces stored credentials, and with them this key, in a later
 // storage change.
-func loadStorageKey(path string) ([]byte, error) {
-	if _, err := os.Lstat(path); errors.Is(err, os.ErrNotExist) {
-		key := make([]byte, 32)
-		if _, err := rand.Read(key); err != nil {
-			return nil, err
+//
+// A new key is made only when no database exists yet. The key reaches the
+// disk, and so does its directory entry, before the caller opens the database,
+// which is what records the key's fingerprint. A database that is found
+// without its key is never given a new one.
+func loadStorageKey(path, database string) ([]byte, error) {
+	info, err := os.Lstat(path)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return nil, err
+	}
+	if err == nil && info.Size() == 0 || errors.Is(err, os.ErrNotExist) {
+		if _, dbErr := os.Lstat(database); dbErr == nil {
+			return nil, errStorageKeyLost
+		} else if !errors.Is(dbErr, os.ErrNotExist) {
+			return nil, dbErr
 		}
-		out, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
-		if err != nil {
-			return nil, err
-		}
-		_, err = out.WriteString(base64.StdEncoding.EncodeToString(key) + "\n")
-		if closeErr := out.Close(); err == nil {
-			err = closeErr
-		}
-		if err != nil {
+	}
+	if errors.Is(err, os.ErrNotExist) {
+		if err := createStorageKey(path); err != nil {
 			return nil, err
 		}
 	}
@@ -79,6 +85,44 @@ func loadStorageKey(path string) ([]byte, error) {
 		return nil, errors.New("storage key must encode exactly 32 bytes")
 	}
 	return key, nil
+}
+
+// createStorageKey writes a fresh key durably: a private temporary file in the
+// same directory, flushed to disk, renamed into place, then the directory is
+// flushed so a crash cannot leave a database whose key vanished.
+func createStorageKey(path string) error {
+	key := make([]byte, 32)
+	defer clear(key)
+	if _, err := rand.Read(key); err != nil {
+		return err
+	}
+	directory := filepath.Dir(path)
+	temporary := filepath.Join(directory, "."+filepath.Base(path)+".tmp")
+	_ = os.Remove(temporary)
+	out, err := os.OpenFile(temporary, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
+	if err != nil {
+		return err
+	}
+	_, err = out.WriteString(base64.StdEncoding.EncodeToString(key) + "\n")
+	if err == nil {
+		err = out.Sync()
+	}
+	if closeErr := out.Close(); err == nil {
+		err = closeErr
+	}
+	if err == nil {
+		err = os.Rename(temporary, path)
+	}
+	if err != nil {
+		_ = os.Remove(temporary)
+		return err
+	}
+	dir, err := os.Open(directory)
+	if err != nil {
+		return err
+	}
+	defer dir.Close()
+	return dir.Sync()
 }
 
 func listenUnix(path string) (net.Listener, error) {
@@ -112,7 +156,7 @@ func serve(ctx context.Context, cfg config) error {
 	if err := os.MkdirAll(filepath.Dir(cfg.database), 0700); err != nil {
 		return err
 	}
-	key, err := loadStorageKey(filepath.Join(filepath.Dir(cfg.database), storageKeyName))
+	key, err := loadStorageKey(filepath.Join(filepath.Dir(cfg.database), storageKeyName), cfg.database)
 	if err != nil {
 		return err
 	}
