@@ -1,5 +1,25 @@
 # Upgrade and roll back the React UI release
 
+> **Legacy line.** This upgrade guide describes the legacy Status line (`app.json`, `0.1.0-beta.x`
+> on `main`): a separately deployed service paired to Portal, with its own offline
+> backup and restore. The platform v2 line (`app.v2.json`, `0.2.0-beta.1`, draft, this
+> branch) differs, and nothing in v2 is released yet:
+>
+> - No pairing, no `-listen`, `-pairing-file` or `-storage-key-file` flags, no Compose
+>   or gateway deployment. The app is a backend image in a signed Portal package. It
+>   serves a Unix socket and its data is `/data/status.db` with `/data/status.key`.
+> - No `status backup` or `status restore`. The platform backs up and restores `/data`
+>   (keep `status.db` and `status.key` together, because the service refuses to start
+>   if the database has no key). After a restore under a different installation, probes
+>   and notification delivery stay paused until an administrator reviews and resumes.
+> - No anonymous public page and no inbound heartbeats. Probes, Dify, DeepSeek, Qwen
+>   and PostgreSQL checks and notification publishing cannot run until Portal grants
+>   the background identity a network path, so monitors report an unknown state, not a
+>   failure. Other Portal users or OUs cannot be picked for a grant until Portal offers
+>   a principal directory.
+> - Installing it is a fresh install with configuration-only import, not an upgrade of
+>   a legacy installation. See [the platform v2 port notes](../README.md).
+
 ## Boundaries
 
 Beta.3 changes frontend code and shared development tooling. It does not alter the
