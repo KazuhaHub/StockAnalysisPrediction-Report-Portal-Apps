@@ -168,6 +168,7 @@ jobs:
       - run: docker build -f apps/scheduled-digest/service/Dockerfile -t scheduled-digest-development .
   market-monitor:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     defaults:
       run:
         working-directory: apps/market-monitor/service
@@ -180,6 +181,20 @@ jobs:
       - run: go vet ./...
       - run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
       - run: go test -race ./...
+      - name: Backend image
+        run: docker build --platform linux/amd64 -f apps/market-monitor/service/Dockerfile -t market-monitor-development .
+        working-directory: .
+      - name: Image imports and package size
+        working-directory: .
+        run: |
+          # Under the runner's restrictions: imports must not write outside /data.
+          docker run --rm --user 65532:65532 --read-only --network none --cap-drop ALL \
+            --tmpfs /tmp:rw,nosuid,nodev,noexec,size=16777216 \
+            --entrypoint /app/venv/bin/python market-monitor-development \
+            -c "import akshare, pandas, pyarrow, scipy, fastmcp, curl_cffi, py_mini_racer; print('akshare', akshare.__version__)"
+          size=$(docker save market-monitor-development | gzip -1 | wc -c)
+          echo "compressed image: $((size / 1048576)) MiB (package limit 384 MiB)"
+          test "$size" -lt $((350 * 1048576))
   market-monitor-pipeline:
     runs-on: ubuntu-latest
     defaults:

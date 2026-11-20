@@ -116,12 +116,47 @@ Known limit: when every ETF feed fails, `refresh.sh` recomputes from its
 stored data and exits 0, so the ETF snapshot can carry an older `as_of`;
 its `summary.data_health` shows each source's last date.
 
+## Backend image
+
+```sh
+docker build --platform linux/amd64 -f apps/market-monitor/service/Dockerfile -t market-monitor .
+```
+
+One image holds the Go service (`/app/market-monitor`, the entrypoint), the
+pipeline (`/app/pipeline`) and its virtual environment (`/app/venv`, installed
+from `pipeline/requirements.lock`). `/opt/daily-tasks` links to `/data/work`.
+It runs as the platform runs it: user 65532, read-only root, no network,
+16 MiB `/tmp`, data at `/data`, `TZ=Asia/Shanghai` (the scripts use local
+dates for trading days). About 240 MiB compressed with `gzip -1` (the package
+limit is 384 MiB). linux/amd64 only: py-mini-racer has no arm64 wheel.
+
+The job entry sets `MM_NO_HTML=1`, and the margin, ETF and Panorama scripts
+then skip their own HTML pages (the app has its own frontend, and the pages
+need vendored echarts/mermaid that are not in this repository). Without the
+variable the scripts behave exactly as before.
+
+`requirements.lock` pins every package. akshare is pinned to 1.18.94, the
+version that runs on the production host: from 1.20.45 on, akshare renamed
+functions this code calls (`tool_trade_date_hist_sina` among them), and the
+margin job failed on them. To change a version, re-resolve in a clean
+`python:3.11-slim` container and re-freeze, then rerun the jobs.
+
+Checked end to end in that container with a Portal-side test client
+(handshake, task trigger, signed viewer reads): `sentiment` and `panorama`
+(with `PANORAMA_ASOF`) install their snapshots, viewer reads return them,
+unsigned reads get 403, and `margin` fails only where it first needs the
+network.
+
 ## Next steps
+
+0. Seed a new installation: a fresh `/data` has no bar store (2014 onwards,
+   about 510 MB) or Panorama base data, so every job fails until a one-time
+   import loads them.
 
 1. Fix the known method defects (unadjusted returns in Panorama, fail-open
    freshness gate, silently stale structure data in the margin scan, ETF
    forward-fill treated as zero flow, hard-coded reporting periods).
-2. Build the backend image (Go service, Python venv, pipeline) with
-   `/opt/daily-tasks` linked to `/data/work`.
+2. Wire egress through the platform's reviewed forward proxy (Portal doc
+   184) and switch the few `http://` sources to `https://`.
 3. Build the dashboards on the shared React SDK (systemic-risk overview and
    margin scan first).

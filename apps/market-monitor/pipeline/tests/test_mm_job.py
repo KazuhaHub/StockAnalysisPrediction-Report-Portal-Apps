@@ -129,6 +129,15 @@ class PrepareWork(unittest.TestCase):
         self.assertTrue(os.path.exists(os.path.join(e.work, "venv", "bin", "python3")))
 
 
+class JobEnv(unittest.TestCase):
+    def test_skips_html_and_uses_the_exchange_time_zone(self):
+        saved = os.environ.pop("TZ", None)
+        self.addCleanup(lambda: saved is not None and os.environ.__setitem__("TZ", saved))
+        env = mm_job.job_env("/w")
+        self.assertEqual(env["MM_NO_HTML"], "1")
+        self.assertEqual(env["TZ"], "Asia/Shanghai")
+
+
 class Dispatch(unittest.TestCase):
     def test_unknown_job_exits_2(self):
         self.assertEqual(mm_job.main(["mm_job.py", "nope"]), 2)
