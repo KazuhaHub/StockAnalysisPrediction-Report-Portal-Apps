@@ -29,6 +29,8 @@ import {
   decodeNetworkBody,
   type NetworkRequest as WireNetworkRequest,
   type NetworkResponse as WireNetworkResponse,
+  type NetworkTargetRequest,
+  type NetworkTargetsResult,
   BridgeReportError,
   type BridgeReportQuery,
   type BridgeReportRequest,
@@ -74,6 +76,24 @@ const BackendContext = createContext<AppBackend | null>(null);
 export function useAppBackend(): AppBackend {
   const value = useContext(BackendContext);
   if (!value) throw new Error("AppRoot backend unavailable");
+  return value;
+}
+export type AppNetworkTargetRequest = NetworkTargetRequest;
+export type AppNetworkTargetsResult = NetworkTargetsResult;
+// Asks the signed-in administrator, through a Portal-owned dialog, to allow more
+// destinations. The answer says only what happened; it grants nothing by itself.
+export interface AppNetworkTargets {
+  readonly available: boolean;
+  readonly ready: boolean;
+  request(
+    targets: readonly AppNetworkTargetRequest[],
+    signal?: AbortSignal,
+  ): Promise<AppNetworkTargetsResult>;
+}
+const NetworkTargetsContext = createContext<AppNetworkTargets | null>(null);
+export function useAppNetworkTargets(): AppNetworkTargets {
+  const value = useContext(NetworkTargetsContext);
+  if (!value) throw new Error("AppRoot network targets unavailable");
   return value;
 }
 export interface AppNetworkRequest {
@@ -366,6 +386,10 @@ interface Pending extends AppPresentation {
     value: WireNetworkRequest,
     options?: BridgeNetworkStreamOptions,
   ): Promise<BridgeNetworkStreamResult>;
+  requestNetworkTargets(
+    value: readonly NetworkTargetRequest[],
+    signal?: AbortSignal,
+  ): Promise<NetworkTargetsResult>;
   requestReports(
     value: BridgeReportRequest,
     signal?: AbortSignal,
@@ -464,6 +488,7 @@ export function AppRoot({
             signal?: AbortSignal,
           ) => Promise<WireNetworkResponse>;
           requestNetworkStream: Pending["requestNetworkStream"];
+          requestNetworkTargets: Pending["requestNetworkTargets"];
           requestReports: (
             value: BridgeReportRequest,
             signal?: AbortSignal,
@@ -579,6 +604,16 @@ export function AppRoot({
                     : signal,
                 );
               },
+              requestNetworkTargets: (value, requestSignal) => {
+                if (!active || stopped || !connection || signal.aborted)
+                  return Promise.reject(new AppNetworkError("not_ready"));
+                return connection.requestNetworkTargets(
+                  value,
+                  requestSignal
+                    ? AbortSignal.any([signal, requestSignal])
+                    : signal,
+                );
+              },
               requestNetworkStream: (value, options = {}) => {
                 if (!active || stopped || !connection || signal.aborted)
                   return Promise.reject(new AppNetworkError("not_ready"));
@@ -659,6 +694,7 @@ export function AppRoot({
             requestBackend: backendForSignal.request,
             requestNetwork: backendForSignal.requestNetwork,
             requestNetworkStream: backendForSignal.requestNetworkStream,
+            requestNetworkTargets: backendForSignal.requestNetworkTargets,
             requestReports: backendForSignal.requestReports,
             requestObjects: backendForSignal.requestObjects,
             requestNotifications: backendForSignal.requestNotifications,
@@ -1002,6 +1038,23 @@ function PresentationFrame({
       pending.signal,
     ],
   );
+  const networkTargets = useMemo<AppNetworkTargets>(
+    () =>
+      Object.freeze({
+        available: networkAvailable,
+        ready: backendReady && networkAvailable,
+        request: async (
+          targets: readonly AppNetworkTargetRequest[],
+          signal?: AbortSignal,
+        ) => {
+          if (!networkAvailable) throw new AppNetworkError("unsupported");
+          if (!backendReady || pending.signal.aborted)
+            throw new AppNetworkError("not_ready");
+          return pending.requestNetworkTargets(targets, signal);
+        },
+      }),
+    [networkAvailable, backendReady, pending.requestNetworkTargets, pending.signal],
+  );
   const reportsAvailable =
     pending.context.capabilities.includes("reports.read");
   const reports = useMemo<AppReports>(
@@ -1323,6 +1376,7 @@ function PresentationFrame({
         <PresentationContext.Provider value={value}>
           <BackendContext.Provider value={backend}>
             <NetworkContext.Provider value={network}>
+              <NetworkTargetsContext.Provider value={networkTargets}>
               <ReportsContext.Provider value={reports}>
                 <ObjectsContext.Provider value={objects}>
                   <NotificationsContext.Provider value={notifications}>
@@ -1341,6 +1395,7 @@ function PresentationFrame({
                   </NotificationsContext.Provider>
                 </ObjectsContext.Provider>
               </ReportsContext.Provider>
+              </NetworkTargetsContext.Provider>
             </NetworkContext.Provider>
           </BackendContext.Provider>
         </PresentationContext.Provider>

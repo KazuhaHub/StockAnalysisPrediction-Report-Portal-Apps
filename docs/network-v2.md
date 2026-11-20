@@ -110,6 +110,52 @@ revoking the grant or credential stops future frames. Missing, repeated,
 oversized or digest-drifted frames are `uncertain`; never resume or retry that
 same stream implicitly.
 
+## Ask for network destinations
+
+An app that needs a destination the installation does not yet allow can ask the
+signed-in administrator to add it. `useAppNetworkTargets()` returns
+`{available, ready, request(targets, signal?)}`:
+
+```tsx
+const targets = useAppNetworkTargets();
+const result = await targets.request([
+  {
+    id: 'status',
+    origin: 'https://status.example.com',
+    paths: ['/api'],
+    methods: ['GET'],
+    network: 'public',
+  },
+]);
+// result.state is 'applied', 'declined' or 'not_permitted'.
+```
+
+A target is `{id, origin, paths, methods, network, requestBytes?, responseBytes?,
+deadlineMs?}`, at most 16 per request. `network` is `public` or `private`; an
+`http:` origin is only valid for a private target the runner allowlist admits.
+The server decides every value. The request cannot carry shared bounds.
+
+* `applied`: the administrator confirmed and the review was consumed. The policy
+  revision changed, so Portal relaunches the frame right after this answer; do not
+  expect to keep running. `policyRevision` is the new revision.
+* `declined`: the administrator cancelled, the review was refused, or the request
+  came while another dialog was open or within the back-off after a refusal. The
+  back-off is kept per installation, not per page load, so reloading does not
+  reset it; it starts at 10 seconds and doubles with repeated refusals, up to five
+  minutes. Do not ask again in a loop.
+* `not_permitted`: the viewer is not an administrator, or the host cannot review.
+  Nothing was fetched. Show a message that an administrator must allow the
+  destination.
+
+The confirmation dialog is Portal's and shows the server's own diff of the plan.
+It says the request comes from your app, by the app's name from its launch
+metadata, and labels each target id as app-chosen, because the ids are the one
+thing you choose. You cannot add text, a description or a reason to it. Private networks and plain HTTP are marked
+prominently, and credential bindings that the change would pause are listed.
+`request` rejects with `invalid_request` for a malformed list, `unsupported`
+without a `network.http` grant, `busy` while one request is open and `not_ready`
+after the document is retired.
+
 ## Failure semantics
 
 Errors are `AppNetworkError` values with `not_ready`, `unsupported`,
