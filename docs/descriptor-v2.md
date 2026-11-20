@@ -31,6 +31,20 @@ Never use the return value as proof that code can run, that a capability was
 granted or that a descriptor has a valid signature. The host binds signatures and
 review identity to the original bytes, not a reserialized JavaScript object.
 
+## Data quota
+
+A backend app may request its data quota with `data.quota`:
+
+```json
+"data": { "schema": 1, "readable_schemas": [1], "writes_on_startup": false, "quota": { "bytes": 3221225472, "inodes": 100000 } }
+```
+
+- `bytes` is between 256 MiB and 16 GiB, in multiples of 64 MiB.
+- `inodes` is between 65,536 and 1,000,000.
+- Without the block, the app gets 256 MiB and 65,536 inodes.
+
+A frontend-only app may not declare a quota. The administrator approves the quota at install and may approve a smaller one. An update that asks for more shows the increase in its review. The quota applies to the whole `/data` namespace, and checkpoints are sized from it (Portal doc 185).
+
 ## Forward proxy declaration
 
 A backend that needs ordinary HTTPS egress (a third-party library that speaks to
