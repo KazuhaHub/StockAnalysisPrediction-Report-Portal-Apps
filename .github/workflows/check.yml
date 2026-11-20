@@ -166,6 +166,20 @@ jobs:
       - run: python3 scripts/plugin-standard.py
       - run: python3 scripts/build-app-v2.py scheduled-digest --output "$RUNNER_TEMP/scheduled-digest-candidate"
       - run: docker build -f apps/scheduled-digest/service/Dockerfile -t scheduled-digest-development .
+  market-monitor:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/market-monitor/service
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: apps/market-monitor/service/go.mod
+          cache: false
+      - run: go vet ./...
+      - run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
+      - run: go test -race ./...
   status:
     runs-on: ubuntu-latest
     steps:
