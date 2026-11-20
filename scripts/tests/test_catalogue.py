@@ -1,7 +1,10 @@
 import importlib.util
 import json
 import tempfile
+import os
 import unittest
+import urllib.request
+from unittest import mock
 import zipfile
 import io
 import hashlib
@@ -271,3 +274,29 @@ class CatalogueTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             c.export_legacy(self.portal, self.root, fetch=lambda url, limit: self.archive)
         self.assertEqual(self.legacy_path.read_bytes(), before)
+
+
+class DownloadAuthTests(unittest.TestCase):
+    """GitHub's REST API rate-limits anonymous calls by address, which CI
+    runners share; a token is sent to api.github.com only."""
+
+    def request_for(self, url, token):
+        with mock.patch.dict(os.environ, {"GITHUB_TOKEN": token} if token else {}, clear=True):
+            return c.artifact_request(url)
+
+    def test_token_goes_to_the_api_host_only(self):
+        api = self.request_for("https://api.github.com/repos/o/r/releases/tags/v1", "t0k")
+        self.assertEqual(api.get_header("Authorization"), "Bearer t0k")
+        for url in ("https://github.com/o/r/releases/download/v1/a.zip",
+                    "https://raw.githubusercontent.com/o/r/main/x"):
+            self.assertIsNone(self.request_for(url, "t0k").get_header("Authorization"))
+
+    def test_no_token_no_header(self):
+        self.assertIsNone(self.request_for("https://api.github.com/x", None).get_header("Authorization"))
+
+    def test_redirect_drops_the_token(self):
+        req = urllib.request.Request("https://api.github.com/x", headers={"Authorization": "Bearer t0k"})
+        new = c.ArtifactRedirect().redirect_request(
+            req, None, 302, "Found", {}, "https://objects.githubusercontent.com/blob")
+        self.assertIsNone(new.get_header("Authorization"))
+

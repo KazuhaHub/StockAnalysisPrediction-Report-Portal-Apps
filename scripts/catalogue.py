@@ -11,7 +11,7 @@ import tempfile
 import zipfile
 from pathlib import Path
 from urllib.parse import urlsplit, unquote, quote
-from urllib.request import HTTPRedirectHandler, build_opener
+from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 ROOT = Path(__file__).resolve().parents[1]
 SLUG = re.compile(r"[a-z0-9][a-z0-9_-]{0,63}")
@@ -28,11 +28,26 @@ class ArtifactRedirect(HTTPRedirectHandler):
             "objects.githubusercontent.com", "release-assets.githubusercontent.com",
         }:
             raise ValueError("refused artifact redirect")
-        return super().redirect_request(request, fp, code, msg, headers, newurl)
+        new = super().redirect_request(request, fp, code, msg, headers, newurl)
+        # The API token is for api.github.com only, never a download host.
+        if new is not None and u.hostname != "api.github.com":
+            new.remove_header("Authorization")
+        return new
+
+
+def artifact_request(url):
+    """GitHub's REST API rate-limits anonymous calls per address, and CI
+    runners share addresses, so a GITHUB_TOKEN from the environment is sent
+    to api.github.com (and only there)."""
+    request = Request(url)
+    token = os.environ.get("GITHUB_TOKEN")
+    if token and urlsplit(url).hostname == "api.github.com":
+        request.add_header("Authorization", "Bearer " + token)
+    return request
 
 
 def download(url, limit):
-    with build_opener(ArtifactRedirect()).open(url, timeout=30) as response:
+    with build_opener(ArtifactRedirect()).open(artifact_request(url), timeout=30) as response:
         raw = response.read(limit + 1)
     if len(raw) > limit:
         raise ValueError("remote artifact exceeded its bound")
