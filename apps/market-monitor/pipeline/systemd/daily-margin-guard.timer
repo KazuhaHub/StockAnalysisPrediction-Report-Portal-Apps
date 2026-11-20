@@ -1,0 +1,11 @@
+[Unit]
+Description=融资盘兜底校验（周一至周五 09:50）
+
+[Timer]
+OnCalendar=Mon..Fri 09:50
+Persistent=false
+AccuracySec=1min
+Unit=daily-margin-guard.service
+
+[Install]
+WantedBy=timers.target

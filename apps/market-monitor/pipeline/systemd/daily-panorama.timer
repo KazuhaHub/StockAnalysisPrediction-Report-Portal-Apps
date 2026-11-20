@@ -1,0 +1,11 @@
+[Unit]
+Description=Panorama 选股日更（周二至周六 00:50）
+
+[Timer]
+OnCalendar=Tue..Sat 00:50
+Persistent=true
+AccuracySec=1min
+Unit=daily-panorama.service
+
+[Install]
+WantedBy=timers.target
