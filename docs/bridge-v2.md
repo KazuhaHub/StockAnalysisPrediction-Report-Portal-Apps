@@ -2,7 +2,8 @@
 
 `@portal-app/sdk/bridge-v2` is SDK/root integration infrastructure, not a released
 capability client or replacement for the legacy provider.
-The development protocol is `portal.app.bridge/2-dev.8`. It is not frozen.
+The development protocol is `portal.app.bridge/2-dev.9`; the Portal host also still
+accepts apps built for `2-dev.8`. It is not frozen.
 
 Use the [Portal transport contract and lifecycle guide](https://github.com/KazuhaHub/StockAnalysisPrediction-Report-Portal/blob/kazuha/app-bridge-presentation/docs/app-platform/22-presentation-bridge-implementation.md)
 for source ownership, state transitions, message bounds and integration rules.
@@ -86,6 +87,11 @@ binding, channel nonce, grants and current server-side policy/binding revisions
 are all rechecked by the host and Portal. Remote 401/403 statuses remain
 application responses; only a Portal session failure invokes the host's
 session-loss handler.
+
+Protocol `2-dev.9` adds `network.targets.request` and `network.targets.result`
+(see [Ask for network destinations](network-v2.md#ask-for-network-destinations)).
+The result carries the new revision as `appliedPolicyRevision`, because
+`policyRevision` is already the binding field of every message envelope.
 
 An `uncertain` network result may follow a completed remote write. Neither side
 retries automatically. Closing, capability changes or a replacement document
