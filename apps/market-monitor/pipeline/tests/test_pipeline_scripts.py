@@ -130,16 +130,11 @@ class SkipHtml(unittest.TestCase):
         self.assertNotIn("build_report.py", calls)
 
 
-if __name__ == "__main__":
-    unittest.main()
-
 
 class ExternalSourcesUseHttps(unittest.TestCase):
     """Backend egress goes through an HTTPS CONNECT proxy (HTTPS_PROXY only), so a
-    plain-http source would not reach it. The one exception is the data server's
-    upstream, an address the proxy cannot carry (an IP literal, port 8000)."""
-
-    UPSTREAM = "47.237.204.217"
+    plain-http source would not reach it. The quotes API is addressed by its HTTPS
+    name (QUOTE_API), never by the old plain-http IP."""
 
     def test_no_plain_http_source_to_a_public_host(self):
         import re
@@ -154,7 +149,22 @@ class ExternalSourcesUseHttps(unittest.TestCase):
                     for n, line in enumerate(f, 1):
                         for m in re.finditer(r"http://([A-Za-z0-9._-]+)", line):
                             host = m.group(1)
-                            if host in ("localhost", "127.0.0.1", self.UPSTREAM) or host.startswith("<"):
+                            if host in ("localhost", "127.0.0.1") or host.startswith("<"):
                                 continue
                             bad.append("%s:%d %s" % (os.path.relpath(path, PIPELINE), n, host))
         self.assertEqual(bad, [])
+
+    def test_quote_api_is_configurable_and_https(self):
+        import re
+        users = ["MarketData/trading_day.py", "MarketData/bulk_pull.py",
+                 "MarketData/fetch_catalog.py", "stock_server/stock_mcp_integrated.py",
+                 "stock_server/stock_mcp_server.py"]
+        for rel in users:
+            with open(os.path.join(PIPELINE, rel), encoding="utf-8") as f:
+                src = f.read()
+            self.assertIn('os.environ.get("QUOTE_API", "https://', src, rel)
+            self.assertIsNone(re.search(r"\b\d{1,3}(\.\d{1,3}){3}:8000", src), rel)
+
+
+if __name__ == "__main__":
+    unittest.main()

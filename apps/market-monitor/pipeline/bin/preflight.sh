@@ -74,7 +74,7 @@ fi
 # 交易日历要能取到，否则 update.sh 会退回「今天」当终点，周末空跑
 td="$("$PY" "$MD_HOME/trading_day.py" 2>/dev/null | tail -1)"
 if [ -n "$td" ]; then ok "交易日历可用，最近交易日 $td"
-else bad "取不到交易日历：上游 47.237.204.217 不可达，或 8091 未起"; fi
+else bad "取不到交易日历：上游行情 API（QUOTE_API）不可达，或 8091 未起"; fi
 
 sec "5. 各任务的输入文件"
 chk() { [ -e "$2" ] && ok "$1" || bad "$1 缺失：$2"; }

@@ -47,7 +47,7 @@ logger = logging.getLogger("StockMCP")
 # ==================== 常量定义 ====================
 
 # 后端API基础地址
-API_BASE = "http://47.237.204.217:8000/api/v1"
+API_BASE = os.environ.get("QUOTE_API", "https://quotes.internal.anchan.kazuhahub.com") + "/api/v1"
 
 # 交易所代码映射：股票代码前缀 -> (标准exchange, 后端instrument_id后缀)
 EXCHANGE_MAP = {

@@ -36,7 +36,7 @@ sys.path.insert(0, HERE)
 import market_data as md  # noqa: E402
 import pandas as pd  # noqa: E402
 
-API = os.environ.get("QUOTE_API", "http://47.237.204.217:8000")
+API = os.environ.get("QUOTE_API", "https://quotes.internal.anchan.kazuhahub.com")
 CAT = os.path.join(HERE, "catalog.json")
 GAP = os.path.join(HERE, "pool_gap_panorama.json")
 PATCH = os.path.join(HERE, "meta_patch.json")

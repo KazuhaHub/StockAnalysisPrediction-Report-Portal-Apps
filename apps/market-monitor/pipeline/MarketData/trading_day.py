@@ -12,12 +12,13 @@
   取不到就返回非零退出码，调用方退回「今天」，行为与改造前一致，不会更糟。
 """
 import json
+import os
 import sys
 import urllib.parse
 import urllib.request
 from datetime import date, timedelta
 
-BASE = "http://47.237.204.217:8000/api/v1/calendar/trading"
+BASE = os.environ.get("QUOTE_API", "https://quotes.internal.anchan.kazuhahub.com") + "/api/v1/calendar/trading"
 
 
 def last_trading_day(upto=None, lookback=20):

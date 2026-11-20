@@ -20,7 +20,7 @@ rc=$?
 
 echo "==== $(date '+%F %T') 结束 rc=$rc  日志：$LOG"
 if [ "$rc" -ne 0 ]; then
-  echo "!! 非零退出。常见原因：stock-server(:8091) 不可用、上游 47.237.204.217 故障、库体检未过。"
+  echo "!! 非零退出。常见原因：stock-server(:8091) 不可用、上游行情 API（QUOTE_API，默认 https://quotes.internal.anchan.kazuhahub.com）故障、库体检未过。"
   echo "!! 排查：curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8091/mcp"
 fi
 exit "$rc"

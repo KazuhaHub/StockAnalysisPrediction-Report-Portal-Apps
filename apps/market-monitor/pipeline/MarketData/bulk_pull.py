@@ -54,7 +54,7 @@ import pandas as pd  # noqa: E402
 GAP = os.path.join(HERE, "pool_gap_panorama.json")
 CACHE = os.path.join(HERE, "pull_cache")
 DONE = os.path.join(CACHE, "done.txt")
-BASE = os.environ.get("QUOTE_API", "http://47.237.204.217:8000") + "/api/v1/quotes/daily"
+BASE = os.environ.get("QUOTE_API", "https://quotes.internal.anchan.kazuhahub.com") + "/api/v1/quotes/daily"
 START = "2014-06-01"
 _lock = threading.Lock()
 

@@ -1,14 +1,19 @@
 from fastmcp import FastMCP
+import os
+
 import requests
 from datetime import datetime
 from typing import Optional, Dict, Any
 
 
+QUOTE_API = os.environ.get("QUOTE_API", "https://quotes.internal.anchan.kazuhahub.com")
+
+
 class StockQuoteAPI:
-    BASE_URL = "http://47.237.204.217:8000/api/v1/quotes/daily"
-    LATEST_BASE_URL = "http://47.237.204.217:8000/api/v1/quotes/latest"
-    CALENDAR_BASE_URL = "http://47.237.204.217:8000/api/v1/calendar/trading"
-    INSTRUMENT_BASE_URL = "http://47.237.204.217:8000/api/v1/instruments/symbol"
+    BASE_URL = QUOTE_API + "/api/v1/quotes/daily"
+    LATEST_BASE_URL = QUOTE_API + "/api/v1/quotes/latest"
+    CALENDAR_BASE_URL = QUOTE_API + "/api/v1/calendar/trading"
+    INSTRUMENT_BASE_URL = QUOTE_API + "/api/v1/instruments/symbol"
 
     def __init__(self):
         self.session = requests.Session()
