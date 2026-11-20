@@ -235,6 +235,9 @@ jobs:
             --tmpfs /tmp:rw,nosuid,nodev,noexec,size=16777216 \
             --entrypoint /app/venv/bin/python market-monitor-development \
             -c "import akshare, pandas, pyarrow, scipy, fastmcp, curl_cffi, py_mini_racer; print('akshare', akshare.__version__)"
+          # The hand-curated reference tables must survive .dockerignore.
+          docker run --rm --network none --entrypoint /bin/sh market-monitor-development -c \
+            'for f in workspace/analysis/panel/feed/universe.csv workspace/panorama/data/code_name.csv workspace/panorama/data/div_seed.csv; do test -s "/app/pipeline/$f" || { echo "missing $f"; exit 1; }; done'
           size=$(docker save market-monitor-development | gzip -1 | wc -c)
           echo "compressed image: $((size / 1048576)) MiB (package limit 384 MiB)"
           test "$size" -lt $((350 * 1048576))

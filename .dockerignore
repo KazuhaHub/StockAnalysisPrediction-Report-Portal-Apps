@@ -19,3 +19,7 @@ apps/market-monitor/pipeline/**/*.db
 apps/market-monitor/pipeline/**/.env
 apps/market-monitor/pipeline/**/*.key
 apps/market-monitor/pipeline/**/*.pem
+# Hand-curated reference tables the jobs read and no script produces.
+!apps/market-monitor/pipeline/workspace/analysis/panel/feed/universe.csv
+!apps/market-monitor/pipeline/workspace/panorama/data/code_name.csv
+!apps/market-monitor/pipeline/workspace/panorama/data/div_seed.csv
