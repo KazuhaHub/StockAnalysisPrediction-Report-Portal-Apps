@@ -191,5 +191,6 @@ network.
    forward-fill treated as zero flow, hard-coded reporting periods).
 2. Wire egress through the platform's reviewed forward proxy (Portal doc
    184) and switch the few `http://` sources to `https://`.
-3. Panorama summary: add the industry list, market medians and valuation
-   shifts the original page showed, so the dashboard can restore them.
+3. Panorama: the industry breakdown, market medians and valuation shifts
+   come from the export step's page data (`site/data.js`), used only when
+   that run wrote it for the same date; see `convert_panorama`.

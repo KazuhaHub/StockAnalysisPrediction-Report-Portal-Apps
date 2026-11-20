@@ -1,9 +1,10 @@
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { expect, test, vi } from "vitest";
 import { mount, noData, type Handler } from "./harness";
-import { backend } from "./fixtures";
+import { backend, summaries } from "./fixtures";
 import realRows from "./real-rows.json";
 import { stripTags, heatRange } from "../src/pages/Sentiment";
+import { escapeHtml } from "../src/lib/html";
 import { formatYi, utf8Length } from "../src/lib/format";
 import { valueLabel } from "../src/lib/labels";
 import { locales } from "../src/lib/copy";
@@ -177,6 +178,129 @@ test("panorama dashboard renders the summary, pages rows and opens the valuation
   await waitFor(() =>
     expect(within(drawer).getAllByTestId("chart").length).toBe(2),
   );
+});
+
+const panoExtras = {
+  industries: [
+    {
+      name: "Small<b>",
+      n: 10,
+      s_value: 48.14,
+      s_growth: 51,
+      s_cyclical: null,
+      s_dividend: null,
+      s_momentum: null,
+      s_quality: null,
+    },
+    {
+      name: "Big",
+      n: 600,
+      s_value: 60,
+      s_growth: 40,
+      s_cyclical: 50,
+      s_dividend: 50,
+      s_momentum: 50,
+      s_quality: 50,
+    },
+    {
+      name: "Empty",
+      n: 900,
+      s_value: null,
+      s_growth: null,
+      s_cyclical: null,
+      s_dividend: null,
+      s_momentum: null,
+      s_quality: null,
+    },
+  ],
+  market: { median_pe: 19.84, median_pb: 2.183, above_ma120_pct: 9.46 },
+  diff: {
+    first: false,
+    prev: "2026-11-13",
+    cur: "2026-11-16",
+    shift: [
+      {
+        s: "603887",
+        n: "ShiftCo",
+        a: -0.0752,
+        b: 0.2131,
+        la: "合理",
+        lb: "低估",
+      },
+    ],
+  },
+};
+test("panorama shows the heatmap, KPI readings and the shift table when the snapshot carries them", async () => {
+  const base = summaries.panorama as object;
+  const app = await mount(
+    backend({ summary: { panorama: { ...base, ...panoExtras } } }),
+    { path: "/panorama" },
+  );
+  expect(await screen.findByText("19.8×")).toBeTruthy();
+  expect(screen.getByText("2.18×")).toBeTruthy();
+  expect(screen.getByText("9.5%")).toBeTruthy();
+  const heat = screen.getByLabelText(enUS.pano_heat);
+  // Two industries have scores; the all-null one is skipped.
+  expect(heat.getAttribute("data-points")).toBe("8");
+  expect(screen.getByText("ShiftCo 603887")).toBeTruthy();
+  expect(screen.getByText("-7.5%")).toBeTruthy();
+  expect(screen.getByText("+21.3%")).toBeTruthy();
+  expect(screen.getByText("2026-11-13 → 2026-11-16")).toBeTruthy();
+  fireEvent.click(screen.getByText("ShiftCo 603887"));
+  await waitFor(() =>
+    expect(
+      app.calls.some((c) => c.startsWith("/v1/panorama/rows/603887")),
+    ).toBe(true),
+  );
+});
+
+test("panorama industry filter is a select of the snapshot's names and sends f.sw1", async () => {
+  const base = summaries.panorama as object;
+  const app = await mount(
+    backend({ summary: { panorama: { ...base, ...panoExtras } } }),
+    { path: "/panorama" },
+  );
+  await screen.findByText("Pano0");
+  const select = Array.from(document.querySelectorAll(".ant-select")).find(
+    (el) => el.textContent === enUS.pano_industry,
+  )!;
+  fireEvent.mouseDown(within(select as HTMLElement).getByRole("combobox"));
+  fireEvent.click(
+    await waitFor(
+      () =>
+        document.querySelector(
+          '.ant-select-item-option[title="Big"]',
+        ) as HTMLElement,
+    ),
+  );
+  await waitFor(() => expect(param(lastRows(app.calls), "f.sw1")).toBe("Big"));
+});
+
+test("panorama without the newer snapshot fields renders and hides those parts", async () => {
+  await mount(backend(), { path: "/panorama" });
+  expect(await screen.findByText("5,588")).toBeTruthy();
+  expect(screen.queryByLabelText(enUS.pano_heat)).toBeNull();
+  expect(screen.queryByText(enUS.pano_shift)).toBeNull();
+  expect(screen.getByText(enUS.pano_pool)).toBeTruthy();
+  expect(screen.getByPlaceholderText(enUS.pano_industryExact)).toBeTruthy();
+});
+
+test("panorama hides the shift table on a first run", async () => {
+  const base = summaries.panorama as object;
+  await mount(
+    backend({
+      summary: {
+        panorama: {
+          ...base,
+          ...panoExtras,
+          diff: { ...panoExtras.diff, first: true },
+        },
+      },
+    }),
+    { path: "/panorama" },
+  );
+  await screen.findByText("19.8×");
+  expect(screen.queryByText(enUS.pano_shift)).toBeNull();
 });
 
 test("a failing backend shows an error, and the zh-CN locale applies", async () => {
@@ -493,4 +617,10 @@ test("amount units and categorical labels come from the locale copy", () => {
   expect(valueLabel(locales["en-US"], "新值")).toBe("新值");
   expect(valueLabel(locales["en-US"], "constructor")).toBe("constructor");
   expect(enUS.sent_disp).not.toMatch(/\{rank\}th/);
+});
+
+test("heatmap tooltip text is escaped", () => {
+  expect(escapeHtml("Small<b>")).toBe("Small&#60;b&#62;");
+  expect(escapeHtml(`a&"'`)).toBe("a&#38;&#34;&#39;");
+  expect(escapeHtml(undefined)).toBe("");
 });

@@ -16,7 +16,7 @@ export const marginRows = Array.from({ length: 45 }, (_, i) => ({
 
 const histDates = Array.from({ length: 60 }, (_, i) => `d${i}`);
 
-const summaries: Record<string, unknown> = {
+export const summaries: Record<string, unknown> = {
   risk: {
     margin: {
       as_of: "2026-11-16",
@@ -218,6 +218,8 @@ export type Options = {
   /** Replaces a module's scripted rows. */
   rows?: Record<string, Record<string, unknown>[]>;
   failRuns?: boolean;
+  /** Replaces a module's scripted summary. */
+  summary?: Record<string, unknown>;
 };
 
 /** A scripted backend: pages the in-memory rows only by page and size. */
@@ -247,7 +249,7 @@ export function backend(options: Options = {}): Handler {
       return ok({
         module,
         as_of: params.get("date") ?? dates[0],
-        summary: summaries[module],
+        summary: options.summary?.[module] ?? summaries[module],
       });
     const rows = options.rows?.[module] ?? rowsOf[module] ?? [];
     if (parts[1] === "rows" && parts[2]) {

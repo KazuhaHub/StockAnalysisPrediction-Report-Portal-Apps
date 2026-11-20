@@ -208,6 +208,76 @@ class Convert(unittest.TestCase):
         self.assertNotIn("pct", p["summary"])
         self.assertNotIn("risk", out)  # Panorama is not a risk input
 
+    def panorama_site(self, e, asof="2026-11-16", mtime=None, text=None):
+        site = {"meta": {"asof": asof, "corr": [[1.0]], "inter": [[3]], "n_industries": 1},
+                "industries": [{"name": "银行", "n": 42, "s_value": 65.0}],
+                "market": {"median_pe": 19.8, "median_pb": 2.18, "above_ma120_pct": 9.5},
+                "diff": {"first": False, "prev": "2026-11-13", "cur": asof,
+                         "shift": [{"s": "300215", "n": "电科院", "a": 0.213, "b": -0.553}]},
+                "rows": [[1, 2]], "cols": ["x"]}
+        path = os.path.join(e.work, "workspace", "panorama", "site", "data.js")
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(text if text is not None else "window.PANORAMA=" + json.dumps(site, ensure_ascii=False) + ";")
+        if mtime is not None:
+            os.utime(path, (mtime, mtime))
+
+    def publish_panorama(self, **site):
+        e = Env(self)
+        write(os.path.join(e.work, "workspace", "panorama", "data", "site_payload.json"), panorama_payload())
+        if site.pop("present", True):
+            self.panorama_site(e, **site)
+        started = time.time() - 60
+        self.assertEqual(mm_job.publish("panorama", e.work, e.out, started=started), 0)
+        return e.outputs()["panorama"]["summary"]
+
+    def test_panorama_adds_the_site_extras(self):
+        s = self.publish_panorama()
+        self.assertEqual(s["industries"][0]["name"], "银行")
+        self.assertEqual(s["market"]["median_pe"], 19.8)
+        self.assertEqual(s["diff"]["shift"][0]["s"], "300215")
+        self.assertEqual(s["meta"]["corr"], [[1.0]])
+        self.assertEqual(s["meta"]["report_period"], "2026Q3")  # site_payload meta kept
+        self.assertNotIn("rows", s)  # only the named extras are taken
+        self.assertEqual(sorted(s["market"]), ["above_ma120_pct", "median_pb", "median_pe"])
+
+    def test_panorama_keeps_diff_only_for_the_same_date(self):
+        # diff.py compares the latest two snapshot dates; a backfill of an
+        # older date must not carry a later comparison.
+        e = Env(self)
+        write(os.path.join(e.work, "workspace", "panorama", "data", "site_payload.json"), panorama_payload())
+        self.panorama_site(e)
+        path = os.path.join(e.work, "workspace", "panorama", "site", "data.js")
+        text = open(path, encoding="utf-8").read().replace('"cur": "2026-11-16"', '"cur": "2026-11-17"')
+        open(path, "w", encoding="utf-8").write(text)
+        mm_job.publish("panorama", e.work, e.out, started=time.time() - 60)
+        s = e.outputs()["panorama"]["summary"]
+        self.assertNotIn("diff", s)
+        self.assertIn("industries", s)
+
+    def test_panorama_site_nan_becomes_null(self):
+        e = Env(self)
+        write(os.path.join(e.work, "workspace", "panorama", "data", "site_payload.json"), panorama_payload())
+        self.panorama_site(e, text='window.PANORAMA={"meta":{"asof":"2026-11-16"},'
+                                   '"industries":[{"name":"银行","s_dividend":NaN}]};')
+        mm_job.publish("panorama", e.work, e.out, started=time.time() - 60)
+        self.assertIsNone(e.outputs()["panorama"]["summary"]["industries"][0]["s_dividend"])
+
+    def test_panorama_without_fresh_matching_extras_still_publishes(self):
+        cases = {
+            "missing": {"present": False},
+            "stale": {"mtime": time.time() - 3600},
+            "other date": {"asof": "2026-11-13"},
+            "malformed": {"text": "window.PANORAMA={broken"},
+            "wrong prefix": {"text": "var X={};"},
+        }
+        for name, site in cases.items():
+            with self.subTest(name):
+                s = self.publish_panorama(**site)
+                for key in ("industries", "market", "diff"):
+                    self.assertNotIn(key, s)
+                self.assertNotIn("corr", s["meta"])
+
     def test_marketdata_publishes_nothing(self):
         e = Env(self)
         self.assertEqual(mm_job.publish("marketdata", e.work, e.out), 0)

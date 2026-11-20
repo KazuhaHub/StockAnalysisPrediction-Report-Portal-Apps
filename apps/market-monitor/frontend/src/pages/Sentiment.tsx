@@ -6,11 +6,7 @@ import { KpiRow, type KpiItem } from "../components/Kpi";
 import { useVisual } from "../components/useVisual";
 import { useCopy } from "../lib/copy";
 import { arr, fill, fmt, isNum, signed, DASH, type Num } from "../lib/format";
-
-/** ECharts renders tooltip strings as HTML; snapshot text must not be markup. */
-function escapeHtml(text: unknown): string {
-  return String(text ?? "").replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
-}
+import { escapeHtml } from "../lib/html";
 
 type Dim = {
   k: string;

@@ -245,5 +245,14 @@
   "amt_large": "{n} 万亿",
   "amt_small": "{n} 亿",
   "inputTooLong": "超过 64 字节上限",
-  "pano_radarMissing": "无评分：{names}"
+  "pano_radarMissing": "无评分：{names}",
+  "pano_medianPe": "全 A 中位 PE",
+  "pano_medianPb": "全 A 中位 PB",
+  "pano_aboveMa120": "站上 120 日线",
+  "pano_heat": "六策略 × 申万一级（全市场分位的行业均值）",
+  "pano_heatTip": "{industry} · {strategy}：{score}",
+  "pano_shift": "本期估值变化最大",
+  "pano_prevUpside": "上期上行",
+  "pano_curUpside": "本期上行",
+  "pano_unclassified": "未分类"
 }
