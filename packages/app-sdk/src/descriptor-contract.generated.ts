@@ -1,5 +1,5 @@
 // Derived from the Portal descriptor schema; edit the source contract instead.
-export const DESCRIPTOR_SCHEMA_SHA256 = "7dd64ddd38e381279dcb16d06036a18b7cbf8cc81631b0494c992aaa15b38f32";
+export const DESCRIPTOR_SCHEMA_SHA256 = "262432eb25a39fb2eb8e7da2b6233e3c5af3395729dc542038b80b17ca87029f";
 export interface Descriptor {
  format: "portal.app/v2";
  id: string;
@@ -12,6 +12,7 @@ export interface Descriptor {
  capabilities?: Capabilities | null;
  public?: Public | null;
  ingress?: Ingress | null;
+ network_proxy?: NetworkProxy | null;
  data: DataCompatibility;
 }
 export interface Compatibility {
@@ -61,7 +62,7 @@ export interface Resources {
 }
 export interface Capabilities {
  required?: ("reports.read" | "storage.files" | "tasks.schedule" | "events.subscribe" | "notifications.publish" | "network.http" | "network.stream" | "secrets.use" | "secrets.read" | "background.run" | "files.export")[] | null;
- optional?: ("reports.read" | "storage.files" | "tasks.schedule" | "events.subscribe" | "notifications.publish" | "network.http" | "network.stream" | "secrets.use" | "secrets.read" | "background.run" | "files.export" | "principals.read" | "public.projection" | "network.postgres" | "ingress.webhook")[] | null;
+ optional?: ("reports.read" | "storage.files" | "tasks.schedule" | "events.subscribe" | "notifications.publish" | "network.http" | "network.stream" | "secrets.use" | "secrets.read" | "background.run" | "files.export" | "principals.read" | "public.projection" | "network.postgres" | "ingress.webhook" | "network.proxy")[] | null;
 }
 export interface DataCompatibility {
  schema: number;
@@ -91,6 +92,9 @@ export interface RouteQuery {
  min?: number;
  max?: number;
  values?: (string)[];
+}
+export interface NetworkProxy {
+ hosts: (string)[];
 }
 export interface Public {
  routes: (PublicRoute)[];
@@ -137,6 +141,7 @@ export const DESCRIPTOR_LIMITS = {
   "maxImageLayerUncompressedBytes": 1073741824,
   "maxDescriptorVersionBytes": 128,
   "maxPublicRoutes": 8,
+  "maxNetworkProxyHosts": 64,
   "maxPublicQueryNames": 8,
   "minPublicCacheSeconds": 1,
   "maxPublicCacheSeconds": 300,
@@ -189,7 +194,8 @@ export const DESCRIPTOR_CAPABILITIES = [
   "principals.read",
   "public.projection",
   "network.postgres",
-  "ingress.webhook"
+  "ingress.webhook",
+  "network.proxy"
 ] as const;
 export const DESCRIPTOR_LOCALES = [
   "en-US",
@@ -227,6 +233,7 @@ export const DESCRIPTOR_FIELDS = {
     "capabilities",
     "public",
     "ingress",
+    "network_proxy",
     "data"
   ],
   "Compatibility": [
@@ -306,6 +313,9 @@ export const DESCRIPTOR_FIELDS = {
     "min",
     "max",
     "values"
+  ],
+  "NetworkProxy": [
+    "hosts"
   ],
   "Public": [
     "routes",
