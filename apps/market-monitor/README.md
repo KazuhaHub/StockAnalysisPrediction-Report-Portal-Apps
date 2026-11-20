@@ -85,9 +85,17 @@ paged. A task only queues a job: jobs (`marketdata`, `sentiment`, `panorama`,
 limits, and their snapshot outputs are validated and installed by the service.
 Storage layout and rules: [docs/storage.md](docs/storage.md).
 
-The backend container has no network (Portal doc 174). Jobs that fetch data
-cannot run on a managed install until the platform provides egress for them;
-computing from data already in `/data` works today.
+The backend container has no network (Portal doc 174). The service starts the
+reviewed forward proxy's forwarder (`packages/proxy`, `egress.go`) on
+`127.0.0.1:3128` before any job runs, and the runner points the workers'
+`HTTPS_PROXY` at it (`HTTP_PROXY` is not set, so sources must be `https://`).
+Jobs that fetch data work once an administrator has reviewed the hosts the
+descriptor suggests in `network_proxy.hosts`; until then every CONNECT is
+refused with 403 and `X-Portal-Proxy-Refusal`. The data server's upstream
+(`47.237.204.217:8000`, plain HTTP, an IP literal) cannot go through the proxy,
+so the `marketdata` and `panorama` jobs, which need the data server, still wait
+for a source on a reviewed HTTPS name. Computing from data already in `/data`
+works today.
 
 ```sh
 cd apps/market-monitor/service && go test -race ./...
@@ -189,7 +197,8 @@ network.
 1. Fix the known method defects (unadjusted returns in Panorama, fail-open
    freshness gate, silently stale structure data in the margin scan, ETF
    forward-fill treated as zero flow, hard-coded reporting periods).
-2. Wire egress through the platform's reviewed forward proxy (Portal doc
-   184) and switch the few `http://` sources to `https://`.
+2. Review the proxy hosts in an installation and verify the jobs end to end
+   (done in code: the forwarder is wired and the `http://` source is now
+   `https://`). Move the data server's upstream to an HTTPS host name.
 3. Panorama summary: add the industry list, market medians and valuation
    shifts the original page showed, so the dashboard can restore them.

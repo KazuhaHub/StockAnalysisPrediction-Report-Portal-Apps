@@ -9,7 +9,9 @@ does not set `HTTP_PROXY`. This package supplies the forwarder that answers on
 that address:
 
 - `proxy.Serve(ctx, proxy.Options{})`: a library for backends with a resident Go
-  process. It blocks until `ctx` is done.
+  process. It blocks until `ctx` is done. `proxy.Listen` binds the loopback
+  address first, for a host that must have the port open before it starts
+  workers; pass the result as `Options.Listener`.
 - `cmd/portal-egress-proxy`: the same, as a static binary
   (`CGO_ENABLED=0 go build ./cmd/portal-egress-proxy`).
 

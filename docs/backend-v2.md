@@ -51,6 +51,51 @@ host connection aborts the old signal and remounts application state. Unmounted
 or retired hook references refuse new calls. A caller's AbortSignal is combined
 with the document's signal; it cannot outlive that document.
 
+## Outbound HTTPS from a backend
+
+A backend container has no network. A release that declares `network.proxy`
+(see [descriptor-v2.md](descriptor-v2.md#forward-proxy-declaration)) can reach
+reviewed HTTPS hosts through a forwarder that runs inside the container and
+relays each connection over the runner's broker socket
+(`PORTAL_APP_BROKER_SOCKET`). `packages/proxy` provides it.
+
+When the release declares the capability, the runner sets, whether or not it is
+granted, `HTTPS_PROXY` and `https_proxy` to `http://127.0.0.1:3128`, `NO_PROXY`
+and `no_proxy` to `127.0.0.1,localhost`, and `PORTAL_APP_PROXY_LISTEN` to
+`127.0.0.1:3128`. **`HTTP_PROXY` is not set**: only HTTPS traffic can use the
+proxy, so use `https://` URLs; a plain `http://` request has no way out. Because
+the variables are set without a grant, granting or withdrawing needs no restart.
+
+Run the forwarder in one of two ways:
+
+- **A resident Go backend** hosts it. Bind before starting any worker that
+  needs the network, then serve:
+
+  ```go
+  import "github.com/KazuhaHub/StockAnalysisPrediction-Report-Portal-Apps/packages/proxy"
+
+  l, err := proxy.Listen(proxy.Options{}) // PORTAL_APP_PROXY_LISTEN, loopback only
+  if err != nil { /* fail the boot */ }
+  go proxy.Serve(ctx, proxy.Options{Listener: l}) // PORTAL_APP_BROKER_SOCKET; returns when ctx ends
+  ```
+
+  `proxy.Serve(ctx, proxy.Options{})` alone listens and serves in one call.
+  Add `COPY packages/proxy` to the image build and a `replace` for the module,
+  as `apps/market-monitor/service` does.
+- **No resident process**: ship the static `portal-egress-proxy` binary
+  (`CGO_ENABLED=0 go build ./cmd/portal-egress-proxy` in `packages/proxy`) and
+  start it before the code that needs it.
+
+The forwarder accepts only HTTP/1.1 `CONNECT host:port` and answers anything else
+with 405. A refusal by the broker comes back as `403` with
+`X-Portal-Proxy-Refusal: <code>` and no body (`not_granted`,
+`host_not_reviewed`, `port_not_permitted`, `address_denied`, `resolve_failed`,
+`connect_failed`, `busy`, `budget_spent`, `unavailable`); until an administrator
+has reviewed the hosts every CONNECT gets `not_granted`. Handle it like any
+failing upstream. A TLS name that differs from the CONNECT host, or a first
+record that is not a TLS ClientHello, shows up as a closed connection. The
+forwarder holds no authority; every decision is the broker's.
+
 ## Writes and result handling
 
 Write only from an explicit user action, never a mount effect. Set a submitting
