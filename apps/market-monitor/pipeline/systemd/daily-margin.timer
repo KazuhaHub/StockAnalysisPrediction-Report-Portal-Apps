@@ -1,0 +1,12 @@
+[Unit]
+Description=融资盘扫描（周一至周五 09:00）
+
+[Timer]
+# 09:00 才拿得到深交所 T+1 上午披露的数据；周六跑必然空转，故不含周六
+OnCalendar=Mon..Fri 09:00
+Persistent=true
+AccuracySec=1min
+Unit=daily-margin.service
+
+[Install]
+WantedBy=timers.target

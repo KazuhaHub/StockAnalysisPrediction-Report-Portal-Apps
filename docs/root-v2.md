@@ -1,7 +1,7 @@
 # Experimental v2 React presentation root
 
 `@portal-app/sdk/root-v2` is an internal P06 development entry point built on the
-shared `portal.app.bridge/2-dev.8` transport. It is not a released stable SDK,
+shared `portal.app.bridge/2-dev.9` transport. It is not a released stable SDK,
 accepted v2 host, capability client or migration of a maintained app. Existing
 applications and the public template retain their legacy provider until the whole
 host/root/package lifecycle passes acceptance. No catalogue/release changes here.

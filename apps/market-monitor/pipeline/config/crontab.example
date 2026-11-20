@@ -1,0 +1,29 @@
+# 备选方案：不用 systemd 时的 crontab
+#
+# 用法：sudo crontab -u daily -e   然后把下面 6 行粘进去（去掉注释符）
+# 注意 cron 环境极简：没有 HOME、没有 LANG、PATH 只有 /usr/bin:/bin。
+# 所以每行都显式前置 HOME，否则脚本里的 ~/MarketData 会指到 /root 或空值。
+#
+# 星期字段：0=周日 1=周一 … 6=周六。周二至周六 = 2-6，周一至周五 = 1-5。
+
+# 日更 1/5 行情库：21:00 主跑 + 23:30 兜底（并发由 .update.lock 挡住，重复跑只是空转几分钟）
+0  21 * * 1-5  HOME=/opt/daily-tasks LANG=C.UTF-8 /bin/bash /opt/daily-tasks/bin/run_marketdata.sh >> /opt/daily-tasks/logs/cron-marketdata.log 2>&1
+30 23 * * 1-5  HOME=/opt/daily-tasks LANG=C.UTF-8 /bin/bash /opt/daily-tasks/bin/run_marketdata.sh >> /opt/daily-tasks/logs/cron-marketdata.log 2>&1
+
+# 日更 2/5 情绪面板：周二至周六 00:40（处理前一交易日）
+40 0  * * 2-6  HOME=/opt/daily-tasks LANG=C.UTF-8 /bin/bash /opt/daily-tasks/bin/run_sentiment.sh >> /opt/daily-tasks/logs/cron-sentiment.log 2>&1
+
+# 日更 3/5 Panorama：周二至周六 00:50
+50 0  * * 2-6  HOME=/opt/daily-tasks LANG=C.UTF-8 /bin/bash /opt/daily-tasks/bin/run_panorama.sh >> /opt/daily-tasks/logs/cron-panorama.log 2>&1
+
+# 日更 4/5 ETF 面板：周二至周六 08:00
+0  8  * * 2-6  HOME=/opt/daily-tasks LANG=C.UTF-8 /bin/bash /opt/daily-tasks/bin/run_etf.sh >> /opt/daily-tasks/logs/cron-etf.log 2>&1
+
+# 日更 5/5 融资盘：周一至周五 09:00，09:50 兜底校验（未成功才补跑）
+0  9  * * 1-5  HOME=/opt/daily-tasks LANG=C.UTF-8 /bin/bash /opt/daily-tasks/bin/run_margin.sh >> /opt/daily-tasks/logs/cron-margin.log 2>&1
+50 9  * * 1-5  HOME=/opt/daily-tasks LANG=C.UTF-8 /bin/bash /opt/daily-tasks/bin/margin_guard.sh >> /opt/daily-tasks/logs/cron-margin.log 2>&1
+
+# 数据源常驻服务（cron 不管常驻进程，用 supervisor 或 systemd 单独管；最省事仍是 systemd：
+#   systemctl enable --now daily-stock-server）
+# 若坚持不用 systemd，至少要保证开机后自启：
+#   @reboot MCP_TRANSPORT=http MCP_PORT=8091 HOME=/opt/daily-tasks /opt/daily-tasks/venv/bin/python3 /opt/daily-tasks/stock_server/stock_mcp_integrated.py >> /opt/daily-tasks/logs/stock-server.log 2>&1

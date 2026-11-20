@@ -166,6 +166,78 @@ jobs:
       - run: python3 scripts/plugin-standard.py
       - run: python3 scripts/build-app-v2.py scheduled-digest --output "$RUNNER_TEMP/scheduled-digest-candidate"
       - run: docker build -f apps/scheduled-digest/service/Dockerfile -t scheduled-digest-development .
+  market-monitor-frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: npm ci
+      - run: npm run typecheck --workspace=apps/market-monitor/frontend
+      - run: npm test --workspace=apps/market-monitor/frontend
+      - run: python3 scripts/plugin-standard.py
+      - run: python3 scripts/build-app-v2.py market-monitor --output "$RUNNER_TEMP/market-monitor-candidate"
+      # The preview harness (frontend/dev) must never reach the package. The
+      # bundle is minified, so check the source graph and the zip contents.
+      - name: No development harness in the package
+        run: |
+          if grep -rEn "['\"][^'\"]*(\.\.?/dev(/|['\"])|vite\.dev\.config)" apps/market-monitor/frontend/src; then
+            echo "src imports the development harness"; exit 1
+          fi
+          unzip -Z1 "$RUNNER_TEMP/market-monitor-candidate/frontend.zip" > "$RUNNER_TEMP/mm-files"
+          if grep -E '(^|/)dev/|mock' "$RUNNER_TEMP/mm-files" || unzip -p "$RUNNER_TEMP/market-monitor-candidate/frontend.zip" app.js | grep -q '__mock'; then
+            echo "development harness found in frontend.zip"; exit 1
+          fi
+
+  market-monitor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: apps/market-monitor/service
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: apps/market-monitor/service/go.mod
+          cache: false
+      - run: go vet ./...
+      - run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
+      - run: go test -race ./...
+      - name: Backend image
+        run: docker build --platform linux/amd64 -f apps/market-monitor/service/Dockerfile -t market-monitor-development .
+        working-directory: .
+      - name: Image imports and package size
+        working-directory: .
+        run: |
+          # Under the runner's restrictions: imports must not write outside /data.
+          docker run --rm --user 65532:65532 --read-only --network none --cap-drop ALL \
+            --tmpfs /tmp:rw,nosuid,nodev,noexec,size=16777216 \
+            --entrypoint /app/venv/bin/python market-monitor-development \
+            -c "import akshare, pandas, pyarrow, scipy, fastmcp, curl_cffi, py_mini_racer; print('akshare', akshare.__version__)"
+          size=$(docker save market-monitor-development | gzip -1 | wc -c)
+          echo "compressed image: $((size / 1048576)) MiB (package limit 384 MiB)"
+          test "$size" -lt $((350 * 1048576))
+  market-monitor-pipeline:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/market-monitor/pipeline
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'  # the backend image's interpreter
+      # requests lets the Panorama freshness test run; tests needing the
+      # rest of the pipeline's dependencies skip themselves here.
+      - run: python3 -m pip install 'requests>=2.31,<3'
+        working-directory: .
+      - run: python3 tests/test_mm_job.py
+      - run: python3 tests/test_pipeline_scripts.py
   status:
     runs-on: ubuntu-latest
     steps:

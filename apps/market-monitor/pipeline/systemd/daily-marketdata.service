@@ -1,0 +1,19 @@
+[Unit]
+Description=日更 1/5 行情库增量更新
+After=network-online.target daily-stock-server.service
+Wants=network-online.target daily-stock-server.service
+
+[Service]
+Type=oneshot
+User=daily
+Group=daily
+WorkingDirectory=/opt/daily-tasks
+Environment=HOME=/opt/daily-tasks
+Environment=LANG=C.UTF-8
+Environment=LC_ALL=C.UTF-8
+ExecStart=/bin/bash /opt/daily-tasks/bin/run_marketdata.sh
+# 全库补跑实测 3 小时，21:00 常规增量约 100 分钟，给足余量
+TimeoutStartSec=14400
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7

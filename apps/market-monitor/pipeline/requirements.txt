@@ -1,0 +1,23 @@
+# 日更任务运行时依赖（Python ≥ 3.10 建议，最低 3.9）
+#
+# 为什么不用 --no-binary：pyarrow 源码编译要 30 分钟以上，用 manylinux wheel 即可。
+# 为什么 pin 上界：pandas 3.0 会改默认 dtype 与 copy 语义，行情库的 groupby/rolling
+# 大面积依赖旧行为，升大版本必须逐脚本回归，不能跟着 latest 走。
+
+pandas>=2.0,<2.3
+numpy>=1.24,<3
+pyarrow>=14,<22
+
+# Spearman rank IC in workspace/panorama/health.py (pandas imports it lazily).
+scipy>=1.11,<2
+
+# HTTP 抓取（ETF 份额/净值、两融、行情快照）
+requests>=2.31,<3
+
+# 融资盘扫描用（东财接口封装）；版本变动频繁，装好之后不要随手升级
+# Pinned: 1.20.45+ renamed tool_trade_date_hist_sina and other functions this
+# code calls; 1.18.94 is what runs on the production host and has all 32 of them.
+akshare==1.18.94
+
+# stock-server 的 MCP 框架
+fastmcp>=2.0

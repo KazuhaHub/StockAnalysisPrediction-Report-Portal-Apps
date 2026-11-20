@@ -1,0 +1,6 @@
+package   A股日更任务包
+built     2026-11-17
+source    macOS 本地投研环境（WorkBuddy workspace 2026-10-31-16-12-23 + MarketData）
+tasks     行情库增量 · 情绪面板 · Panorama选股 · ETF资金 · 融资盘扫描
+excludes  aktools / akquant（按需求不纳入）
+python    需 ≥3.9（venv 内装 pandas/numpy/pyarrow/requests/akshare/fastmcp）

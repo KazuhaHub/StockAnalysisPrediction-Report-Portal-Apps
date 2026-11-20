@@ -1,0 +1,24 @@
+[Unit]
+Description=Stock MCP Server :8091 (日更任务的数据源)
+Documentation=file:/opt/daily-tasks/stock_server/README.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=daily
+Group=daily
+WorkingDirectory=/opt/daily-tasks/stock_server
+Environment=HOME=/opt/daily-tasks
+Environment=MCP_TRANSPORT=http
+Environment=MCP_HOST=127.0.0.1
+Environment=MCP_PORT=8091
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/opt/daily-tasks/venv/bin/python3 stock_mcp_integrated.py
+Restart=always
+RestartSec=5
+StandardOutput=append:/opt/daily-tasks/logs/stock-server.log
+StandardError=append:/opt/daily-tasks/logs/stock-server.log
+
+[Install]
+WantedBy=multi-user.target

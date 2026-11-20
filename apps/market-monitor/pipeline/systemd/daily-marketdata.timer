@@ -1,0 +1,14 @@
+[Unit]
+Description=行情库增量更新（交易日 21:00 主跑 + 23:30 兜底）
+
+[Timer]
+# 21:00 主跑：3300+ 只票约 100 分钟，22:40 前后收工，不跨零点。
+# 23:30 兜底：若 21:00 那趟失败或机器睡过，这一趟补上；并发由 .update.lock 挡住。
+OnCalendar=Mon..Fri 21:00
+OnCalendar=Mon..Fri 23:30
+Persistent=true
+AccuracySec=1min
+Unit=daily-marketdata.service
+
+[Install]
+WantedBy=timers.target

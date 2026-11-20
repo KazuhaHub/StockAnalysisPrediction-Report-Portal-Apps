@@ -1,0 +1,12 @@
+[Unit]
+Description=市场情绪监控面板（周二至周六 00:40）
+
+[Timer]
+# 00:40 处理的是「昨天」收盘，排周二至周六对应周一至周五的行情
+OnCalendar=Tue..Sat 00:40
+Persistent=true
+AccuracySec=1min
+Unit=daily-sentiment.service
+
+[Install]
+WantedBy=timers.target

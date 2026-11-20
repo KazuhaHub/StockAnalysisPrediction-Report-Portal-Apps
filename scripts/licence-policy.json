@@ -33,6 +33,7 @@
     "components": [
       "github.com/KazuhaHub/",
       "@portal-app/",
+      "portal-app-market-monitor",
       "portal-app-notes-sample",
       "portal-app-scheduled-digest",
       "portal-status-ui",
