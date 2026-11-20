@@ -166,6 +166,33 @@ jobs:
       - run: python3 scripts/plugin-standard.py
       - run: python3 scripts/build-app-v2.py scheduled-digest --output "$RUNNER_TEMP/scheduled-digest-candidate"
       - run: docker build -f apps/scheduled-digest/service/Dockerfile -t scheduled-digest-development .
+  market-monitor-frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: npm ci
+      - run: npm run typecheck --workspace=apps/market-monitor/frontend
+      - run: npm test --workspace=apps/market-monitor/frontend
+      - run: python3 scripts/plugin-standard.py
+      - run: python3 scripts/build-app-v2.py market-monitor --output "$RUNNER_TEMP/market-monitor-candidate"
+      # The preview harness (frontend/dev) must never reach the package. The
+      # bundle is minified, so check the source graph and the zip contents.
+      - name: No development harness in the package
+        run: |
+          if grep -rEn "['\"][^'\"]*(\.\.?/dev(/|['\"])|vite\.dev\.config)" apps/market-monitor/frontend/src; then
+            echo "src imports the development harness"; exit 1
+          fi
+          unzip -Z1 "$RUNNER_TEMP/market-monitor-candidate/frontend.zip" > "$RUNNER_TEMP/mm-files"
+          if grep -E '(^|/)dev/|mock' "$RUNNER_TEMP/mm-files" || unzip -p "$RUNNER_TEMP/market-monitor-candidate/frontend.zip" app.js | grep -q '__mock'; then
+            echo "development harness found in frontend.zip"; exit 1
+          fi
+
   market-monitor:
     runs-on: ubuntu-latest
     timeout-minutes: 30

@@ -1,0 +1,65 @@
+.mm {
+  width: 100%;
+  min-width: 0;
+}
+
+.mm-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.mm-muted {
+  color: var(--ant-color-text-tertiary, rgba(128, 128, 128, 0.8));
+  font-size: 12px;
+}
+
+.mm-kpi .ant-statistic-content {
+  font-size: 22px;
+}
+
+.mm-chart {
+  width: 100%;
+}
+
+.mm-spark {
+  height: 44px;
+}
+
+.mm-between {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.mm-health {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--ant-color-border-secondary, #f0f0f0);
+}
+
+.mm-quad {
+  border-radius: 8px;
+  padding: 18px 12px;
+  text-align: center;
+}
+
+.mm .mm-row-select {
+  cursor: pointer;
+}
+
+.mm .mm-row-select:focus-visible {
+  outline: 2px solid var(--ant-color-primary, #1677ff);
+  outline-offset: -2px;
+}
+
+.mm-hint {
+  color: var(--ant-color-error, #ff4d4f);
+  font-size: 12px;
+}

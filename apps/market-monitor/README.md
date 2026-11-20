@@ -4,9 +4,32 @@ Daily A-share market monitoring: margin-financing pressure, market sentiment,
 broad-ETF fund flows and the Panorama multi-strategy screener, plus the
 market-level series intended for a systemic-risk monitor.
 
-**Status: not an installable app yet** — there is no `app.v2.json` and no
-`frontend/`, so `scripts/plugin-standard.py` skips this directory and nothing
-is published to the catalogue.
+**Status: development app.** `app.v2.json` declares five document routes
+(overview, margin, sentiment, ETF, Panorama) and the backend image; the image
+digest is a placeholder until a release is built, so nothing is published to
+the catalogue yet.
+
+## `frontend/` — dashboards
+
+React + Ant Design on `@portal-app/sdk/root-v2`, charts with ECharts (only
+the chart types used are bundled). Every page reads the backend through
+`useAppBackend`: summary for the dashboard, server-paged rows for the margin,
+ETF and Panorama tables, and `/rows/<code>` for a row's drawer. Colours come
+from the host theme tokens, so light and dark both work; up is red, down
+green.
+
+Local preview with real snapshots (development only, never packaged):
+
+```sh
+cd apps/market-monitor/frontend
+MM_SNAPSHOT_DIR=/path/to/snapshots npm run dev   # <dir>/<module>/<date>.json
+```
+
+Open `http://127.0.0.1:5173/`. `dev/host.html` is a stand-in host using the
+SDK's `createBridgeHost` in a sandboxed frame; `?path=/margin&dark=1&locale=en-US`
+picks the start state. `dev/mock-backend.mjs` answers the `/v1` routes like the
+Go service (same paging, sort and filter rules) and keeps loaded files in
+memory, so restart it after changing the fixtures.
 
 ## `pipeline/` — imported upstream code
 
@@ -168,5 +191,5 @@ network.
    forward-fill treated as zero flow, hard-coded reporting periods).
 2. Wire egress through the platform's reviewed forward proxy (Portal doc
    184) and switch the few `http://` sources to `https://`.
-3. Build the dashboards on the shared React SDK (systemic-risk overview and
-   margin scan first).
+3. Panorama summary: add the industry list, market medians and valuation
+   shifts the original page showed, so the dashboard can restore them.
