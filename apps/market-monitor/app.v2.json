@@ -95,6 +95,7 @@
   "data": {
     "schema": 1,
     "readable_schemas": [1],
-    "writes_on_startup": false
+    "writes_on_startup": false,
+    "quota": { "bytes": 6442450944, "inodes": 100000 }
   }
 }
