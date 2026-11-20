@@ -102,6 +102,15 @@ bootstrap configuration; it is not inferred from the parent DOM, referrer, query
 or arbitrary message. Cross-deployment distribution bootstrap remains a release
 gate before promoting this provisional template to the public default.
 
+### Apps with a backend
+
+Generate one with `--template v2-backend` (the v2 starter plus a Go service) and follow
+[backend-service-v2.md](backend-service-v2.md): the `portal.backend/1` protocol, the
+sandbox, each capability and its review, background tasks, `network.http` versus
+`network.proxy`, the reserved `/v1/public/`, `/v1/ingress/` and `/v1/machine/` routes,
+`scripts/run-backend-local.py` for a local run with the runner's constraints, and what
+is not yet available for signing and installing.
+
 ### Managed image packages
 
 An app with a backend ships its image inside the package instead of naming a

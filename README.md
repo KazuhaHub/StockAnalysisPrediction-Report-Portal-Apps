@@ -7,7 +7,9 @@ images. Repository sharing does not merge their processes, databases or permissi
 | Application | State | Runtime |
 | --- | --- | --- |
 | demo-symbols | Existing reference app, preserved identity/version | Sandboxed frontend |
-| scheduled-digest | Development managed reference app, not in the catalogue | Sandboxed frontend and independent service |
+| notes-sample | Development v2 reference app, not in the catalogue | Sandboxed frontend, no backend |
+| scheduled-digest | Development v2 reference backend (the neutral fixture), not in the catalogue | Sandboxed frontend and independent Go service |
+| market-monitor | Development v2 app, the first real backend app and the reference for new ones; not in the catalogue | Sandboxed frontend; one image with a Go service and a Python pipeline, with optional `network.proxy` |
 | status | In development, not in the install catalogue | Sandboxed frontend and separate service |
 
 `index.json` is the installation catalogue. It lists only available verified assets.
@@ -32,6 +34,18 @@ Build output is under ignored `dist/`; package generation is deterministic.
 Shared protocol and app-specific checks are described under their own directories.
 See `docs/implementation-plan.md` for the complete ordered Status implementation,
 and `docs/progress.md` for actual evidence and remaining gates.
+
+## Writing a backend app
+
+Start from `python3 scripts/create-app.py my-app --name "My app" --template v2-backend
+--parent-origin http://127.0.0.1:31935` (the `templates/react-app-v2-backend` template: the
+v2 frontend plus a Go service with an example route, an optional enqueue-only background
+task, opt-in `network.proxy` and a non-root Dockerfile). The developer guide,
+[docs/backend-service-v2.md](docs/backend-service-v2.md), covers the `portal.backend/1`
+protocol, the sandbox, every capability and what an administrator reviews, background
+tasks, outbound HTTP, running the image locally with `scripts/run-backend-local.py`, the
+build, sign and install flow, and what is not yet available. `apps/market-monitor` is the
+worked example.
 
 ## Marketplace publication and installation
 

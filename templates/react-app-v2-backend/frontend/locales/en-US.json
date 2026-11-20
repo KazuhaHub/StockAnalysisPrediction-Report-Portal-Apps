@@ -1,0 +1,18 @@
+{
+  "title": APP_NAME_JSON,
+  "editorTitle": "Draft editor",
+  "description": "Shared Portal appearance, navigation and page actions",
+  "openEditor": "Open editor",
+  "preview": "Preview",
+  "home": "Home",
+  "draft": "Draft text",
+  "draftHelp": "Leave the page to exercise the Portal unsaved-change guard.",
+  "temporary": "This starter keeps text only in memory. Closing or refreshing discards it.",
+  "introduction": "Use the page action above to open the editor. This application has its own backend and requests no platform capability.",
+  "empty": "The draft is empty.",
+  "backendTitle": "Backend",
+  "backendUnavailable": "App backend unavailable",
+  "backendFailed": "Could not read app data",
+  "backendHello": "The backend answered",
+  "backendRole": "Your role"
+}

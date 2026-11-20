@@ -1,6 +1,8 @@
 """Generate, typecheck, test and build a fresh application without publishing it."""
 import argparse
 import importlib.util
+import json
+import os
 import shutil
 import subprocess
 import tempfile
@@ -20,10 +22,14 @@ builder_spec=importlib.util.spec_from_file_location("build_v2",ROOT/"scripts/bui
 builder=importlib.util.module_from_spec(builder_spec)
 builder_spec.loader.exec_module(builder)
 
+if shutil.which("go") is None:
+    raise ValueError("Go is required to check the backend template")
 with tempfile.TemporaryDirectory(prefix="portal-template-") as directory:
     target = Path(directory)
     shutil.copytree(ROOT / "templates", target / "templates")
     (target / "node_modules").symlink_to(ROOT / "node_modules", target_is_directory=True)
+    # The generated service's go.mod replaces the shared modules with ../../../packages/...
+    (target / "packages").symlink_to(ROOT / "packages", target_is_directory=True)
     creator.ROOT = target
     creator.create("template-check", "Template check")
     frontend = target / "apps/template-check/frontend"
@@ -43,3 +49,18 @@ with tempfile.TemporaryDirectory(prefix="portal-template-") as directory:
         shutil.copytree(frontend/"dist",output/"child")
         for name in ["frontend.zip", "descriptor.json"]:
             shutil.copyfile(candidate/name,output/name)
+
+    # The backend template: frontend checks and candidate, then the Go service's vet and tests.
+    # No image is built here; that needs Docker and is a local step (docs/backend-service-v2.md).
+    creator.create("template-backend-check", "Template backend check", template="v2-backend", parent_origin="http://127.0.0.1:31935")
+    app = target / "apps/template-backend-check"
+    frontend = app / "frontend"
+    for command in ["typecheck", "test"]:
+        subprocess.run(["npm", "run", command], cwd=frontend, check=True)
+    go_env = {**os.environ, "GOWORK": "off", "CGO_ENABLED": "0"}
+    for command in [["go", "vet", "./..."], ["go", "test", "-count=1", "./..."]]:
+        subprocess.run(command, cwd=app / "service", env=go_env, check=True)
+    candidate = builder.build("template-backend-check", root=target)
+    descriptor = json.loads((candidate / "descriptor.json").read_text())
+    if descriptor.get("backend", {}).get("protocol") != "portal.backend/1" or "image" not in descriptor["backend"]:
+        raise ValueError("Backend candidate lost its backend declaration")
