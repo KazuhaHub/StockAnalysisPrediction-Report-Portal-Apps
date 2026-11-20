@@ -46,10 +46,33 @@ type Options struct {
 	Dial func(context.Context) (net.Conn, error)
 }
 
+// Listen opens the forwarder's listener: Options.Listen, else
+// PORTAL_APP_PROXY_LISTEN, else DefaultListen. The address must be a loopback IP
+// literal. A caller that must be sure the port is bound before it starts other
+// work calls Listen first and passes the result to Serve as Options.Listener.
+func Listen(opts Options) (net.Listener, error) {
+	listen := opts.Listen
+	if listen == "" {
+		listen = os.Getenv(EnvProxyListen)
+	}
+	if listen == "" {
+		listen = DefaultListen
+	}
+	host, _, err := net.SplitHostPort(listen)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", EnvProxyListen, err)
+	}
+	if ip := net.ParseIP(host); ip == nil || !ip.IsLoopback() {
+		return nil, fmt.Errorf("%s must be a loopback address, got %q", EnvProxyListen, listen)
+	}
+	return net.Listen("tcp", listen)
+}
+
 // Serve accepts CONNECT requests and relays each tunnel over a fresh connection
 // to the broker. It returns nil once ctx is done, or the listener's error; either
 // way it closes the listener and every open tunnel and waits for them. A bad
-// configuration is returned at once, before anything is listened on.
+// configuration is returned at once, before anything is accepted, and closes a
+// supplied Listener.
 func Serve(ctx context.Context, opts Options) error {
 	dial := opts.Dial
 	if dial == nil {
@@ -58,6 +81,9 @@ func Serve(ctx context.Context, opts Options) error {
 			sock = os.Getenv(EnvBrokerSocket)
 		}
 		if sock == "" {
+			if opts.Listener != nil {
+				opts.Listener.Close()
+			}
 			return fmt.Errorf("%s is required", EnvBrokerSocket)
 		}
 		dial = func(ctx context.Context) (net.Conn, error) {
@@ -67,21 +93,8 @@ func Serve(ctx context.Context, opts Options) error {
 	}
 	l := opts.Listener
 	if l == nil {
-		listen := opts.Listen
-		if listen == "" {
-			listen = os.Getenv(EnvProxyListen)
-		}
-		if listen == "" {
-			listen = DefaultListen
-		}
-		host, _, err := net.SplitHostPort(listen)
-		if err != nil {
-			return fmt.Errorf("%s: %w", EnvProxyListen, err)
-		}
-		if ip := net.ParseIP(host); ip == nil || !ip.IsLoopback() {
-			return fmt.Errorf("%s must be a loopback address, got %q", EnvProxyListen, listen)
-		}
-		if l, err = net.Listen("tcp", listen); err != nil {
+		var err error
+		if l, err = Listen(opts); err != nil {
 			return err
 		}
 	}

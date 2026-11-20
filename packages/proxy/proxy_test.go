@@ -639,3 +639,38 @@ func TestRawBrokerOpenSplices(t *testing.T) {
 		t.Fatalf("echo %q %v", buf, err)
 	}
 }
+
+func TestListenRefusesWhatServeRefuses(t *testing.T) {
+	for _, listen := range []string{"0.0.0.0:3128", ":3128", "example.com:3128", "127.0.0.1"} {
+		if l, err := Listen(Options{Listen: listen}); err == nil {
+			l.Close()
+			t.Errorf("%q: want an error", listen)
+		}
+	}
+	l, err := Listen(Options{Listen: "127.0.0.1:0"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	l.Close()
+	t.Setenv("PORTAL_APP_PROXY_LISTEN", "127.0.0.1:0")
+	l, err = Listen(Options{})
+	if err != nil {
+		t.Fatalf("the environment's address was not used: %v", err)
+	}
+	l.Close()
+}
+
+func TestServeClosesASuppliedListenerOnBadConfiguration(t *testing.T) {
+	t.Setenv("PORTAL_APP_BROKER_SOCKET", "")
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := Serve(context.Background(), Options{Listener: l}); err == nil {
+		t.Fatal("want a configuration error")
+	}
+	if c, err := net.Dial("tcp", l.Addr().String()); err == nil {
+		c.Close()
+		t.Fatal("the listener was left open")
+	}
+}
