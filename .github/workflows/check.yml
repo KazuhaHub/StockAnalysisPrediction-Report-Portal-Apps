@@ -140,6 +140,19 @@ jobs:
       - run: go vet ./...
       - run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
       - run: go test -race ./...
+  proxy:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/proxy
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: packages/proxy/go.mod
+          cache: false
+      - run: go vet ./...
+      - run: go test -race ./...
   scheduled-digest:
     runs-on: ubuntu-latest
     steps:
