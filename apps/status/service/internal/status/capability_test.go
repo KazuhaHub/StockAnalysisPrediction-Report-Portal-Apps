@@ -2,7 +2,6 @@ package status
 
 import (
 	"encoding/json"
-	protocol "github.com/KazuhaHub/StockAnalysisPrediction-Report-Portal-Apps/packages/extensionprotocol"
 	"strings"
 	"testing"
 	"time"
@@ -34,7 +33,7 @@ func TestUnsupportedBillingIsExplicitAndCannotRecoverIncident(t *testing.T) {
 	if err := s.Record(m, unsupported, at); err != nil {
 		t.Fatal(err)
 	}
-	view, err := s.Components(protocol.Viewer{Subject: "admin", Role: "admin"}, false, at)
+	view, err := s.Components(fixtureAdmin(), false, at)
 	if err != nil || len(view) != 1 || len(view[0].Monitors) != 1 {
 		t.Fatalf("view=%+v err=%v", view, err)
 	}

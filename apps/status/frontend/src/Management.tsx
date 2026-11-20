@@ -15,6 +15,7 @@ import {
   Typography,
 } from "antd";
 import { PlusOutlined, SettingOutlined } from "@ant-design/icons";
+import { useAppDraft } from "@portal-app/sdk/root-v2";
 import type {
   Component,
   Credential,
@@ -225,6 +226,11 @@ function CredentialEditor({
     [draft, setDraft] = useState(value),
     [secret, setSecret] = useState<Record<string, string>>({}),
     [confirmDelete, setConfirmDelete] = useState(false);
+  useAppDraft(
+    draft.label !== value.label ||
+      draft.kind !== value.kind ||
+      Object.values(secret).some(Boolean),
+  );
   const fields =
     draft.kind === "postgres"
       ? ["username", "password"]
@@ -315,7 +321,7 @@ function CredentialEditor({
             "postgres",
             "deepseek",
             "qwen",
-            "heartbeat",
+            ...(draft.kind === "heartbeat" ? ["heartbeat"] : []),
             "notification",
           ].map((value) => ({ value, label: t(value) }))}
           onChange={(kind) => {
@@ -627,15 +633,6 @@ function SettingsEditor({ value }: { value: Settings }) {
   }, [value]);
   return (
     <Form component="div" layout="vertical" disabled={busy}>
-      <Typography.Paragraph type="secondary">
-        {t("publicHint")}
-      </Typography.Paragraph>
-      <Check
-        checked={draft.public_enabled}
-        onChange={(public_enabled) => setDraft({ ...draft, public_enabled })}
-      >
-        {t("publicEnabled")}
-      </Check>
       <Field
         label={t("portalURL")}
         value={draft.portal_url}

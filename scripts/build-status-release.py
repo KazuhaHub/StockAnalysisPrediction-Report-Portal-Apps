@@ -14,6 +14,9 @@ import zipfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+_line_spec = importlib.util.spec_from_file_location("status_line", Path(__file__).with_name("status_line.py"))
+status_line = importlib.util.module_from_spec(_line_spec)
+_line_spec.loader.exec_module(status_line)
 TARGETS = {"linux-amd64": ("linux", "amd64", ""), "linux-arm64": ("linux", "arm64", ""),
            "linux-armv7": ("linux", "arm", "7"), "darwin-amd64": ("darwin", "amd64", ""),
            "darwin-arm64": ("darwin", "arm64", ""), "windows-amd64": ("windows", "amd64", "")}
@@ -74,9 +77,17 @@ def build(targets, destination):
     return output
 
 
-if __name__ == "__main__":
+def main(argv=None, root=ROOT):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--target", action="append", choices=sorted(TARGETS), help="Repeat for selected targets; default builds all six")
     parser.add_argument("--output", type=Path, default=ROOT / "dist/artifacts")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
+    if status_line.uses_v2_line(root):
+        print(status_line.skip_message("The legacy Status release build"))
+        return 0
     print(build(args.target or list(TARGETS), args.output.resolve()))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

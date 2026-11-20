@@ -8,15 +8,13 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	protocol "github.com/KazuhaHub/StockAnalysisPrediction-Report-Portal-Apps/packages/extensionprotocol"
 )
 
 func outboxFixture(t *testing.T) (*Store, string) {
 	t.Helper()
 	s := testStore(t)
 	c := monitoredComponent(t, s)
-	admin := protocol.Viewer{Subject: "admin", Role: "admin"}
+	admin := fixtureAdmin()
 	cred, err := s.SaveCredential(admin, CredentialInput{Kind: "notification", Label: "Publisher", Secret: json.RawMessage(`{"token":"dedicated-notification-token"}`)})
 	if err != nil {
 		t.Fatal(err)
@@ -101,7 +99,7 @@ func TestPublisherReturnsCaptureNotDeliveryAndUsesFixedPath(t *testing.T) {
 }
 func TestRestoreQueueFingerprintRejectsConcurrentChange(t *testing.T) {
 	s, _ := outboxFixture(t)
-	admin := protocol.Viewer{Subject: "admin", Role: "admin"}
+	admin := fixtureAdmin()
 	s.db.Exec(`INSERT INTO settings(key,value) VALUES('outbox_paused','1')`)
 	fingerprint, err := s.QueueFingerprint()
 	if err != nil {

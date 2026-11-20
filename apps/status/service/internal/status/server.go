@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	protocol "github.com/KazuhaHub/StockAnalysisPrediction-Report-Portal-Apps/packages/extensionprotocol"
@@ -15,18 +16,46 @@ import (
 type Server struct {
 	publicBudget publicBudget
 	store        *Store
-	signer       protocol.Signer
-	verifier     *protocol.Verifier
+	registration string
+	bootID       string
 	slots        chan struct{}
+
+	verifierMu  sync.Mutex
+	verifier    *protocol.Verifier
+	verifierKey string
 }
 
-func NewServer(store *Store, signer protocol.Signer) (*Server, error) {
-	if _, err := signer.NewChallenge(time.Now()); err != nil {
+// NewServer serves the application's HTTP interface on behalf of the platform.
+// The registration file supplies the only key that can authenticate requests
+// and the boot identity binds every assertion to this process.
+func NewServer(store *Store, registration, bootID string) *Server {
+	return &Server{store: store, registration: registration, bootID: bootID, slots: make(chan struct{}, 16)}
+}
+
+// verifierFor returns the verifier for the current registration. The replay set
+// lives as long as the registration is unchanged; a rotated key replaces it, and
+// assertions made under the old key no longer verify anyway.
+func (s *Server) verifierFor() (*protocol.Verifier, error) {
+	registration, err := LoadRegistration(s.registration)
+	defer clear(registration.Key)
+	if err != nil {
 		return nil, err
 	}
-	signer.BootID = newID()
-	return &Server{store: store, signer: signer, verifier: protocol.NewVerifier(protocol.VerifyConfig{Issuer: signer.Issuer, Audience: signer.Audience, AppID: signer.AppID, InstanceID: signer.InstanceID, BootID: signer.BootID, Keys: map[string][]byte{signer.KeyID: signer.Key}}), slots: make(chan struct{}, 16)}, nil
+	signer, err := registration.Signer(s.bootID)
+	if err != nil {
+		return nil, err
+	}
+	defer clear(signer.Key)
+	fingerprint := signer.Issuer + "\x00" + signer.Audience + "\x00" + signer.InstanceID + "\x00" + signer.KeyID
+	s.verifierMu.Lock()
+	defer s.verifierMu.Unlock()
+	if s.verifier == nil || s.verifierKey != fingerprint {
+		s.verifier = protocol.NewVerifier(protocol.VerifyConfig{Issuer: signer.Issuer, Audience: signer.Audience, AppID: signer.AppID, InstanceID: signer.InstanceID, BootID: signer.BootID, Keys: map[string][]byte{signer.KeyID: signer.Key}})
+		s.verifierKey = fingerprint
+	}
+	return s.verifier, nil
 }
+
 func write(w http.ResponseWriter, status int, value any) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(status)
@@ -46,6 +75,37 @@ func apiError(w http.ResponseWriter, err error) {
 	}
 	// SQL, network and credential errors never enter wire messages.
 	write(w, status, map[string]any{"ok": false, "error": map[string]string{"code": code}})
+}
+func (s *Server) handshake(w http.ResponseWriter, r *http.Request, raw []byte) {
+	if r.URL.RawQuery != "" || r.Header.Get("Cookie") != "" || r.Header.Get("Authorization") != "" || r.Header.Get("Content-Type") != "application/json" {
+		write(w, 400, map[string]bool{"ok": false})
+		return
+	}
+	var in struct {
+		Challenge string `json:"challenge"`
+	}
+	if len(raw) == 0 || len(raw) > maxHandshakeBody || strictJSON(raw, &in) != nil || in.Challenge == "" || len(in.Challenge) > maxChallengeLength {
+		write(w, 400, map[string]bool{"ok": false})
+		return
+	}
+	registration, err := LoadRegistration(s.registration)
+	defer clear(registration.Key)
+	if err != nil {
+		write(w, 503, map[string]bool{"ok": false})
+		return
+	}
+	signer, err := registration.Signer(s.bootID)
+	if err != nil {
+		write(w, 503, map[string]bool{"ok": false})
+		return
+	}
+	defer clear(signer.Key)
+	answer, err := signer.AnswerChallenge(in.Challenge, s.bootID, time.Now())
+	if err != nil {
+		write(w, 400, map[string]bool{"ok": false})
+		return
+	}
+	write(w, 200, map[string]string{"answer": answer})
 }
 func decode(raw []byte, out any) error {
 	d := json.NewDecoder(bytes.NewReader(raw))
@@ -74,81 +134,57 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		apiError(w, ErrInvalid)
 		return
 	}
-	if (r.URL.Path == "/" || r.URL.Path == "/app.js" || r.URL.Path == "/style.css" || strings.HasPrefix(r.URL.Path, "/public/")) && !s.publicBudget.allow(r.RemoteAddr, time.Now()) {
-		w.Header().Set("Retry-After", "1")
-		write(w, 429, map[string]bool{"ok": false})
-		return
-	}
-	if s.publicRoute(w, r) {
-		return
-	}
-	if r.Method == "POST" && strings.HasPrefix(r.URL.Path, "/ingest/v1/heartbeats/") {
-		s.heartbeat(w, r, raw)
-		return
-	}
-	if r.Method == "POST" && r.URL.Path == "/v1/handshake" {
-		var in struct {
-			Challenge string `json:"challenge"`
+	if r.URL.Path == "/v1/handshake" {
+		if r.Method == "POST" {
+			s.handshake(w, r, raw)
+		} else {
+			http.NotFound(w, r)
 		}
-		if len(raw) > 8192 || decode(raw, &in) != nil {
-			apiError(w, ErrInvalid)
+		return
+	}
+	if r.URL.Path == "/health/ready" {
+		if r.Method != "GET" {
+			http.NotFound(w, r)
 			return
 		}
-		answer, err := s.signer.AnswerChallenge(in.Challenge, s.signer.BootID, time.Now())
-		if err != nil {
-			write(w, 401, map[string]any{"ok": false})
+		if r.URL.RawQuery != "" || r.Header.Get("Authorization") != "" || r.Header.Get("Cookie") != "" {
+			write(w, 400, map[string]bool{"ok": false})
 			return
 		}
-		write(w, 200, map[string]string{"answer": answer})
-		return
-	}
-	if r.Method == "GET" && r.URL.Path == "/healthz" {
 		var n int
 		if err := s.store.db.QueryRowContext(r.Context(), `SELECT 1`).Scan(&n); err != nil {
 			write(w, 503, map[string]bool{"ok": false})
-		} else {
-			write(w, 200, map[string]bool{"ok": true})
-		}
-		return
-	}
-	if r.Method == "GET" && r.URL.Path == "/public/v1/status" {
-		offset, limit, err := pageParams(r)
-		if err != nil {
-			apiError(w, err)
 			return
 		}
-		page, err := s.store.PublicComponentPage(time.Now(), offset, limit)
-		if err != nil {
-			apiError(w, err)
-			return
-		}
-		// Explicit projection: adding fields to private views cannot publish them.
-		type publicComponent struct {
-			ID         string `json:"id"`
-			Label      string `json:"label"`
-			State      string `json:"state"`
-			ObservedAt string `json:"observed_at"`
-			Stale      bool   `json:"stale"`
-		}
-		out := []publicComponent{}
-		for _, c := range page.Items {
-			out = append(out, publicComponent{c.ID, c.Label, c.State, c.ObservedAt, c.Stale})
-		}
-		w.Header().Set("Cache-Control", "public, max-age=10")
-		write(w, 200, map[string]any{"ok": true, "items": out, "total": page.Total, "offset": page.Offset, "limit": page.Limit, "generated_at": time.Now().UTC().Format(time.RFC3339)})
+		write(w, 200, map[string]any{"protocol": backendProtocolVersion, "ready": true, "data_format": backendDataFormatVersion})
 		return
 	}
+	if !strings.HasPrefix(r.URL.Path, "/v1/") {
+		http.NotFound(w, r)
+		return
+	}
+	// The relay passes a backend answer on only for 2xx and 400, 403, 404, 409,
+	// 422 and 429, so a rejected assertion or viewer is a 403, not a 401.
 	headers := r.Header.Values(protocol.Header)
 	if len(headers) != 1 {
-		write(w, 401, map[string]bool{"ok": false})
+		write(w, 403, map[string]bool{"ok": false})
 		return
 	}
-	claims, err := s.verifier.Verify(headers[0], r.Method, r.URL.RequestURI(), raw, time.Now())
+	verifier, err := s.verifierFor()
 	if err != nil {
-		write(w, 401, map[string]bool{"ok": false})
+		write(w, 503, map[string]bool{"ok": false})
+		return
+	}
+	claims, err := verifier.Verify(headers[0], r.Method, r.URL.RequestURI(), raw, time.Now())
+	if err != nil {
+		write(w, 403, map[string]bool{"ok": false})
 		return
 	}
 	v := claims.Viewer
+	if _, ok := authorityOf(v); !ok {
+		write(w, 403, map[string]bool{"ok": false})
+		return
+	}
 	if r.Method != "GET" || strings.HasPrefix(r.URL.Path, "/v1/manage/") {
 		if !isAdmin(v) {
 			apiError(w, ErrForbidden)
@@ -303,4 +339,51 @@ func (s *Store) ComponentConfigurations() ([]ComponentInput, error) {
 		}
 	}
 	return out, nil
+}
+
+// servePhase2 holds the routes that need Portal capabilities the platform does
+// not offer yet: anonymous public pages and inbound heartbeat ingress. It is
+// deliberately not called from ServeHTTP, so the platform socket serves none
+// of them. Phase 2 registers it once the platform can carry those requests.
+func (s *Server) servePhase2(w http.ResponseWriter, r *http.Request, raw []byte) bool {
+	if (r.URL.Path == "/" || r.URL.Path == "/app.js" || r.URL.Path == "/style.css" || strings.HasPrefix(r.URL.Path, "/public/")) && !s.publicBudget.allow(r.RemoteAddr, time.Now()) {
+		w.Header().Set("Retry-After", "1")
+		write(w, 429, map[string]bool{"ok": false})
+		return true
+	}
+	if s.publicRoute(w, r) {
+		return true
+	}
+	if r.Method == "POST" && strings.HasPrefix(r.URL.Path, "/ingest/v1/heartbeats/") {
+		s.heartbeat(w, r, raw)
+		return true
+	}
+	if r.Method == "GET" && r.URL.Path == "/public/v1/status" {
+		offset, limit, err := pageParams(r)
+		if err != nil {
+			apiError(w, err)
+			return true
+		}
+		page, err := s.store.PublicComponentPage(time.Now(), offset, limit)
+		if err != nil {
+			apiError(w, err)
+			return true
+		}
+		// Explicit projection: adding fields to private views cannot publish them.
+		type publicComponent struct {
+			ID         string `json:"id"`
+			Label      string `json:"label"`
+			State      string `json:"state"`
+			ObservedAt string `json:"observed_at"`
+			Stale      bool   `json:"stale"`
+		}
+		out := []publicComponent{}
+		for _, c := range page.Items {
+			out = append(out, publicComponent{c.ID, c.Label, c.State, c.ObservedAt, c.Stale})
+		}
+		w.Header().Set("Cache-Control", "public, max-age=10")
+		write(w, 200, map[string]any{"ok": true, "items": out, "total": page.Total, "offset": page.Offset, "limit": page.Limit, "generated_at": time.Now().UTC().Format(time.RFC3339)})
+		return true
+	}
+	return false
 }

@@ -9,13 +9,11 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	protocol "github.com/KazuhaHub/StockAnalysisPrediction-Report-Portal-Apps/packages/extensionprotocol"
 )
 
 func TestHeartbeatAuthenticatesAndPersistsReplayFence(t *testing.T) {
 	s := testStore(t)
-	admin := protocol.Viewer{Subject: "admin", Role: "admin"}
+	admin := fixtureAdmin()
 	credential, err := s.SaveCredential(admin, CredentialInput{Kind: "heartbeat", Label: "Backup job", Secret: json.RawMessage(`{"api_key":"heartbeat-secret-at-least-32-bytes"}`)})
 	if err != nil {
 		t.Fatal(err)
@@ -24,11 +22,7 @@ func TestHeartbeatAuthenticatesAndPersistsReplayFence(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	signer := protocol.Signer{Issuer: "portal", Audience: "status", AppID: "status", InstanceID: "one", KeyID: "key", Key: []byte(strings.Repeat("k", 32))}
-	server, err := NewServer(s, signer)
-	if err != nil {
-		t.Fatal(err)
-	}
+	server, _ := newTestServer(t, s)
 	monitor := component.Monitors[0].ID
 	raw := `{"timestamp":"` + time.Now().UTC().Format(time.RFC3339) + `","nonce":"external-job-nonce"}`
 	mac := hmac.New(sha256.New, []byte("heartbeat-secret-at-least-32-bytes"))
@@ -38,7 +32,7 @@ func TestHeartbeatAuthenticatesAndPersistsReplayFence(t *testing.T) {
 		r := httptest.NewRequest("POST", "/ingest/v1/heartbeats/"+monitor, strings.NewReader(raw))
 		r.Header.Set("X-Status-Signature", sig)
 		w := httptest.NewRecorder()
-		server.ServeHTTP(w, r)
+		phase2Handler(server).ServeHTTP(w, r)
 		return w
 	}
 	if w := call("wrong"); w.Code != 401 {

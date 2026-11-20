@@ -61,7 +61,7 @@ func (s *Store) ClaimDue(now time.Time) (Monitor, bool, error) {
 	return m, true, nil
 }
 
-var safeReasons = map[string]bool{"reachable": true, "condition_mismatch": true, "observer_unavailable": true, "heartbeat_not_received": true, "heartbeat_missed": true, "heartbeat_received": true, "network_unavailable": true, "invalid_destination": true, "unsupported_probe": true, "invalid_response": true, "authentication_failed": true, "rate_limited": true, "redirect_refused": true, "upstream_unavailable": true, "invalid_balance_response": true, "currency_unavailable": true, "balance_read": true, "low_balance": true, "low_credit": true, "insufficient_funds": true, "billing_unsupported": true, "billing_permission_required": true, "billing_site_mismatch": true, "billing_unavailable": true, "database_unavailable": true, "database_query_failed": true}
+var safeReasons = map[string]bool{"reachable": true, "condition_mismatch": true, "observer_unavailable": true, "heartbeat_not_received": true, "heartbeat_missed": true, "heartbeat_received": true, "network_unavailable": true, "egress_unavailable": true, "invalid_destination": true, "unsupported_probe": true, "invalid_response": true, "authentication_failed": true, "rate_limited": true, "redirect_refused": true, "upstream_unavailable": true, "invalid_balance_response": true, "currency_unavailable": true, "balance_read": true, "low_balance": true, "low_credit": true, "insufficient_funds": true, "billing_unsupported": true, "billing_permission_required": true, "billing_site_mismatch": true, "billing_unavailable": true, "database_unavailable": true, "database_query_failed": true}
 
 func (s *Store) Record(m Monitor, result Result, now time.Time) error {
 	if !safeReasons[result.ReasonCode] || result.DurationMS < 0 || result.DurationMS > 60000 || result.RetryAfter < 0 || result.RetryAfter > time.Hour {
@@ -339,17 +339,17 @@ func reconcileIncident(tx *sql.Tx, component string, now time.Time) error {
 	return err
 }
 
-// Run starts four bounded workers and holds the store's offline restore gate.
+// Run starts four bounded workers.
 // Stopping the browser has no effect on this process-owned scheduler.
 func (s *Store) Run(ctx context.Context, prober *Prober) error {
-	s.maintenance.Lock()
+	s.lifecycle.Lock()
 	if s.running {
-		s.maintenance.Unlock()
+		s.lifecycle.Unlock()
 		return ErrConflict
 	}
 	s.running = true
-	s.maintenance.Unlock()
-	defer func() { s.maintenance.Lock(); s.running = false; s.maintenance.Unlock() }()
+	s.lifecycle.Unlock()
+	defer func() { s.lifecycle.Lock(); s.running = false; s.lifecycle.Unlock() }()
 	var workers sync.WaitGroup
 	for range 4 {
 		workers.Add(1)

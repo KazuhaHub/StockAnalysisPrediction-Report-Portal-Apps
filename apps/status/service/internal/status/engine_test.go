@@ -4,13 +4,11 @@ import (
 	"encoding/json"
 	"testing"
 	"time"
-
-	protocol "github.com/KazuhaHub/StockAnalysisPrediction-Report-Portal-Apps/packages/extensionprotocol"
 )
 
 func monitoredComponent(t *testing.T, s *Store) ComponentInput {
 	t.Helper()
-	c, err := s.SaveComponent(protocol.Viewer{Subject: "admin", Role: "admin"}, ComponentInput{Label: "HTTP health", Enabled: true, Monitors: []MonitorInput{{Label: "Read health", Kind: "http", Config: json.RawMessage(`{"url":"https://health.example"}`), Enabled: true, IntervalSeconds: 60, TimeoutSeconds: 5}}})
+	c, err := s.SaveComponent(fixtureAdmin(), ComponentInput{Label: "HTTP health", Enabled: true, Monitors: []MonitorInput{{Label: "Read health", Kind: "http", Config: json.RawMessage(`{"url":"https://health.example"}`), Enabled: true, IntervalSeconds: 60, TimeoutSeconds: 5}}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -73,7 +71,7 @@ func TestLeaseAndRevisionFenceDiscardStaleResults(t *testing.T) {
 	if _, ok, err := s.ClaimDue(now); err != nil || ok {
 		t.Fatal("same monitor leased twice")
 	}
-	if _, err := s.SaveComponent(protocol.Viewer{Subject: "admin", Role: "admin"}, c); err != nil {
+	if _, err := s.SaveComponent(fixtureAdmin(), c); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.Record(m, Result{Outcome: "failure", ReasonCode: "network_unavailable"}, now); err != ErrConflict {
@@ -133,19 +131,19 @@ func TestMaintenanceExitRequiresTwoNewObservations(t *testing.T) {
 	if _, err := s.db.Exec(`INSERT INTO maintenance_windows(id,component_id,starts_at,ends_at,safe_summary,created_by,created_at) VALUES('window',?,?,?,'planned','admin',?)`, c.ID, now.Add(-time.Minute).UnixMilli(), end.UnixMilli(), now.UnixMilli()); err != nil {
 		t.Fatal(err)
 	}
-	views, err := s.Components(protocol.Viewer{Subject: "admin", Role: "admin"}, false, end.Add(time.Second))
+	views, err := s.Components(fixtureAdmin(), false, end.Add(time.Second))
 	if err != nil || views[0].State != "unknown" {
 		t.Fatal("maintenance ended with stale green evidence")
 	}
 	now = now.Add(2 * time.Minute)
 	sample(now)
-	views, err = s.Components(protocol.Viewer{Subject: "admin", Role: "admin"}, false, now)
+	views, err = s.Components(fixtureAdmin(), false, now)
 	if err != nil || views[0].State != "unknown" {
 		t.Fatal("first post-maintenance success recovered early")
 	}
 	now = now.Add(2 * time.Minute)
 	sample(now)
-	views, err = s.Components(protocol.Viewer{Subject: "admin", Role: "admin"}, false, now)
+	views, err = s.Components(fixtureAdmin(), false, now)
 	if err != nil || views[0].State != "operational" {
 		t.Fatal("confirmed post-maintenance recovery missing")
 	}

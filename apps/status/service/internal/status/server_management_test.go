@@ -1,7 +1,6 @@
 package status
 
 import (
-	"bytes"
 	"encoding/json"
 	"net/http/httptest"
 	"strings"
@@ -13,16 +12,11 @@ import (
 
 func TestManagementEndpointsKeepSettingsAndSecretsSeparate(t *testing.T) {
 	store := testStore(t)
-	signer := protocol.Signer{Issuer: "portal", Audience: "status", AppID: "status", InstanceID: "one", KeyID: "key", Key: bytes.Repeat([]byte{4}, 32)}
-	server, err := NewServer(store, signer)
-	if err != nil {
-		t.Fatal(err)
-	}
-	signer.BootID = server.signer.BootID
+	server, signer := newTestServer(t, store)
 	call := func(method, path, body string) *httptest.ResponseRecorder {
 		t.Helper()
 		raw := []byte(body)
-		token, err := signer.Sign(method, path, raw, protocol.Viewer{Subject: "admin", Role: "admin"}, time.Now())
+		token, err := signer.Sign(method, path, raw, fixtureAdmin(), time.Now())
 		if err != nil {
 			t.Fatal(err)
 		}

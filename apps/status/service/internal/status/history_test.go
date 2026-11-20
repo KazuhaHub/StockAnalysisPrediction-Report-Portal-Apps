@@ -23,9 +23,9 @@ func TestHistoryFiltersBeforeCountsAndRejectsHiddenDetails(t *testing.T) {
 		}
 		now = now.Add(2 * time.Minute)
 	}
-	s.db.Exec(`INSERT INTO component_grants VALUES(?,?,'read')`, c.ID, "ou:one")
-	one := protocol.Viewer{Subject: "one", Role: "user", OUs: []string{"one"}}
-	two := protocol.Viewer{Subject: "two", Role: "user", OUs: []string{"two"}}
+	s.db.Exec(`INSERT INTO component_grants VALUES(?,?,'read')`, c.ID, fixtureOU("one"))
+	one := fixtureViewer("user", "one", "one")
+	two := fixtureViewer("user", "two", "two")
 	visible, err := s.Incidents(one, false, 0, 50)
 	if err != nil || len(visible.Items) != 1 || visible.Total != 1 {
 		t.Fatalf("visible=%+v err=%v", visible, err)
@@ -48,7 +48,7 @@ func TestHistoryFiltersBeforeCountsAndRejectsHiddenDetails(t *testing.T) {
 func TestMaintenanceAndPublicNarrativeAreExplicit(t *testing.T) {
 	s := testStore(t)
 	c := monitoredComponent(t, s)
-	admin := protocol.Viewer{Subject: "admin", Role: "admin"}
+	admin := fixtureAdmin()
 	now := time.Now()
 	if err := s.SaveMaintenance(admin, MaintenanceInput{ComponentID: c.ID, StartsAt: now.Add(-time.Minute).UTC().Format(time.RFC3339), EndsAt: now.Add(time.Hour).UTC().Format(time.RFC3339), Summary: "Planned work"}); err != nil {
 		t.Fatal(err)

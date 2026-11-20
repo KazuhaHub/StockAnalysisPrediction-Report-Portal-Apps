@@ -2,17 +2,14 @@ package status
 
 import (
 	"encoding/json"
-	"path/filepath"
 	"testing"
 	"time"
-
-	protocol "github.com/KazuhaHub/StockAnalysisPrediction-Report-Portal-Apps/packages/extensionprotocol"
 )
 
 func recoveryNotice(t *testing.T, s *Store, start time.Time) (ComponentInput, string) {
 	t.Helper()
 	c, id := seedHistoryMonitor(t, s, start)
-	admin := protocol.Viewer{Subject: "admin", Role: "admin"}
+	admin := fixtureAdmin()
 	credential, err := s.SaveCredential(admin, CredentialInput{Kind: "notification", Label: "Recovery publisher", Secret: json.RawMessage(`{"token":"fixture-publisher-token"}`)})
 	if err != nil {
 		t.Fatal(err)
@@ -69,24 +66,20 @@ func TestOutboxExpiredLeaseAfterRestartKeepsOccurrence(t *testing.T) {
 	}
 }
 
-func TestRestoreUncertainPublicationRequiresExplicitDiscard(t *testing.T) {
+func TestPlatformRestoreUncertainPublicationRequiresExplicitDiscard(t *testing.T) {
 	s := testStore(t)
 	c, _ := recoveryNotice(t, s, time.Now().Add(-20*time.Minute))
 	first, ok, err := s.ClaimNotice(time.Now())
 	if err != nil || !ok {
 		t.Fatalf("claim=%v %v", ok, err)
 	}
-	backup := filepath.Join(t.TempDir(), "uncertain.db")
-	if err := s.Backup(backup); err != nil {
-		t.Fatal(err)
-	}
-	if err := s.Restore(backup); err != nil {
-		t.Fatal(err)
+	if restored, err := s.ReconcilePlatform("restored-installation/epoch", time.Now()); err != nil || !restored {
+		t.Fatalf("restored=%v err=%v", restored, err)
 	}
 	if s.NoticeCurrent(first) {
 		t.Fatal("restored old lease retained authority")
 	}
-	admin := protocol.Viewer{Subject: "admin", Role: "admin"}
+	admin := fixtureAdmin()
 	fingerprint, err := s.QueueFingerprint()
 	if err != nil {
 		t.Fatal(err)

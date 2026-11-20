@@ -1,9 +1,7 @@
 package status
 
 import (
-	"bytes"
 	"fmt"
-	protocol "github.com/KazuhaHub/StockAnalysisPrediction-Report-Portal-Apps/packages/extensionprotocol"
 	"net"
 	"net/http/httptest"
 	"net/netip"
@@ -12,17 +10,14 @@ import (
 )
 
 func TestAnonymousBurstIsBoundedWithoutTrustingForwardedHeaders(t *testing.T) {
-	server, err := NewServer(testStore(t), protocol.Signer{Issuer: "portal", Audience: "status", AppID: "status", InstanceID: "registration", KeyID: "key", Key: bytes.Repeat([]byte{8}, 32)})
-	if err != nil {
-		t.Fatal(err)
-	}
+	server, _ := newTestServer(t, testStore(t))
 	limited := 0
 	for i := 0; i < 100; i++ {
 		request := httptest.NewRequest("GET", "/public/v1/status", nil)
 		request.RemoteAddr = "192.0.2.10:45000"
 		request.Header.Set("X-Forwarded-For", newID())
 		response := httptest.NewRecorder()
-		server.ServeHTTP(response, request)
+		phase2Handler(server).ServeHTTP(response, request)
 		if response.Code == 429 {
 			limited++
 			if response.Header().Get("Retry-After") == "" {
@@ -35,13 +30,13 @@ func TestAnonymousBurstIsBoundedWithoutTrustingForwardedHeaders(t *testing.T) {
 	}
 	private := httptest.NewRecorder()
 	server.ServeHTTP(private, httptest.NewRequest("GET", "/v1/components", nil))
-	if private.Code != 401 {
+	if private.Code != 403 {
 		t.Fatalf("anonymous budget interfered with private auth: %d", private.Code)
 	}
 	other := httptest.NewRequest("GET", "/public/v1/status", nil)
 	other.RemoteAddr = "192.0.2.11:45000"
 	response := httptest.NewRecorder()
-	server.ServeHTTP(response, other)
+	phase2Handler(server).ServeHTTP(response, other)
 	if response.Code != 200 {
 		t.Fatalf("independent origin blocked: %d", response.Code)
 	}

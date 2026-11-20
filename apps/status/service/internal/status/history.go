@@ -14,15 +14,16 @@ func componentFilter(v protocol.Viewer, alias string, public bool) (string, []an
 	if public {
 		return alias + `.public_enabled=1 AND ` + alias + `.enabled=1`, nil
 	}
-	if isAdmin(v) {
-		return `1=1`, nil
-	}
-	if v.Subject == "" {
+	a, ok := authorityOf(v)
+	if !ok {
 		return `1=0`, nil
 	}
-	principals := []any{"user:" + v.Subject}
-	for _, ou := range v.OUs {
-		principals = append(principals, "ou:"+ou)
+	if a.admin {
+		return `1=1`, nil
+	}
+	principals := make([]any, 0, len(a.principals))
+	for _, p := range a.principals {
+		principals = append(principals, p)
 	}
 	marks := strings.TrimSuffix(strings.Repeat("?,", len(principals)), ",")
 	return `EXISTS(SELECT 1 FROM component_grants g WHERE g.component_id=` + alias + `.id AND g.permission='read' AND g.principal IN (` + marks + `))`, principals

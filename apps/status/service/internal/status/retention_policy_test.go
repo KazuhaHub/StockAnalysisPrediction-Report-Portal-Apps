@@ -1,14 +1,13 @@
 package status
 
 import (
-	protocol "github.com/KazuhaHub/StockAnalysisPrediction-Report-Portal-Apps/packages/extensionprotocol"
 	"testing"
 	"time"
 )
 
 func TestRetentionPolicyBoundsAndCleanupRespectConfiguredDurations(t *testing.T) {
 	s := testStore(t)
-	admin := protocol.Viewer{Subject: "admin", Role: "admin"}
+	admin := fixtureAdmin()
 	settings := s.Settings()
 	if settings.RawRetentionDays != 30 || settings.HistoryRetentionDays != 90 {
 		t.Fatalf("unexpected defaults=%+v", settings)
@@ -54,7 +53,7 @@ func TestRetentionPolicyBoundsAndCleanupRespectConfiguredDurations(t *testing.T)
 	if restored.RawRetentionDays != 2 || restored.HistoryRetentionDays != 7 {
 		t.Fatal("retention settings not persisted")
 	}
-	if err := s.SaveSettings(protocol.Viewer{Role: "user", Subject: "reader"}, settings); err != ErrForbidden {
+	if err := s.SaveSettings(fixtureViewer("user", "reader"), settings); err != ErrForbidden {
 		t.Fatal("reader changed retention")
 	}
 }

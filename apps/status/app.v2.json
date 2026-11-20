@@ -1,0 +1,93 @@
+{
+  "format": "portal.app/v2",
+  "id": "status",
+  "version": "0.2.0-beta.1",
+  "publisher": "development-publisher",
+  "compatibility": {
+    "platform_api": ">=2.0.0-0 <3.0.0-0",
+    "runner_protocol": ">=1.0.0-0 <2.0.0-0"
+  },
+  "presentation": {
+    "name_key": "title",
+    "description_key": "subtitle",
+    "entry": "index.html",
+    "locales": [
+      "en-US",
+      "zh-CN",
+      "zh-TW"
+    ],
+    "routes": [
+      {
+        "id": "overview",
+        "path": "/",
+        "layout": "document"
+      },
+      {
+        "id": "incidents",
+        "path": "/incidents",
+        "layout": "document"
+      },
+      {
+        "id": "manage",
+        "path": "/manage",
+        "layout": "document"
+      }
+    ],
+    "display": {
+      "icon": "dashboard",
+      "texts": [
+        {
+          "locale": "en-US",
+          "name": "Status",
+          "description": "Component availability, incidents and maintenance with an independent backend"
+        },
+        {
+          "locale": "zh-CN",
+          "name": "服务状态",
+          "description": "带独立后端的组件可用性、事件与维护状态"
+        },
+        {
+          "locale": "zh-TW",
+          "name": "服務狀態",
+          "description": "帶獨立後端的元件可用性、事件與維護狀態"
+        }
+      ]
+    }
+  },
+  "frontend": {
+    "artifact": "frontend.zip",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "backend": {
+    "kind": "oci",
+    "image": "ghcr.io/kazuhahub/status@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "platforms": [
+      "linux/amd64",
+      "linux/arm64"
+    ],
+    "protocol": "portal.backend/1",
+    "resources": {
+      "memory_mib": 256,
+      "cpu_millis": 500,
+      "pids": 64
+    }
+  },
+  "capabilities": {
+    "required": [
+      "background.run",
+      "notifications.publish",
+      "secrets.use",
+      "tasks.schedule"
+    ],
+    "optional": [
+      "network.http"
+    ]
+  },
+  "data": {
+    "schema": 1,
+    "readable_schemas": [
+      1
+    ],
+    "writes_on_startup": false
+  }
+}

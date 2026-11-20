@@ -13,6 +13,7 @@
       : null;
   }
   function monitorHint(monitor) {
+    if (monitor.kind === "heartbeat") return "heartbeatUnavailable";
     if (monitor.stale) return "staleHint";
     return (
       {
@@ -23,6 +24,7 @@
         authentication_failed: "authenticationHint",
         observer_unavailable: "observerHint",
         local_socket_unavailable: "postgresSocketHint",
+        egress_unavailable: "egressHint",
       }[monitor.reason_code] || ""
     );
   }

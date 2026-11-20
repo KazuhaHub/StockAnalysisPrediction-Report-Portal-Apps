@@ -8,7 +8,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	protocol "github.com/KazuhaHub/StockAnalysisPrediction-Report-Portal-Apps/packages/extensionprotocol"
 	"io"
 	"net"
 	"net/http"
@@ -125,7 +124,7 @@ func TestPortalNotificationCaptureAndChannelQuota(t *testing.T) {
 	}
 	call("POST", "/api/login", map[string]any{"username": "admin", "password": password})
 	store := testStore(t)
-	adminViewer := protocol.Viewer{Subject: "admin", Role: "admin"}
+	adminViewer := fixtureAdmin()
 	modelCredential, err := store.SaveCredential(adminViewer, CredentialInput{Kind: "deepseek", Label: "Private billing credential", Secret: json.RawMessage(`{"api_key":"fixture-private-model-key"}`)})
 	if err != nil {
 		t.Fatal(err)

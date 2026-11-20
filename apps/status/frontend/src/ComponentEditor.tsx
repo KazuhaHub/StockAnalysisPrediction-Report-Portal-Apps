@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   Alert,
   Button,
@@ -12,7 +12,8 @@ import {
   Typography,
 } from "antd";
 import { PlusOutlined } from "@ant-design/icons";
-import type { Component, Credential, Monitor, Page, Principal } from "./client";
+import { useAppDraft } from "@portal-app/sdk/root-v2";
+import type { Component, Credential, Monitor } from "./client";
 import { Check, Choice, Field, NumberField, useUI } from "./ui";
 
 export const freshMonitor = (): Monitor => ({
@@ -83,9 +84,9 @@ export function ComponentEditor({
       }),
     ),
     [step, setStep] = useState(0),
-    [directory, setDirectory] = useState<Principal[]>([]),
-    [offset, setOffset] = useState(0),
     [validation, setValidation] = useState("");
+  const initial = useRef(JSON.stringify(draft));
+  useAppDraft(JSON.stringify(draft) !== initial.current);
   const update = (patch: Partial<Component>) =>
     setDraft((old) => ({ ...old, ...patch }));
   const updateMonitor = (index: number, m: Monitor) =>
@@ -124,31 +125,11 @@ export function ComponentEditor({
     )
       close();
   };
-  const loadDirectory = () =>
-    run(async () => {
-      const pages = await Promise.all(
-        ["ou", "user"].map((kind) =>
-          client.directory<Page<Principal>>(kind as "ou" | "user", offset),
-        ),
-      );
-      setDirectory((old) => [
-        ...new Map(
-          [...old, ...pages.flatMap((page) => page.items)].map((item) => [
-            item.principal,
-            item,
-          ]),
-        ).values(),
-      ]);
-      setOffset(offset + 100);
-    }, "");
-  const grantOptions = [
-    ...new Map([
-      ...directory.map((p) => [p.principal, p.label] as const),
-      ...draft.grants
-        .filter((g) => !directory.some((p) => p.principal === g.principal))
-        .map((g) => [g.principal, g.principal] as const),
-    ]).entries(),
-  ].map(([value, label]) => ({ value, label }));
+  // Without a platform principal directory only existing grants can be shown;
+  // an administrator can keep or remove them but not look up new principals.
+  const grantOptions = [...new Set(draft.grants.map((g) => g.principal))].map(
+    (principal) => ({ value: principal, label: principal }),
+  );
   const setGrants = (permission: string, values: string[]) =>
     update({
       grants: [
@@ -271,11 +252,12 @@ export function ComponentEditor({
         {step === 2 && (
           <>
             <Alert type="info" title={t("privateDefaultHint")} showIcon />
-            <div className="section-gap">
-              <Button onClick={loadDirectory} loading={busy}>
-                {t(offset ? "directoryMore" : "loadDirectory")}
-              </Button>
-            </div>
+            <Alert
+              className="section-gap"
+              type="warning"
+              title={t("directoryUnavailable")}
+              showIcon
+            />
             <Choice
               label={t("readGrants")}
               multiple
@@ -306,28 +288,6 @@ export function ComponentEditor({
                       )}
                       onChange={(v) => setGrants("finance", v as string[])}
                     />
-                  ),
-                },
-                {
-                  key: "public",
-                  label: t("publicOptions"),
-                  children: (
-                    <>
-                      <Check
-                        checked={draft.public_enabled}
-                        onChange={(public_enabled) =>
-                          update({ public_enabled })
-                        }
-                      >
-                        {t("publicComponent")}
-                      </Check>
-                      <Field
-                        label={t("publicLabel")}
-                        value={draft.public_label}
-                        onChange={(public_label) => update({ public_label })}
-                        help={t("publicHint")}
-                      />
-                    </>
                   ),
                 },
               ]}
@@ -369,6 +329,22 @@ function MonitorEditor({
       onChange={(v) => config({ networks: v.split(/\s+/).filter(Boolean) })}
     />
   );
+  // Inbound heartbeats need a platform ingress that does not exist yet, so a
+  // heartbeat monitor cannot be created or changed here. An existing one is
+  // shown as it is, and saving the component keeps it unchanged.
+  if (m.kind === "heartbeat")
+    return (
+      <fieldset className="monitor-editor">
+        <legend>{t("monitor")}</legend>
+        <Card size="small" className="section-gap">
+          <Typography.Paragraph strong>{m.label}</Typography.Paragraph>
+          <Typography.Paragraph type="secondary">
+            {t("heartbeat")}
+          </Typography.Paragraph>
+          <Alert type="info" title={t("heartbeatUnavailable")} showIcon />
+        </Card>
+      </fieldset>
+    );
   return (
     <fieldset className="monitor-editor">
       <legend>{t("monitor")}</legend>
@@ -381,14 +357,9 @@ function MonitorEditor({
         <Choice
           label={t("kind")}
           value={m.kind}
-          options={[
-            "http",
-            "dify",
-            "postgres",
-            "deepseek",
-            "qwen",
-            "heartbeat",
-          ].map((value) => ({ value, label: t(value) }))}
+          options={["http", "dify", "postgres", "deepseek", "qwen"].map(
+            (value) => ({ value, label: t(value) }),
+          )}
           onChange={(kind) =>
             set({
               kind: String(kind),

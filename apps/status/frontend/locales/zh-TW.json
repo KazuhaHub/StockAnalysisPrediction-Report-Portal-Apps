@@ -56,9 +56,7 @@
   "international": "國際站",
   "readGrants": "哪些人可以檢視此元件",
   "financeGrants": "哪些人可以檢視金額",
-  "grantHint": "選擇 Portal 當前賬號或 OU。OU 後代繼承檢視許可權；金額許可權單獨授予。",
-  "loadDirectory": "載入賬號和組織單元",
-  "directoryMore": "載入更多身份",
+  "grantHint": "此元件已有的授權列在這裡，可保留或移除。OU 後代繼承檢視許可權；金額許可權單獨授予。",
   "newCredential": "新建憑證",
   "secretHint": "已儲存的金鑰不會返回。編輯時留空表示保留。",
   "apiKey": "API Key／心跳簽名金鑰",
@@ -164,7 +162,7 @@
   "rawRetention": "原始觀測保留天數",
   "historyRetention": "歷史保留天數",
   "retentionHint": "原始觀測可保留 1–30 天；彙總歷史、已解決事故及已完成通知最多保留 90 天，且不得短於原始觀測。活動事故和待處理通知所需的證據會保留。縮短保留期間後由背景執行清理。",
-  "backendUpgradeRequired": "已配對的 Status 後端不支援此外掛所需的能力。請部署相符且已驗證的服務版本後重新整理。",
+  "backendUpgradeRequired": "Status 後端不支援此應用程式所需的功能。請安裝相符且已驗證的版本後重新整理。",
   "backendNotReady": "無法驗證後端相容性。連線與服務能力驗證通過前不會顯示狀態資料。",
   "postgresConnection": "PostgreSQL 連線方式",
   "postgresTLS": "網路連線（驗證 TLS）",
@@ -198,5 +196,10 @@
   "emptyOutbox": "暫無排隊通知。",
   "technicalDetails": "技術詳情",
   "serviceSettings": "服務設定",
-  "configureFirst": "請先建立元件。"
+  "configureFirst": "請先建立元件。",
+  "egressHint": "此監控暫時無法存取目標：應用程式後端目前沒有可執行檢查的網路通道。狀態為未知，並非故障。",
+  "writeUncertain": "儲存請求可能已送達應用程式後端，也可能沒有。再次儲存前請先重新整理並核對目前設定。您的編輯已保留。",
+  "heartbeatUnavailable": "此版本無法接收簽名心跳，因為 Portal 目前沒有通往應用程式的入站通道。該監控保持原樣，狀態為未知，且無法在此建立或編輯。",
+  "directoryUnavailable": "選擇其他使用者或組織單位需要 Portal 的主體目錄，目前尚不可用。既有授權維持不變；新元件僅管理員可見。",
+  "backendUnavailable": "Status 後端不可用，不顯示任何狀態資料。"
 }

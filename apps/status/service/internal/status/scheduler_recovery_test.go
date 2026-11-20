@@ -1,7 +1,6 @@
 package status
 
 import (
-	protocol "github.com/KazuhaHub/StockAnalysisPrediction-Report-Portal-Apps/packages/extensionprotocol"
 	"testing"
 	"time"
 )
@@ -54,9 +53,9 @@ func TestExpiredProbeAfterRestartRecordsUnknownAndRequiresFreshConfirmation(t *t
 func TestManualProbeRequestHonorsPauseRevisionAndThrottle(t *testing.T) {
 	s := testStore(t)
 	c := monitoredComponent(t, s)
-	admin := protocol.Viewer{Subject: "admin", Role: "admin"}
+	admin := fixtureAdmin()
 	monitor := c.Monitors[0]
-	if err := s.RequestProbe(protocol.Viewer{Subject: "reader", Role: "user"}, monitor.ID, 1); err != ErrForbidden {
+	if err := s.RequestProbe(fixtureViewer("user", "reader"), monitor.ID, 1); err != ErrForbidden {
 		t.Fatalf("reader requested probe: %v", err)
 	}
 	if err := s.RequestProbe(admin, monitor.ID, 999); err != ErrConflict {
