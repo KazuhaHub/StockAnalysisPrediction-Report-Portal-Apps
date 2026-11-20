@@ -26,7 +26,7 @@
 **数据流**（后一个依赖前一个，顺序不能乱）：
 
 ```
-       上游行情 API (47.237.204.217:8000)
+       上游行情 API (QUOTE_API，默认 https://quotes.anchan.kazuhahub.com)
                     │
                     ▼
         stock_server  :8091  ←── 常驻，挂了全链条都停
@@ -56,7 +56,7 @@
 | Python | ≥ 3.9，建议 3.11 | `python3-venv`、`python3-dev` 要装 |
 | 磁盘 | ≥ 3 GB 可用 | 解压 737 MB + 每日增量约 300 MB/年 + venv |
 | 内存 | ≥ 2 GB | Panorama compute 峰值约 1.2 GB |
-| 网络 | 能出公网 | 需要访问 `47.237.204.217:8000`（行情）、东财、腾讯、深交所 |
+| 网络 | 能出公网 | 需要访问 `https://quotes.anchan.kazuhahub.com`（行情，可用环境变量 QUOTE_API 覆盖）、东财、腾讯、深交所 |
 | 权限 | root | 要写 `/etc/systemd/system`、装用户、配 nginx |
 
 **不需要**：不需要 GPU，不需要 WorkBuddy 客户端，不需要原来的 Mac。
@@ -206,7 +206,7 @@ tail -20 /opt/daily-tasks/logs/marketdata-$(date +%Y%m%d).log
 curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8091/mcp     # 期望 200
 ```
 - `连不上 stock-server` → `systemctl restart daily-stock-server`
-- `数据源不可用……本次更新已中止` → 上游 47.237.204.217 故障，等它恢复；**库里已有数据仍然完整可用**，不要手动改库
+- `数据源不可用……本次更新已中止` → 上游行情 API 故障，等它恢复；**库里已有数据仍然完整可用**，不要手动改库
 - 退出码 3 → 写锁被占用超 15 分钟，说明有另一个更新在跑或锁没清。看 `ls /opt/daily-tasks/MarketData/.mdwrite.lock/`，pid 不在了就删掉
 
 ### 情绪面板或 Panorama 报"行情库未更新"

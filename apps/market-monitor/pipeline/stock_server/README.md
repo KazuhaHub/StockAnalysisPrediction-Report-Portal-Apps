@@ -5,7 +5,7 @@
 ## 功能特性
 
 ### 可用接口说明
-http://47.237.204.217:8000/openapi.json
+https://quotes.anchan.kazuhahub.com/openapi.json
 
 ### 📊 股票数据查询
 - **日度行情数据** - 获取指定日期范围的股票日线数据（开盘价、收盘价、最高价、最低价、成交量等）
@@ -479,7 +479,7 @@ MCP 层不改原始字段，只在 `factor != 1` 时为每行追加 `derived` �
 ## 数据源说明
 
 本服务连接到股票数据 API 服务器：
-- 基础 URL: `http://47.237.204.217:8000/api/v1`
+- 基础 URL: `https://quotes.anchan.kazuhahub.com/api/v1`（环境变量 QUOTE_API 可覆盖）
 - 支持的交易所：
   - SSE (上海证券交易所) - 股票代码以 6 开头
   - SZSE (深圳证券交易所) - 股票代码以 0 或 3 开头

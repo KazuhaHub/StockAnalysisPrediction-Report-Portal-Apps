@@ -12,19 +12,22 @@
   取不到就返回非零退出码，调用方退回「今天」，行为与改造前一致，不会更糟。
 """
 import json
+import os
 import sys
 import urllib.parse
 import urllib.request
 from datetime import date, timedelta
 
-BASE = "http://47.237.204.217:8000/api/v1/calendar/trading"
+BASE = os.environ.get("QUOTE_API", "https://quotes.anchan.kazuhahub.com") + "/api/v1/calendar/trading"
+# Cloudflare in front of QUOTE_API refuses the default "Python-urllib" agent (error 1010).
+UA = {"User-Agent": "market-monitor"}
 
 
 def last_trading_day(upto=None, lookback=20):
     upto = upto or date.today().isoformat()
     start = (date.fromisoformat(upto) - timedelta(days=lookback)).isoformat()
     q = urllib.parse.urlencode({"exchange": "SSE", "start_date": start, "end_date": upto})
-    rows = json.load(urllib.request.urlopen(BASE + "?" + q, timeout=30))
+    rows = json.load(urllib.request.urlopen(urllib.request.Request(BASE + "?" + q, headers=UA), timeout=30))
     ds = sorted(str(r.get("date"))[:10] for r in rows if r.get("is_trading_day"))
     return ds[-1] if ds else None
 
