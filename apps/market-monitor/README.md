@@ -60,13 +60,68 @@ computing from data already in `/data` works today.
 cd apps/market-monitor/service && go test -race ./...
 ```
 
+## `pipeline/mm_job.py` — the job entry
+
+The service runs `mm_job.py <job>`. It copies the pipeline code into
+`/data/work` (the pipeline's install prefix and `HOME`; data there is kept),
+clears locks a killed run may have left, starts the pipeline's data server
+(`stock_server`, loopback port 8091) for the jobs that need it, runs the
+pipeline's own script unchanged, and converts the output **this run wrote**
+into snapshot documents. Output older than the run is refused, so a pipeline
+that skips and exits 0 never republishes old data.
+
+| Job | Pipeline script | Data server | Snapshots |
+| --- | --- | --- | --- |
+| `marketdata` | `MarketData/update.sh` | yes | none (updates the bar store) |
+| `sentiment` | `workspace/analysis/sentiment_daily.py` | no | `sentiment`, `risk` |
+| `panorama` | `workspace/panorama/daily_update.sh` | yes | `panorama` |
+| `etf` | `workspace/analysis/panel/refresh.sh` | no | `etf`, `risk` |
+| `margin` | `margin_scan/update.sh` | no | `margin`, `risk` |
+
+`risk` combines the readings of the margin, sentiment and ETF snapshots: the
+one being published and the others only once the service has installed them,
+so it never cites a failed run's output or a refused snapshot. Each part
+keeps its own `as_of` and the document is dated by the newest. The outer
+`bin/run_*.sh` wrappers are not used: they wait on an online trading
+calendar and publish HTML to nginx.
+
+Exit codes: the pipeline's own non-zero code, passed through; 2 usage; 91
+output missing; 92 output not written by this run; 93 environment (the
+`/opt/daily-tasks` link, or the data server's port is taken or it did not
+start). The data server logs to `/data/work/stock_server/server.log`.
+
+Deployment constraint: one `/data` has one runner. Clearing stale locks
+assumes no other container or hand-run pipeline script writes the same work
+directory.
+
+Two pipeline fixes ride along, both so stale data cannot pass as fresh:
+`MarketData/update.sh` now returns the update/check exit code (it always
+exited 0), and Panorama's freshness check refuses to publish when the
+trading calendar is unreachable (it used to pass). A deliberate backfill
+sets `PANORAMA_ASOF`, which skips that check.
+
+Checked against real data (the 2026-11-17 bundle): `sentiment` runs end to
+end offline; `panorama` refuses without the calendar and completes with
+`PANORAMA_ASOF`; the `margin` and `etf` conversions were checked on their
+last outputs; every snapshot installs in the Go store and the first page,
+the summary and every row detail stay under 1 MiB. To repeat the store check:
+`MM_SNAPSHOT_DIR=<dir of snapshots> go test -run TestSnapshotsFromARealRun ./...`.
+
+Still to verify once the platform provides egress: with the data server up,
+Panorama's freshness check compares the last bar with the calendar's
+previous trading day; an evening run after that day's bars are written must
+pass.
+
+Known limit: when every ETF feed fails, `refresh.sh` recomputes from its
+stored data and exits 0, so the ETF snapshot can carry an older `as_of`;
+its `summary.data_health` shows each source's last date.
+
 ## Next steps
 
 1. Fix the known method defects (unadjusted returns in Panorama, fail-open
    freshness gate, silently stale structure data in the margin scan, ETF
    forward-fill treated as zero flow, hard-coded reporting periods).
-2. Add `pipeline/mm_job.py`, the job entry the service calls, which runs each
-   job and writes its snapshot document; then the backend image (Go service,
-   Python venv and pipeline).
+2. Build the backend image (Go service, Python venv, pipeline) with
+   `/opt/daily-tasks` linked to `/data/work`.
 3. Build the dashboards on the shared React SDK (systemic-risk overview and
    margin scan first).

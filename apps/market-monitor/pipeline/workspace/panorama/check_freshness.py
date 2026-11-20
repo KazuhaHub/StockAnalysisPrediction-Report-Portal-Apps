@@ -50,14 +50,17 @@ def coverage(asof: str):
 
 if __name__ == "__main__":
     asof = asof_iso()
+    # Without the trading calendar freshness cannot be shown, so refuse to
+    # publish rather than risk a report that looks new but carries old bars.
+    # A deliberate backfill sets PANORAMA_ASOF, which skips this check.
     try:
         expect = last_trading_day()
     except SystemExit as e:
-        print("WARN %s" % e)
-        sys.exit(0)
-    except Exception as e:  # 服务不可达时不阻断，只告警
-        print("WARN 交易日历不可用（%s），跳过新鲜度校验" % type(e).__name__)
-        sys.exit(0)
+        print("STALE trading calendar unavailable (%s)" % e)
+        sys.exit(2)
+    except Exception as e:
+        print("STALE trading calendar unavailable (%s)" % type(e).__name__)
+        sys.exit(2)
     if asof != expect:
         print("STALE 行情库最后一根 K 线 %s，但最近交易日是 %s" % (asof, expect))
         sys.exit(2)

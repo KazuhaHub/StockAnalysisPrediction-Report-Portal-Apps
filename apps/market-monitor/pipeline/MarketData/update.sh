@@ -6,7 +6,7 @@
 #   2) 输出同时落 logs/update-YYYYMMDD.log，失败时能直接看原因；
 #   3) pending_add.txt 里的票（曾经在源端取不到）每次顺带重试，成功就自动移出。
 set -u
-PY=/opt/daily-tasks/venv/bin/python3
+PY="${PY:-/opt/daily-tasks/venv/bin/python3}"
 cd "${MD_HOME:-/opt/daily-tasks/MarketData}" || exit 1
 source ./locklib.sh          # 写锁：与补票入库互斥，见 locklib.sh 抬头
 mkdir -p logs
@@ -105,7 +105,11 @@ fi
   fi
 
   echo "== $(date '+%F %T') 结束（退出码 ${rc}）"
+  # The block runs in a pipeline subshell, so rc set here is lost outside it;
+  # carry it out as the subshell's exit status instead.
+  exit "${rc:-0}"
 } 2>&1 | tee -a "$LOG"
+rc=${PIPESTATUS[0]}
 
 # 退出码必须是 update/check 的，不是 tee 的：否则定时任务拿到的永远是 0。
 exit ${rc:-0}
