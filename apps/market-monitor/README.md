@@ -25,6 +25,10 @@ cd apps/market-monitor/frontend
 MM_SNAPSHOT_DIR=/path/to/snapshots npm run dev   # <dir>/<module>/<date>.json
 ```
 
+The preview reads plain JSON. Snapshots in `/data/snapshots/<module>/` are
+gzip files (`<date>.json.gz`, docs/store-v2.md), so copy them out and
+`gunzip` them first.
+
 Open `http://127.0.0.1:5173/`. `dev/host.html` is a stand-in host using the
 SDK's `createBridgeHost` in a sandboxed frame; `?path=/margin&dark=1&locale=en-US`
 picks the start state. `dev/mock-backend.mjs` answers the `/v1` routes like the
@@ -66,6 +70,7 @@ socket:
 | `GET /v1/{module}/summary?date=` | viewer | module summary |
 | `GET /v1/{module}/rows?date=&page=&size=&sort=&order=&q=&f.<field>=` | viewer | one page of rows (size ≤ 200) |
 | `GET /v1/{module}/rows/{code}?date=` | viewer | one row and its detail |
+| `GET /v1/{module}/history/dates`, `history`, `compare`, `streak`, `counts` | viewer | cross-day queries over the history files (margin, panorama, etf; 404 for risk and sentiment); one at a time, 4 s limit, bounds in [docs/store-v2.md](docs/store-v2.md) |
 
 **Schedule.** The platform cannot yet originate tasks for a managed backend
 (its `tasks/background` route is not reachable from a networkless container),
@@ -82,8 +87,16 @@ registration, boot and request URI, and refuse cookies and authorization
 headers. Responses stay under the relay's 1 MiB limit, which is why rows are
 paged. A task only queues a job: jobs (`marketdata`, `sentiment`, `panorama`,
 `etf`, `margin`) run one at a time inside the container with per-job time
-limits, and their snapshot outputs are validated and installed by the service.
-Storage layout and rules: [docs/storage.md](docs/storage.md).
+limits, and their snapshot and history outputs are validated and installed by
+the service. Storage layout and rules: [docs/storage.md](docs/storage.md) and
+[docs/store-v2.md](docs/store-v2.md) (the current format, `data_format: "2"`).
+
+**Disk.** A day's snapshots take about 4.4 MB gzipped and history 0.5 MB, so
+the data volume grows about 1.1 GB a year in snapshots (kept 365 days), 0.14
+GB a year in history (kept forever) and 0.3 GB a year in `work/`, on top of
+about 0.75 GB after seeding. Give the installation a **6 GiB** quota at
+install (the default 3 GiB is reached in about two years). The service logs a
+warning when `/data` use passes 80 % of its quota.
 
 The backend container has no network (Portal doc 174). The service starts the
 reviewed forward proxy's forwarder (`packages/proxy`, `egress.go`) on
@@ -108,16 +121,18 @@ The service runs `mm_job.py <job>`. It copies the pipeline code into
 clears locks a killed run may have left, starts the pipeline's data server
 (`stock_server`, loopback port 8091) for the jobs that need it, runs the
 pipeline's own script unchanged, and converts the output **this run wrote**
-into snapshot documents. Output older than the run is refused, so a pipeline
-that skips and exits 0 never republishes old data.
+into snapshot documents, plus a `<module>.history.parquet` of curated columns
+for margin, panorama and etf (pyarrow, explicit schema; the service refuses
+the whole run if one is missing or invalid). Output older than the run is
+refused, so a pipeline that skips and exits 0 never republishes old data.
 
 | Job | Pipeline script | Data server | Snapshots |
 | --- | --- | --- | --- |
 | `marketdata` | `MarketData/update.sh` | yes | none (updates the bar store) |
 | `sentiment` | `workspace/analysis/sentiment_daily.py` | no | `sentiment`, `risk` |
-| `panorama` | `workspace/panorama/daily_update.sh` | yes | `panorama` |
-| `etf` | `workspace/analysis/panel/refresh.sh` | no | `etf`, `risk` |
-| `margin` | `margin_scan/update.sh` | no | `margin`, `risk` |
+| `panorama` | `workspace/panorama/daily_update.sh` | yes | `panorama` (+ history) |
+| `etf` | `workspace/analysis/panel/refresh.sh` | no | `etf` (+ history), `risk` |
+| `margin` | `margin_scan/update.sh` | no | `margin` (+ history), `risk` |
 
 `risk` combines the readings of the margin, sentiment and ETF snapshots: the
 one being published and the others only once the service has installed them,
@@ -146,7 +161,11 @@ end offline; `panorama` refuses without the calendar and completes with
 `PANORAMA_ASOF`; the `margin` and `etf` conversions were checked on their
 last outputs; every snapshot installs in the Go store and the first page,
 the summary and every row detail stay under 1 MiB. To repeat the store check:
-`MM_SNAPSHOT_DIR=<dir of snapshots> go test -run TestSnapshotsFromARealRun ./...`.
+`MM_SNAPSHOT_DIR=<dir> go test -run TestSnapshotsFromARealRun ./...`, where
+`<dir>` holds `<module>.json` and, for margin, panorama and etf, the job's
+`<module>.history.parquet` (a staging directory of `mm_job.py`); snapshots
+copied out of `/data` are gzip files and must be gunzipped first (a module
+without a history file is then only checked as a snapshot).
 
 Still to verify once the platform provides egress: with the data server up,
 Panorama's freshness check compares the last bar with the calendar's

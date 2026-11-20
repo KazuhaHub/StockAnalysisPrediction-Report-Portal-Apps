@@ -52,6 +52,9 @@ func jobSpecs() []JobSpec {
 }
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == validateHistoryArg {
+		os.Exit(runValidateHistory(os.Args[2:], os.Stdin, os.Stdout, os.Stderr))
+	}
 	socket := env("PORTAL_APP_HTTP_SOCKET", defaultSocketPath)
 	dataDir := env("MM_DATA_DIR", defaultDataDir)
 	store := NewStore(dataDir)
@@ -59,6 +62,8 @@ func main() {
 	if err != nil {
 		os.Exit(6)
 	}
+	runner.afterRun = func() { warnIfQuotaNearlyUsed(dataDir) }
+	warnIfQuotaNearlyUsed(dataDir)
 
 	var boot [16]byte
 	if _, err := rand.Read(boot[:]); err != nil {

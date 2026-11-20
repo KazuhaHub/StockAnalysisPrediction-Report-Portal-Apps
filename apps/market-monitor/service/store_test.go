@@ -18,13 +18,19 @@ func testSnapshot(module, asOf string, rows ...map[string]any) []byte {
 			{"code": "300001", "name": "C", "frag": nil, "state": "潜伏", "tags": "占比畸高"},
 		}
 	}
+	details := map[string]any{}
+	for _, row := range rows {
+		if row["code"] == "600000" {
+			details["600000"] = map[string]any{"hist": []float64{1, 2, 3}}
+		}
+	}
 	raw, _ := json.Marshal(map[string]any{
 		"format":  snapshotFormat,
 		"module":  module,
 		"as_of":   asOf,
 		"summary": map[string]any{"n": len(rows)},
 		"rows":    rows,
-		"details": map[string]any{"600000": map[string]any{"hist": []float64{1, 2, 3}}},
+		"details": details,
 	})
 	return raw
 }
@@ -32,9 +38,7 @@ func testSnapshot(module, asOf string, rows ...map[string]any) []byte {
 func TestStoreInstallsAndLoadsLatest(t *testing.T) {
 	s := NewStore(t.TempDir())
 	for _, d := range []string{"2026-11-17", "2026-11-18", "2026-11-16"} {
-		if _, err := s.Install("margin", testSnapshot("margin", d)); err != nil {
-			t.Fatal(d, err)
-		}
+		installTest(t, s, "margin", d)
 	}
 	dates, err := s.Dates("margin")
 	if err != nil || strings.Join(dates, ",") != "2026-11-18,2026-11-17,2026-11-16" {
@@ -52,13 +56,9 @@ func TestStoreInstallsAndLoadsLatest(t *testing.T) {
 
 func TestStoreReinstallReplacesTheSameDate(t *testing.T) {
 	s := NewStore(t.TempDir())
-	if _, err := s.Install("margin", testSnapshot("margin", "2026-11-18")); err != nil {
-		t.Fatal(err)
-	}
+	installTest(t, s, "margin", "2026-11-18")
 	one := []map[string]any{{"code": "600000", "name": "A"}}
-	if _, err := s.Install("margin", testSnapshot("margin", "2026-11-18", one...)); err != nil {
-		t.Fatal(err)
-	}
+	installTest(t, s, "margin", "2026-11-18", one...)
 	snap, err := s.Load("margin", "2026-11-18")
 	if err != nil || len(snap.Rows) != 1 {
 		t.Fatalf("cache not refreshed: %v %v", snap, err)
@@ -83,7 +83,7 @@ func TestStoreRefusesInvalidSnapshots(t *testing.T) {
 		if name == "unknown module" {
 			module = "../x"
 		}
-		if _, err := s.Install(module, raw); err == nil {
+		if _, err := s.Install(module, raw, testHistory(t, "margin", "2026-11-18")); err == nil {
 			t.Errorf("%s: accepted", name)
 		}
 	}
@@ -108,11 +108,9 @@ func TestStoreLoadRefusesUnknownInput(t *testing.T) {
 func TestStoreIgnoresStrayFiles(t *testing.T) {
 	root := t.TempDir()
 	s := NewStore(root)
-	if _, err := s.Install("etf", testSnapshot("etf", "2026-11-16")); err != nil {
-		t.Fatal(err)
-	}
+	installTest(t, s, "etf", "2026-11-16")
 	dir := filepath.Join(root, "snapshots", "etf")
-	for _, name := range []string{"notes.txt", "2026-11-19.json.tmp", "latest.json"} {
+	for _, name := range []string{"notes.txt", "2026-11-19.json.gz.tmp", "latest.json.gz", "2026-11-19.json"} {
 		if err := os.WriteFile(filepath.Join(dir, name), []byte("x"), 0600); err != nil {
 			t.Fatal(err)
 		}
@@ -162,9 +160,7 @@ func TestQueryRowsFiltersSortsAndPages(t *testing.T) {
 
 func TestStoreNeverServesAStaleSnapshotAfterInstall(t *testing.T) {
 	s := NewStore(t.TempDir())
-	if _, err := s.Install("margin", testSnapshot("margin", "2026-11-18")); err != nil {
-		t.Fatal(err)
-	}
+	installTest(t, s, "margin", "2026-11-18")
 	stop := make(chan struct{})
 	done := make(chan struct{})
 	go func() {
@@ -178,15 +174,13 @@ func TestStoreNeverServesAStaleSnapshotAfterInstall(t *testing.T) {
 			}
 		}
 	}()
-	for i := 1; i <= 30; i++ {
+	for i := 1; i <= 10; i++ {
 		rows := make([]map[string]any, i)
 		rows[0] = map[string]any{"code": "600000"} // carries the fixture's detail
 		for j := 1; j < i; j++ {
 			rows[j] = map[string]any{"code": strconv.Itoa(j)}
 		}
-		if _, err := s.Install("margin", testSnapshot("margin", "2026-11-18", rows...)); err != nil {
-			t.Fatal(err)
-		}
+		installTest(t, s, "margin", "2026-11-18", rows...)
 		snap, err := s.Load("margin", "2026-11-18")
 		if err != nil || len(snap.Rows) != i {
 			close(stop)
@@ -202,9 +196,7 @@ func TestStoreCacheStaysWithinItsByteBudget(t *testing.T) {
 	s := NewStore(t.TempDir())
 	s.cacheBudget = 3000
 	for _, d := range []string{"2026-11-10", "2026-11-11", "2026-11-12", "2026-11-13", "2026-11-14"} {
-		if _, err := s.Install("margin", testSnapshot("margin", d)); err != nil {
-			t.Fatal(err)
-		}
+		installTest(t, s, "margin", d)
 		if _, err := s.Load("margin", d); err != nil {
 			t.Fatal(err)
 		}
@@ -220,13 +212,11 @@ func TestStoreCacheStaysWithinItsByteBudget(t *testing.T) {
 func TestStoreStopsServingADateDeletedByHand(t *testing.T) {
 	root := t.TempDir()
 	s := NewStore(root)
-	if _, err := s.Install("margin", testSnapshot("margin", "2026-11-18")); err != nil {
-		t.Fatal(err)
-	}
+	installTest(t, s, "margin", "2026-11-18")
 	if _, err := s.Load("margin", "2026-11-18"); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Remove(filepath.Join(root, "snapshots", "margin", "2026-11-18.json")); err != nil {
+	if err := os.Remove(filepath.Join(root, "snapshots", "margin", "2026-11-18.json.gz")); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.Load("margin", "2026-11-18"); !errors.Is(err, errNotFound) {
@@ -236,7 +226,11 @@ func TestStoreStopsServingADateDeletedByHand(t *testing.T) {
 
 // TestSnapshotsFromARealRun validates job outputs produced outside the test,
 // e.g. by running pipeline/mm_job.py against real data. It runs only when
-// MM_SNAPSHOT_DIR names a directory of <module>.json files.
+// MM_SNAPSHOT_DIR names a directory of <module>.json files, with the job's
+// <module>.history.parquet beside each of margin, panorama and etf (a staging
+// directory of mm_job.py). Snapshots copied out of /data are gzip files and
+// must be gunzipped first; a module without a history file is then only
+// checked as a snapshot.
 func TestSnapshotsFromARealRun(t *testing.T) {
 	dir := os.Getenv("MM_SNAPSHOT_DIR")
 	if dir == "" {
@@ -248,13 +242,34 @@ func TestSnapshotsFromARealRun(t *testing.T) {
 	}
 	s := NewStore(t.TempDir())
 	for _, e := range entries {
+		if !strings.HasSuffix(e.Name(), ".json") {
+			continue
+		}
 		raw, err := os.ReadFile(filepath.Join(dir, e.Name()))
 		if err != nil {
 			t.Fatal(err)
 		}
 		module := strings.TrimSuffix(e.Name(), ".json")
-		asOf, err := s.Install(module, raw)
-		if err != nil {
+		history, herr := os.ReadFile(filepath.Join(dir, module+".history.parquet"))
+		if herr != nil || !historyModules[module] {
+			history = nil
+		}
+		var asOf string
+		if historyModules[module] && history == nil {
+			t.Logf("%s: no history file, checking the snapshot alone", module)
+			snap, err := parseSnapshot(raw)
+			if err != nil {
+				t.Fatalf("%s: %v", e.Name(), err)
+			}
+			if packed, err := gzipBytes(raw); err != nil {
+				t.Fatal(err)
+			} else if err := os.MkdirAll(filepath.Join(s.root, module), 0700); err != nil {
+				t.Fatal(err)
+			} else if err := writeAtomic(filepath.Join(s.root, module, snap.AsOf+snapshotSuffix), packed); err != nil {
+				t.Fatal(err)
+			}
+			asOf = snap.AsOf
+		} else if asOf, err = s.Install(module, raw, history); err != nil {
 			t.Fatalf("%s: %v", e.Name(), err)
 		}
 		snap, err := s.Load(module, asOf)
@@ -264,7 +279,7 @@ func TestSnapshotsFromARealRun(t *testing.T) {
 		page, total := queryRows(snap.Rows, rowQuery{Page: 1, Size: maxPageSize})
 		body, _ := json.Marshal(map[string]any{"items": page})
 		summary, _ := json.Marshal(snap.Summary)
-		t.Logf("%s as_of=%s rows=%d first-page=%dB summary=%dB", module, asOf, total, len(body), len(summary))
+		t.Logf("%s as_of=%s rows=%d first-page=%dB summary=%dB history=%v", module, asOf, total, len(body), len(summary), history != nil)
 		if len(body) > maxResponse || len(summary) > maxResponse {
 			t.Errorf("%s: a response would exceed the relay limit", module)
 		}

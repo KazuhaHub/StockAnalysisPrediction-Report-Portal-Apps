@@ -52,6 +52,15 @@ type testEnv struct {
 
 func newTestEnv(t *testing.T) testEnv {
 	t.Helper()
+	e := newBareEnv(t)
+	installTest(t, e.srv.store, "margin", "2026-11-18")
+	installTest(t, e.srv.store, "margin", "2026-11-17")
+	return e
+}
+
+// newBareEnv is a server over an empty store.
+func newBareEnv(t *testing.T) testEnv {
+	t.Helper()
 	root := t.TempDir()
 	reg := testRegistration()
 	raw, err := json.Marshal(reg)
@@ -64,12 +73,6 @@ func newTestEnv(t *testing.T) testEnv {
 	}
 	data := filepath.Join(root, "data")
 	store := NewStore(data)
-	if _, err := store.Install("margin", testSnapshot("margin", "2026-11-18")); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := store.Install("margin", testSnapshot("margin", "2026-11-17")); err != nil {
-		t.Fatal(err)
-	}
 	runner, err := NewRunner(data, []JobSpec{{Name: "margin", Command: []string{"/bin/true"}, Timeout: time.Second}}, store)
 	if err != nil {
 		t.Fatal(err)
@@ -265,9 +268,7 @@ func TestRowDetail(t *testing.T) {
 func TestResponsesStayWithinTheRelayLimit(t *testing.T) {
 	e := newTestEnv(t)
 	big := map[string]any{"code": "600000", "blob": strings.Repeat("x", maxResponse)}
-	if _, err := e.srv.store.Install("etf", testSnapshot("etf", "2026-11-18", big)); err != nil {
-		t.Fatal(err)
-	}
+	installTest(t, e.srv.store, "etf", "2026-11-18", big)
 	if rec := e.get(t, "/v1/etf/rows/600000", true); rec.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("oversized response: %d", rec.Code)
 	}

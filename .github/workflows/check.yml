@@ -16,7 +16,7 @@ jobs:
       - run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
   licence:
     # The licence gate of the platform policy (Portal doc 167 section 8): the production npm graph of every
-    # first-party workspace and the Go modules linked into the status and scheduled-digest services, judged against
+    # first-party workspace and the Go modules linked into the status, scheduled-digest and market-monitor services, judged against
     # scripts/licence-policy.json. A denied, unknown or missing licence fails the run. The evaluator and the
     # allow and deny lists are copies of the Portal's; scripts/licence_scan.py says so, keep them in sync.
     # apps/status/tests (the browser acceptance harness) is not shipped and is not scanned. The protocol
@@ -70,6 +70,17 @@ jobs:
               app -licenses -assert-licenses -json -main . \
               -output "$RUNNER_TEMP/digest-go-$goos-$goarch.cdx.json" .
           done
+      - name: Go SBOMs (market-monitor service, the linux target of its container image)
+        # The image is linux/amd64 only (app.v2.json). The service's third-party modules are the parquet reader
+        # and its dependencies; its two local modules are judged as components of it, like scheduled-digest's.
+        working-directory: apps/market-monitor/service
+        run: |
+          for target in linux/amd64; do
+            IFS=/ read -r goos goarch <<< "$target"
+            CGO_ENABLED=0 GOOS="$goos" GOARCH="$goarch" "$RUNNER_TEMP/bin/cyclonedx-gomod" \
+              app -licenses -assert-licenses -json -main . \
+              -output "$RUNNER_TEMP/mm-go-$goos-$goarch.cdx.json" .
+          done
       - name: Evaluator and policy match the Portal copy
         # The evaluator and the shared policy sections are copies of the Portal's; this fails when they drift
         # from the Portal commit pinned in scripts/licence-scan.pin.
@@ -83,7 +94,7 @@ jobs:
           python3 -I scripts/licence_scan.py --policy scripts/licence-policy.json
           --go-mod-cache "$(go env GOMODCACHE)" --node-modules node_modules --workspace-root .
           --report "$RUNNER_TEMP/licence-report.json"
-          "$RUNNER_TEMP/npm.cdx.json" "$RUNNER_TEMP"/status-go-*.cdx.json "$RUNNER_TEMP"/digest-go-*.cdx.json
+          "$RUNNER_TEMP/npm.cdx.json" "$RUNNER_TEMP"/status-go-*.cdx.json "$RUNNER_TEMP"/digest-go-*.cdx.json "$RUNNER_TEMP"/mm-go-*.cdx.json
       - name: Keep the SBOMs and the report
         if: always()
         uses: actions/upload-artifact@v4
@@ -93,6 +104,7 @@ jobs:
             ${{ runner.temp }}/npm.cdx.json
             ${{ runner.temp }}/status-go-*.cdx.json
             ${{ runner.temp }}/digest-go-*.cdx.json
+            ${{ runner.temp }}/mm-go-*.cdx.json
             ${{ runner.temp }}/licence-report.json
           retention-days: 30
   frontend-standard:
@@ -226,6 +238,9 @@ jobs:
         with:
           go-version-file: apps/market-monitor/service/go.mod
           cache: false
+      # The service's third-party modules (go.sum pins them); download first so a
+      # registry failure is reported as that, not as a vet or test failure.
+      - run: go mod download
       - run: go vet ./...
       - run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
       - run: go test -race ./...
@@ -243,6 +258,37 @@ jobs:
           # The hand-curated reference tables must survive .dockerignore.
           docker run --rm --network none --entrypoint /bin/sh market-monitor-development -c \
             'for f in workspace/analysis/panel/feed/universe.csv workspace/panorama/data/code_name.csv workspace/panorama/data/div_seed.csv; do test -s "/app/pipeline/$f" || { echo "missing $f"; exit 1; }; done'
+          # History files written by the image's pyarrow as the container user, read by the Go reader.
+          mkdir -m 777 "$RUNNER_TEMP/mm-history"
+          docker run --rm --user 65532:65532 --read-only --network none --cap-drop ALL \
+            --tmpfs /tmp:rw,nosuid,nodev,noexec,size=16777216 \
+            -v "$GITHUB_WORKSPACE/apps/market-monitor/service/testdata:/testdata:ro" -v "$RUNNER_TEMP/mm-history:/out" \
+            --entrypoint /app/venv/bin/python market-monitor-development /testdata/make_history.py /out
+          # The shipped binary's own validator (the one install runs in a child process) accepts them
+          # under the same restrictions, with its memory cap in force.
+          for module in margin panorama etf; do
+            docker run --rm -i --user 65532:65532 --read-only --network none --cap-drop ALL \
+              --tmpfs /tmp:rw,nosuid,nodev,noexec,size=16777216 \
+              --entrypoint /app/market-monitor market-monitor-development validate-history "$module" 2026-11-16 \
+              < "$RUNNER_TEMP/mm-history/$module.history.parquet"
+          done
+          # The crafted files (single-byte corruptions of real ones) must be refused by the shipped static
+          # binary under its address-space cap: the codec bomb by the codec check, the page-header one by
+          # running out of memory in the capped child.
+          # Each must fail for its own reason (1: refused file, 2: out of memory under the cap); any other
+          # status, e.g. 3 when the cap could not be set, fails the step.
+          for crafted in lz4-bomb-margin:margin:1 page-header-etf:etf:2; do
+            IFS=: read -r file module want <<< "$crafted"
+            status=0
+            docker run --rm -i --user 65532:65532 --read-only --network none --cap-drop ALL \
+              --tmpfs /tmp:rw,nosuid,nodev,noexec,size=16777216 \
+              --entrypoint /app/market-monitor market-monitor-development validate-history "$module" 2026-11-16 \
+              < "apps/market-monitor/service/testdata/crafted/$file.parquet" > /dev/null 2>&1 || status=$?
+            if [ "$status" != "$want" ]; then
+              echo "crafted file $file: exit $status, want $want"; exit 1
+            fi
+          done
+          (cd apps/market-monitor/service && MM_IMAGE_HISTORY_DIR="$RUNNER_TEMP/mm-history" go test -count=1 -run TestHistoryFilesFromTheImage -v .)
           size=$(docker save market-monitor-development | gzip -1 | wc -c)
           echo "compressed image: $((size / 1048576)) MiB (package limit 384 MiB)"
           test "$size" -lt $((350 * 1048576))
@@ -257,10 +303,15 @@ jobs:
         with:
           python-version: '3.11'  # the backend image's interpreter
       # requests lets the Panorama freshness test run; tests needing the
-      # rest of the pipeline's dependencies skip themselves here.
-      - run: python3 -m pip install 'requests>=2.31,<3'
+      # rest of the pipeline's dependencies skip themselves here. pyarrow is
+      # the image's exact version (pipeline/requirements.lock) and the history
+      # tests must run: MM_REQUIRE_PYARROW makes the test module fail instead
+      # of skipping them when it cannot be imported.
+      - run: python3 -m pip install 'requests>=2.31,<3' pyarrow==21.0.0
         working-directory: .
       - run: python3 tests/test_mm_job.py
+        env:
+          MM_REQUIRE_PYARROW: '1'
       - run: python3 tests/test_pipeline_scripts.py
   status:
     runs-on: ubuntu-latest

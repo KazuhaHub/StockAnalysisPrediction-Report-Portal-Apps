@@ -17,7 +17,11 @@ FROM golang:1.26.11-bookworm@sha256:dc40a13b61304647ed7e5d581d246b86413dfc29d63c
 WORKDIR /src/apps/market-monitor/service
 COPY packages/extensionprotocol /src/packages/extensionprotocol
 COPY packages/proxy /src/packages/proxy
-COPY apps/market-monitor/service/go.mod ./
+COPY apps/market-monitor/service/go.mod apps/market-monitor/service/go.sum ./
+# The first third-party modules of the service (the parquet reader and its
+# dependencies). Downloaded in their own layer, keyed by go.mod and go.sum, so
+# a source change does not download them again; go.sum pins every hash.
+RUN go mod download
 COPY apps/market-monitor/service/*.go ./
 RUN rm -f *_test.go && CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o /out/market-monitor .
 

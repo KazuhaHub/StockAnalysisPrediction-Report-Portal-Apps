@@ -22,6 +22,14 @@ func fakeJob(t *testing.T, dir, name, snapshot string, exit int) JobSpec {
 	body := "#!/bin/sh\necho running " + name + "\n"
 	if snapshot != "" {
 		body += "cp '" + src + "' \"$MM_OUTPUT_DIR/" + name + ".json\"\n"
+		// Margin, panorama and etf jobs also write their history file.
+		if parsed, err := parseSnapshot([]byte(snapshot)); err == nil && historyModules[name] {
+			hist := filepath.Join(dir, name+".history.parquet")
+			if err := os.WriteFile(hist, historyFile(t, histSpec{module: name, asOf: parsed.AsOf, rows: parsed.Rows}), 0600); err != nil {
+				t.Fatal(err)
+			}
+			body += "cp '" + hist + "' \"$MM_OUTPUT_DIR/" + name + ".history.parquet\"\n"
+		}
 	}
 	body += "exit " + strconv.Itoa(exit) + "\n"
 	return scriptJob(t, dir, name, body, 10*time.Second)
@@ -228,7 +236,12 @@ func TestRunnerSucceedsAndKillsALeftoverChild(t *testing.T) {
 	}
 	// The child keeps the inherited stdout open, which used to make Wait
 	// report an I/O error and fail a job that had exited 0.
+	hist := filepath.Join(scripts, "snap.history.parquet")
+	if err := os.WriteFile(hist, testHistory(t, "margin", "2026-11-18"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	spec := scriptJob(t, scripts, "margin", "#!/bin/sh\ncp '"+src+"' \"$MM_OUTPUT_DIR/margin.json\"\n"+
+		"cp '"+hist+"' \"$MM_OUTPUT_DIR/margin.history.parquet\"\n"+
 		"sleep 30 &\necho $! > '"+pidFile+"'\nexit 0\n", 20*time.Second)
 	r, _ := NewRunner(data, []JobSpec{spec}, NewStore(data))
 	stop := r.Start()

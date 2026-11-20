@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -20,8 +21,9 @@ import (
 // A platform background task only triggers a job; the job itself can run for
 // far longer than the task request may, so the runner executes it inside the
 // container, one at a time in submission order, and records its progress.
-// Jobs write snapshot JSON into MM_OUTPUT_DIR; the runner validates and
-// installs them, so the Go service stays the only writer of snapshots.
+// Jobs write snapshot JSON and history parquet files into MM_OUTPUT_DIR; the
+// runner validates and installs them, so the Go service stays the only writer
+// of snapshots and history.
 //
 // Jobs are idempotent per as-of date (a re-run replaces that date's
 // snapshot), so a run cut short by a restart is queued again. Only runs that
@@ -87,6 +89,8 @@ type Runner struct {
 	specs   map[string]JobSpec
 	store   *Store
 	now     func() time.Time
+	// afterRun, when set, is called after every finished run (the quota check).
+	afterRun func()
 
 	mu    sync.Mutex
 	runs  []Run // newest first
@@ -326,6 +330,9 @@ func (r *Runner) execute(ctx context.Context, id string) {
 		r.update(id, func(run *Run) {
 			run.Status, run.ExitCode, run.Error, run.Installed, run.FinishedAt = status, code, errCode, installed, r.stamp()
 		})
+		if r.afterRun != nil {
+			r.afterRun()
+		}
 	}
 	if logErr != nil {
 		finish("failed", -1, "log_unavailable", nil)
@@ -387,56 +394,112 @@ func (r *Runner) execute(ctx context.Context, id string) {
 		finish("failed", cmd.ProcessState.ExitCode(), "exit_status", nil)
 		return
 	}
-	installed, err := r.installOutputs(staging)
+	installed, err := r.installOutputs(staging, note)
 	if err != nil {
 		note("outputs: %v", err)
-		finish("failed", 0, "output_invalid", installed)
+		code := "output_invalid"
+		if errors.Is(err, errValidatorUnavailable) {
+			// Not the job's fault: the history validator could not run.
+			note("history validator unavailable: the output was not judged; this is a service or host problem")
+			code = "validator_unavailable"
+		}
+		finish("failed", 0, code, installed)
 		return
 	}
 	finish("succeeded", 0, "", installed)
 }
 
-// installOutputs validates every <module>.json in the staging directory
-// before installing any. Installation itself is one module at a time; if a
-// later install fails, the modules already installed are reported.
-func (r *Runner) installOutputs(staging string) ([]string, error) {
+// installOutputs validates every output in the staging directory before
+// installing any: a <module>.json snapshot, and for margin, panorama and etf
+// also its <module>.history.parquet, which must be present and valid, so a
+// missing or broken history file fails the whole run. Installation itself is
+// one module at a time, history first and snapshot second; if a later install
+// fails, the modules already installed are reported. Retention runs only
+// after every install succeeded.
+func (r *Runner) installOutputs(staging string, note func(string, ...any)) ([]string, error) {
 	entries, err := os.ReadDir(staging)
 	if err != nil {
 		return nil, err
 	}
-	type output struct {
-		module string
-		raw    []byte
-	}
-	var outputs []output
+	snapshots, histories := map[string]string{}, map[string]string{}
 	for _, e := range entries {
 		name := e.Name()
-		if !e.Type().IsRegular() || !strings.HasSuffix(name, ".json") {
+		if !e.Type().IsRegular() {
 			return nil, fmt.Errorf("unexpected output %q", name)
 		}
-		module := strings.TrimSuffix(name, ".json")
-		raw, err := os.ReadFile(filepath.Join(staging, name))
+		switch {
+		case strings.HasSuffix(name, historyOutputSuffix) && historyModules[strings.TrimSuffix(name, historyOutputSuffix)]:
+			histories[strings.TrimSuffix(name, historyOutputSuffix)] = name
+		case strings.HasSuffix(name, ".json"):
+			snapshots[strings.TrimSuffix(name, ".json")] = name
+		default:
+			return nil, fmt.Errorf("unexpected output %q", name)
+		}
+	}
+	for module := range histories {
+		if _, ok := snapshots[module]; !ok {
+			return nil, fmt.Errorf("history output for %s has no snapshot", module)
+		}
+	}
+	names := make([]string, 0, len(snapshots))
+	for module := range snapshots {
+		names = append(names, module)
+	}
+	sort.Strings(names)
+	var outputs []*prepared
+	for _, module := range names {
+		raw, err := os.ReadFile(filepath.Join(staging, snapshots[module]))
 		if err != nil {
 			return nil, err
 		}
-		snap, err := parseSnapshot(raw)
+		var history []byte
+		if name, ok := histories[module]; ok {
+			if history, err = readHistoryOutput(filepath.Join(staging, name)); err != nil {
+				return nil, fmt.Errorf("output %s: %w", name, err)
+			}
+		}
+		p, err := r.store.Prepare(module, raw, history)
 		if err != nil {
-			return nil, fmt.Errorf("output %s: %v", name, err)
+			return nil, fmt.Errorf("output %s: %w", snapshots[module], err)
 		}
-		if snap.Module != module {
-			return nil, fmt.Errorf("output %s declares module %q", name, snap.Module)
-		}
-		outputs = append(outputs, output{module, raw})
+		outputs = append(outputs, p)
 	}
 	installed := []string{}
-	for _, o := range outputs {
-		asOf, err := r.store.Install(o.module, o.raw)
-		if err != nil {
+	protected := map[string]map[string]bool{}
+	for _, p := range outputs {
+		if err := r.store.Commit(p); err != nil {
 			sort.Strings(installed)
-			return installed, fmt.Errorf("install %s: %v", o.module, err)
+			return installed, fmt.Errorf("install %s: %v", p.module, err)
 		}
-		installed = append(installed, o.module+"/"+asOf)
+		installed = append(installed, p.module+"/"+p.asOf)
+		if protected[p.module] == nil {
+			protected[p.module] = map[string]bool{}
+		}
+		protected[p.module][p.asOf] = true
 	}
 	sort.Strings(installed)
+	if removed := r.store.Retain(protected); len(removed) > 0 {
+		note("retention removed snapshots %s", strings.Join(removed, ", "))
+	}
 	return installed, nil
+}
+
+const historyOutputSuffix = ".history.parquet"
+
+// readHistoryOutput reads a history file, refusing one over the size limit
+// before it is held in memory.
+func readHistoryOutput(path string) ([]byte, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	raw, err := io.ReadAll(io.LimitReader(f, maxHistoryBytes+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(raw) == 0 || len(raw) > maxHistoryBytes {
+		return nil, fmt.Errorf("%w: history size", errInvalid)
+	}
+	return raw, nil
 }

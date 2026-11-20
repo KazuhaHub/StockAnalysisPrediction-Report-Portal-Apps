@@ -19,6 +19,8 @@ import (
 //	/v1/{module}/summary?date=       module summary without the row table
 //	/v1/{module}/rows?date=&page=&size=&sort=&order=&q=&f.<field>=
 //	/v1/{module}/rows/{code}?date=   one row and its detail
+//	/v1/{module}/history/dates, history, compare, streak, counts
+//	                                 cross-day queries (history_api.go)
 //
 // The platform relay accepts response bodies up to 1 MiB, so the row table is
 // only ever returned a page at a time.
@@ -50,7 +52,7 @@ func (s *server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, "refused")
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"protocol": "portal.backend/1", "ready": true, "data_format": "1"})
+		writeJSON(w, http.StatusOK, map[string]any{"protocol": "portal.backend/1", "ready": true, "data_format": "2"})
 	case r.Method == http.MethodPost && r.URL.Path == "/v1/handshake":
 		s.handshake(w, r)
 	case r.Method == http.MethodPost && r.URL.Path == "/v1/tasks/run":
@@ -161,6 +163,11 @@ func (s *server) read(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	module, query := parts[0], r.URL.Query()
+	switch parts[1] {
+	case "history", "compare", "streak", "counts":
+		s.history(w, r, module, parts, query)
+		return
+	}
 	date := query.Get("date")
 	if date != "" && !validDate(date) {
 		writeError(w, http.StatusBadRequest, "bad_request")
