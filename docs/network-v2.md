@@ -122,7 +122,7 @@ const result = await targets.request([
   {
     id: 'status',
     origin: 'https://status.example.com',
-    paths: ['/api/*'],
+    paths: ['/api'],
     methods: ['GET'],
     network: 'public',
   },
@@ -139,15 +139,18 @@ The server decides every value. The request cannot carry shared bounds.
   revision changed, so Portal relaunches the frame right after this answer; do not
   expect to keep running. `policyRevision` is the new revision.
 * `declined`: the administrator cancelled, the review was refused, or the request
-  came while another dialog was open or within 10 seconds of a decline. Do not
-  ask again in a loop.
+  came while another dialog was open or within the back-off after a refusal. The
+  back-off is kept per installation, not per page load, so reloading does not
+  reset it; it starts at 10 seconds and doubles with repeated refusals, up to five
+  minutes. Do not ask again in a loop.
 * `not_permitted`: the viewer is not an administrator, or the host cannot review.
   Nothing was fetched. Show a message that an administrator must allow the
   destination.
 
-The confirmation dialog is Portal's and is built only from the server's own diff
-of the plan, never from text in the request: the app cannot name, describe or
-dress up what the administrator sees. Private networks and plain HTTP are marked
+The confirmation dialog is Portal's and shows the server's own diff of the plan.
+It says the request comes from your app, by the app's name from its launch
+metadata, and labels each target id as app-chosen, because the ids are the one
+thing you choose. You cannot add text, a description or a reason to it. Private networks and plain HTTP are marked
 prominently, and credential bindings that the change would pause are listed.
 `request` rejects with `invalid_request` for a malformed list, `unsupported`
 without a `network.http` grant, `busy` while one request is open and `not_ready`
