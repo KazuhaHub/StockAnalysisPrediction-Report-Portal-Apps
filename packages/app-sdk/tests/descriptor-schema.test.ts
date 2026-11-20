@@ -173,3 +173,21 @@ test("decoded integer validation does not authorize decimal byte lexemes", () =>
   expect(validate(JSON.parse(text))).toBe(true);
   expect(() => parseDescriptor(new TextEncoder().encode(text))).toThrow();
 });
+
+test("network.proxy and the network_proxy host suggestions are accepted", () => {
+  const value = fixture(true);
+  value.capabilities = {
+    required: ["background.run"],
+    optional: ["network.proxy"],
+  };
+  value.network_proxy = { hosts: ["*.eastmoney.com", "qt.gtimg.cn"] };
+  expect(validate(value), JSON.stringify(validate.errors)).toBe(true);
+  expect(parseDescriptor(encoded(value)).network_proxy?.hosts).toEqual([
+    "*.eastmoney.com",
+    "qt.gtimg.cn",
+  ]);
+  value.network_proxy = { hosts: [] };
+  expect(validate(value)).toBe(false);
+  value.network_proxy = { hosts: ["a.example.com"], extra: 1 };
+  expect(validate(value)).toBe(false);
+});

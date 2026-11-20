@@ -31,6 +31,30 @@ Never use the return value as proof that code can run, that a capability was
 granted or that a descriptor has a valid signature. The host binds signatures and
 review identity to the original bytes, not a reserialized JavaScript object.
 
+## Forward proxy declaration
+
+A backend that needs ordinary HTTPS egress (a third-party library that speaks to
+many hosts, for example) declares the optional `network.proxy` capability, which
+also needs a backend and `background.run`. `network_proxy.hosts` may suggest the
+hosts it expects to reach:
+
+```json
+"capabilities": { "required": ["background.run"], "optional": ["network.proxy"] },
+"network_proxy": { "hosts": ["*.eastmoney.com", "*.push2.eastmoney.com", "qt.gtimg.cn"] }
+```
+
+- Entries are sorted, unique and at most 64: an exact lower-case host, or `*.`
+  and a base that is a registrable domain or deeper. A wildcard matches exactly
+  one label in front of its base: `*.eastmoney.com` matches `push2.eastmoney.com`
+  but not `82.push2.eastmoney.com`, which needs `*.push2.eastmoney.com`, and it
+  does not match `eastmoney.com`. The port is always 443.
+- The list is a suggestion only. The capability is off at install and authority
+  comes from the administrator's review of the hosts; without it every tunnel is
+  refused. Declaring a host never grants it.
+
+See [Outbound HTTPS from a backend](backend-v2.md#outbound-https-from-a-backend)
+for the code side.
+
 ## Shared corpus and semantics
 
 Portal's Go parser and this parser share a 44-case byte corpus. Both tests pin its

@@ -77,7 +77,20 @@
   },
   "capabilities": {
     "required": ["background.run", "tasks.schedule"],
-    "optional": []
+    "optional": ["network.proxy"]
+  },
+  "network_proxy": {
+    "hosts": [
+      "*.eastmoney.com",
+      "*.push2.eastmoney.com",
+      "api.fund.eastmoney.com",
+      "finance.sina.com.cn",
+      "qt.gtimg.cn",
+      "query.sse.com.cn",
+      "vip.stock.finance.sina.com.cn",
+      "web.ifzq.gtimg.cn",
+      "www.szse.cn"
+    ]
   },
   "data": {
     "schema": 1,

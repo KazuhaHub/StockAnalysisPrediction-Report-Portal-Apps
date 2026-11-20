@@ -12,7 +12,7 @@ import urllib.request
 
 import pandas as pd
 
-BASE = "http://qt.gtimg.cn/q="
+BASE = "https://qt.gtimg.cn/q="
 UA = {"User-Agent": "Mozilla/5.0"}
 
 
