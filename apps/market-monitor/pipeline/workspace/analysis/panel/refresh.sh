@@ -4,7 +4,7 @@
 #        ./refresh.sh --full   全量回补（首次或补历史）
 set -u
 cd "$(dirname "$0")" || exit 1
-PY=/opt/daily-tasks/venv/bin/python3
+PY="${PY:-/opt/daily-tasks/venv/bin/python3}"
 FULL=0
 [ "${1:-}" = "--full" ] && FULL=1
 
@@ -42,6 +42,9 @@ $PY -u quotes.py || echo "（行情抓取失败，用收盘价回退）"
 step "8/9 指标"
 $PY -W ignore metrics.py || { echo "指标计算失败，中止"; exit 1; }
 
+# MM_NO_HTML (set by the market-monitor app): metrics.json is the output;
+# the page, its inlining and the page-vs-metrics self-check are skipped.
+if [ "${MM_NO_HTML:-}" != "1" ]; then
 step "9/9 渲染 + 内联"
 $PY -W ignore build.py || exit 1
 $PY "$HOME/.workbuddy/skills/html-report/scripts/build_report.py" \
@@ -49,5 +52,8 @@ $PY "$HOME/.workbuddy/skills/html-report/scripts/build_report.py" \
 
 step "自检：页面与指标一致性"
 $PY selfcheck.py --quiet || echo "（自检有失败项，见上）"
+else
+step "9/9 渲染：skipped (MM_NO_HTML)"
+fi
 
 echo "✓ 完成 $(date '+%Y-%m-%d %H:%M:%S')"

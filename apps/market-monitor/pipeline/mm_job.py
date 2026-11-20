@@ -116,6 +116,11 @@ def clear_stale_locks(work):
 def job_env(work):
     env = dict(os.environ)
     env["STOCK_SERVER_URL"] = "http://127.0.0.1:%d/mcp" % server_port()
+    # The pipeline's own HTML pages are not used (the app has its own
+    # frontend) and need vendored JS the app does not ship.
+    env["MM_NO_HTML"] = "1"
+    # Trading days follow Beijing time; the scripts use local dates.
+    env.setdefault("TZ", "Asia/Shanghai")
     env.update({
         "HOME": work, "APP_HOME": work,
         "MD_HOME": os.path.join(work, "MarketData"),

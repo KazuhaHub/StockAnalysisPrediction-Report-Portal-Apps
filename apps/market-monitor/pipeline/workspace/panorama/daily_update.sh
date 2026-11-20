@@ -6,7 +6,7 @@
 set -euo pipefail
 
 cd "$(dirname "$0")"
-PY=/opt/daily-tasks/venv/bin/python3
+PY="${PY:-/opt/daily-tasks/venv/bin/python3}"
 OUT="out"
 mkdir -p "$OUT" shots
 
@@ -71,10 +71,15 @@ run export     $PY export_site.py
 # ---------- 2 构建 ----------
 TAG=${ASOF//-/}
 TARGET="$OUT/Panorama_${TAG}.html"
+# MM_NO_HTML (set by the market-monitor app): data only, skip the HTML page.
+if [ "${MM_NO_HTML:-}" != "1" ]; then
 echo "[$(ts)] build → $TARGET"
 "$PY" "$HOME/.workbuddy/skills/html-report/scripts/build_report.py" site/index.src.html "$TARGET" > "$OUT/last_build.log" 2>&1 \
   || { echo "❌ 构建失败"; tail -20 "$OUT/last_build.log"; exit 4; }
 cp -f "$TARGET" "Panorama_全策略选股与十法估值.html"
+else
+echo "[$(ts)] build skipped (MM_NO_HTML)"
+fi
 
 # ---------- 3 摘要 ----------
 $PY summary.py

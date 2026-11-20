@@ -17,7 +17,7 @@ export HOME="${HOME:-/opt/daily-tasks}"
 export LANG="${LANG:-zh_CN.UTF-8}"
 export LC_ALL="${LC_ALL:-zh_CN.UTF-8}"
 
-PY=/opt/daily-tasks/venv/bin/python3
+PY="${PY:-/opt/daily-tasks/venv/bin/python3}"
 BUILD="$HOME/.workbuddy/skills/html-report/scripts/build_report.py"
 OUT="融资盘与持仓结构扫描.html"
 LOG="logs/$(date +%Y-%m-%d).log"
@@ -64,7 +64,12 @@ echo "== 4/5 同步 payload =="
 cp out/payload.js src/
 
 echo "== 5/5 构建单文件 HTML =="
-$PY "$BUILD" src/index.html "$OUT" 2>&1 | tail -4
+# MM_NO_HTML (set by the market-monitor app): data only, skip the HTML page.
+if [ "${MM_NO_HTML:-}" != "1" ]; then
+  $PY "$BUILD" src/index.html "$OUT" 2>&1 | tail -4
+else
+  echo "skipped (MM_NO_HTML)"
+fi
 
 SIZE=$($PY -c "import os;print('%.1fMB'%(os.path.getsize(r'''$OUT''')/1048576))" 2>/dev/null || echo "?")
 BASEDATE=$($PY -c "import json;print(json.load(open('out/payload.json'))['meta']['as_of'])" 2>/dev/null || echo "?")

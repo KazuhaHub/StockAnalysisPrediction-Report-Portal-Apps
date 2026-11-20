@@ -1,0 +1,21 @@
+# Build context is the repository root for every app image.
+**/__pycache__
+**/*.pyc
+**/node_modules
+.git
+.development
+
+# market-monitor: only the pipeline's runtime code goes into the image.
+apps/market-monitor/pipeline/tests
+apps/market-monitor/pipeline/systemd
+apps/market-monitor/pipeline/config
+apps/market-monitor/pipeline/install.sh
+apps/market-monitor/pipeline/uninstall.sh
+apps/market-monitor/pipeline/**/logs
+apps/market-monitor/pipeline/**/out
+apps/market-monitor/pipeline/**/data
+apps/market-monitor/pipeline/**/*.parquet
+apps/market-monitor/pipeline/**/*.db
+apps/market-monitor/pipeline/**/.env
+apps/market-monitor/pipeline/**/*.key
+apps/market-monitor/pipeline/**/*.pem
