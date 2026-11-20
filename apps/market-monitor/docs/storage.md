@@ -1,8 +1,16 @@
 # market-monitor storage
 
+**Current format: [store-v2.md](store-v2.md) (`data_format: "2"`).** It is the
+one source of truth for what is on disk and how it is read: gzip snapshots,
+parquet history files, retention, the cross-day routes and the quota. This
+file keeps what v2 does not change (the document model, the install rules,
+runs, restore and deletion). Where it differs from store-v2.md, store-v2.md
+wins; the superseded v1 parts are marked below.
+
 Approved by the owner on 2026-11-19: one snapshot file per module per as-of
 date, history kept; viewer reads are split by module into summary, paged rows
-and single-row detail.
+and single-row detail. Amended before any installation existed by store-v2.md
+(no data migration).
 
 Everything lives in the installation's `/data` mount. The Go service is the
 only writer of `snapshots/` and `runs/`; Python jobs write only to their own
@@ -10,7 +18,8 @@ staging directory and to the pipeline's work directory.
 
 ```
 /data
-├── snapshots/<module>/<YYYY-MM-DD>.json   one document per module and as-of date
+├── snapshots/<module>/<YYYY-MM-DD>.json.gz  one gzip document per module and as-of date (v2; v1 was plain .json); kept 365 days
+├── history/<module>/<YYYY-MM-DD>.parquet    margin, panorama, etf: curated columns, one row per code; kept forever (store-v2.md)
 ├── runs/index.json                        job history, newest first, at most 200 runs
 ├── runs/<run-id>.log                      job output, first 256 KiB per attempt
 ├── staging/<run-id>/                      a running job's output, removed when it ends
@@ -52,15 +61,21 @@ Rules enforced on install (`store.go`):
 - `as_of` is a real calendar date in `YYYY-MM-DD`; it names the file.
 - `summary` is a JSON object; `rows` is an array of objects, each with a unique
   non-empty `code` of at most 16 characters; every `details` key names a row.
-- A document is at most 32 MiB.
+- A document is at most 32 MiB **decompressed**: the service reads
+  `<date>.json.gz` through a reader capped at 32 MiB + 1 byte.
+- For margin, panorama and etf the job's history file must also be present and
+  valid (store-v2.md, "Write path"), or the whole run is `output_invalid`.
 
 `as_of` is the data's base date, not the time the job ran. Re-running a job for
-the same date replaces that date's file; earlier dates are never touched.
+the same date replaces that date's files; other dates are only touched by
+retention (a snapshot more than 365 days older than the module's newest, never
+history).
 
 Writes go to `<file>.tmp`, are fsynced, renamed over the target and the
-directory is fsynced, so a crash leaves either the old or the new document.
+directory is fsynced, so a crash leaves either the old or the new file.
 A job's outputs are all validated before any is installed; installing is then
-one module at a time, and a run that fails part-way lists the modules it did
+one module at a time (history file first, snapshot second, the snapshot being
+the commit point), and a run that fails part-way lists the modules it did
 install.
 
 ## Runs
@@ -81,14 +96,19 @@ occurrence under the same task ID is refused. Duplicate detection covers the
 ## Restore and deletion
 
 - **Backup/restore:** the platform checkpoints and restores the whole `/data`
-  mount. Snapshots are self-describing and need no migration within format
-  `/1`; runs restored as `queued` or `running` are queued again on start,
+  mount. Snapshots and history files are self-describing and need no migration
+  within formats `snapshot/1` and `history/1`; runs restored as `queued` or `running` are queued again on start,
   within the same attempt limit.
 - **Data format changes:** a new snapshot format gets a new `format` string
   and a reader for both; an existing format is never rewritten in place.
 - **Deletion:** uninstalling with data deletion removes the mount; there is no
   partial delete. Removing one date by hand is safe: readers only list files
-  that parse as dates.
-- **Retention:** snapshots are kept indefinitely; at roughly 2 MB a day for all
-  modules that is under 1 GB a year. A retention rule, if needed, is a later
-  decision for the owner.
+  that parse as dates, and the history cache notices a removed or replaced
+  file at its next use. Removing a date removes its snapshot, its history
+  file and the history file's `.sha256` sidecar (store-v2.md).
+- **Retention (v2):** snapshots are kept 365 days (measured from the module's
+  newest as-of date; the newest snapshot and any date installed by the current
+  run are never removed); history files are kept forever. Measured size is
+  about 4.4 MB of snapshots and 0.5 MB of history a day, not the "2 MB a day"
+  estimated in v1; capacity and the recommended 6 GiB quota are in
+  store-v2.md.

@@ -13,6 +13,15 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(HERE))
 import mm_job  # noqa: E402
 
+try:
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+except ImportError:  # a plain checkout may lack it; CI sets MM_REQUIRE_PYARROW
+    if os.environ.get("MM_REQUIRE_PYARROW"):
+        raise
+    pa = pq = None
+needs_pyarrow = unittest.skipIf(pa is None, "pyarrow not installed")
+
 SNAPSHOT_KEYS = {"format", "module", "as_of", "summary", "rows", "details"}
 
 
@@ -83,6 +92,8 @@ class Env:
     def outputs(self):
         out = {}
         for name in sorted(os.listdir(self.out)):
+            if not name.endswith(".json"):
+                continue
             with open(os.path.join(self.out, name), encoding="utf-8") as f:
                 out[name[:-5]] = json.load(f)
         return out
@@ -302,8 +313,12 @@ class Convert(unittest.TestCase):
             os.remove(os.path.join(e.out, name))
         mm_job.publish("sentiment", e.work, e.out)
         self.assertNotIn("margin", e.outputs()["risk"]["summary"])
-        # Once the store holds that margin snapshot, risk cites it.
+        # A plain .json is not an installed v2 snapshot.
         write(os.path.join(data, "snapshots", "margin", "2026-11-18.json"), "{}")
+        mm_job.publish("sentiment", e.work, e.out)
+        self.assertNotIn("margin", e.outputs()["risk"]["summary"])
+        # Once the store holds that margin snapshot, risk cites it.
+        write(os.path.join(data, "snapshots", "margin", "2026-11-18.json.gz"), "{}")
         mm_job.publish("sentiment", e.work, e.out)
         r = e.outputs()["risk"]
         self.check_snapshot(r, "risk", "2026-11-19")  # latest input date
@@ -334,6 +349,189 @@ class Convert(unittest.TestCase):
 
     def test_clean(self):
         self.assertEqual(mm_job.clean({"a": [1.0, float("nan"), {"b": -math.inf}]}), {"a": [1.0, None, {"b": None}]})
+
+
+# The history column sets of docs/store-v2.md, spelled out independently of
+# the converter's own table.
+MARGIN_SCHEMA = (
+    [("code", "string"), ("name", "string")]
+    + [(c, "double") for c in ("price", "chg", "rz", "ratio", "dratio20", "rz_chg5", "rz_chg20",
+                               "buf_call", "buf_liq", "pnl", "score", "frag")]
+    + [("state", "string"), ("level", "string"), ("tags", "string")])
+PANORAMA_SCHEMA = (
+    [("code", "string"), ("name", "string"), ("sw1", "string")]
+    + [(c, "double") for c in ("price", "mktcap", "pe", "pb", "roe", "upside")]
+    + [("label", "string"), ("quad", "string"), ("profile", "string")]
+    + [(c, "double") for c in ("s_value", "s_growth", "s_cyclical", "s_dividend", "s_momentum", "s_quality")])
+ETF_SCHEMA = [("code", "string"), ("name", "string"), ("cat", "string"), ("cum_ytd", "double"), ("cum20", "double")]
+
+
+def margin_rows():
+    """Rows shaped like the real 2026-11-16 data: many more fields than the
+    history keeps, nulls where the source had none."""
+    return [
+        {"code": "600000", "name": "A", "py": "A", "price": 10.5, "chg": -1.2, "rz": 3.0, "ratio": 2.0,
+         "dratio20": 0.1, "rz_chg5": 1.0, "rz_chg20": 2.0, "buf_call": 30.0, "buf_liq": 40.0, "pnl": -5.0,
+         "score": 70.0, "frag": 90.0, "state": "临界", "level": "高", "tags": "a|b", "res_detail": "x",
+         "pld_n": None},
+        {"code": "000001", "name": "B", "price": 9.0, "chg": 0.5, "rz": 1.0, "ratio": 1.0, "dratio20": None,
+         "rz_chg5": None, "rz_chg20": 0.0, "buf_call": 1.0, "buf_liq": 2.0, "pnl": 3.0, "score": None,
+         "frag": None, "state": "安全", "level": "低", "tags": ""},
+    ]
+
+
+@needs_pyarrow
+class History(unittest.TestCase):
+    def write_margin(self, e, rows=None):
+        payload = margin_payload()
+        if rows is not None:
+            fields = sorted({k for r in rows for k in r})
+            payload["fields"] = fields
+            payload["rows"] = {f: [r.get(f) for r in rows] for f in fields}
+        write(os.path.join(e.work, "margin_scan", "out", "payload.json"), payload)
+
+    def history(self, e, module):
+        return pq.read_table(os.path.join(e.out, module + ".history.parquet"))
+
+    def check_schema(self, table, expected):
+        self.assertEqual([(f.name, str(f.type)) for f in table.schema], expected)
+        self.assertTrue(all(f.nullable for f in table.schema))
+
+    def test_margin_schema_is_exactly_the_specified_columns(self):
+        e = Env(self)
+        self.write_margin(e, margin_rows())
+        self.assertEqual(mm_job.publish("margin", e.work, e.out), 0)
+        table = self.history(e, "margin")
+        self.check_schema(table, MARGIN_SCHEMA)
+        self.assertEqual(table.num_rows, 2)
+        first = table.to_pylist()[0]
+        self.assertEqual((first["code"], first["name"], first["price"], first["tags"]), ("600000", "A", 10.5, "a|b"))
+        self.assertNotIn("py", first)
+        self.assertIsNone(table.to_pylist()[1]["dratio20"])
+
+    def test_a_column_the_snapshot_lacks_is_null_not_missing(self):
+        e = Env(self)
+        self.write_margin(e)  # the shared payload only has code, name, frag, state
+        mm_job.publish("margin", e.work, e.out)
+        table = self.history(e, "margin")
+        self.check_schema(table, MARGIN_SCHEMA)
+        self.assertEqual(table.column("price").null_count, 2)
+        self.assertEqual(table.column("frag").to_pylist(), [90.0, None])  # NaN after clean()
+
+    def test_panorama_schema_and_code_is_the_symbol(self):
+        e = Env(self)
+        payload = panorama_payload()
+        payload["stocks"][0].update({"sw1": "银行", "price": 11.0, "mktcap": 2e11, "roe": 10.0, "in_pool": True,
+                                     "label": "低估", "quad": "Q1", "profile": "P", "s_value": 60.0,
+                                     "s_growth": None, "n_methods": 4})
+        write(os.path.join(e.work, "workspace", "panorama", "data", "site_payload.json"), payload)
+        mm_job.publish("panorama", e.work, e.out)
+        table = self.history(e, "panorama")
+        self.check_schema(table, PANORAMA_SCHEMA)
+        rows = table.to_pylist()
+        self.assertEqual([r["code"] for r in rows], ["000001", "600000"])
+        self.assertEqual((rows[0]["sw1"], rows[0]["mktcap"], rows[0]["s_value"]), ("银行", 2e11, 60.0))
+        self.assertIsNone(rows[0]["upside"])  # inf
+        self.assertEqual(rows[1]["upside"], 0.1)
+
+    def test_etf_schema(self):
+        e = Env(self)
+        m = etf_metrics()
+        m["funds"][0]["cum_ytd"] = 12.5
+        write(os.path.join(e.work, "workspace", "analysis", "panel", "data", "metrics.json"), m)
+        mm_job.publish("etf", e.work, e.out)
+        table = self.history(e, "etf")
+        self.check_schema(table, ETF_SCHEMA)
+        self.assertEqual(table.to_pylist(), [{"code": "588000", "name": "科创50ETF", "cat": "科创50",
+                                              "cum_ytd": 12.5, "cum20": 414.6}])
+
+    def test_codes_equal_the_snapshots_row_codes_in_order(self):
+        e = Env(self)
+        self.write_margin(e, margin_rows())
+        mm_job.publish("margin", e.work, e.out)
+        snap_codes = [r["code"] for r in e.outputs()["margin"]["rows"]]
+        self.assertEqual(self.history(e, "margin").column("code").to_pylist(), snap_codes)
+
+    def test_odd_values_become_null_and_are_counted(self):
+        rows = margin_rows()
+        rows[0]["price"] = "10.5"          # a string in a numeric column
+        rows[0]["chg"] = True              # a bool is not a number
+        rows[1]["chg"] = False
+        rows[1]["rz"] = 7                  # an int is a number
+        rows[1]["state"] = 3               # a number in a string column
+        rows[1]["tags"] = None             # absent values are not "nulled"
+        doc = {"as_of": "2026-11-18", "rows": rows}
+        table, nulled = mm_job.history_table("margin", doc)
+        self.assertEqual(table.column("price").to_pylist(), [None, 9.0])
+        self.assertEqual(table.column("chg").to_pylist(), [None, None])
+        self.assertEqual(table.column("rz").to_pylist(), [3.0, 7.0])
+        self.assertEqual(table.column("state").to_pylist(), ["临界", None])
+        self.assertEqual({k: v for k, v in nulled.items() if v}, {"price": 1, "chg": 2, "state": 1})
+
+    def test_non_finite_and_huge_numbers_become_null(self):
+        rows = [dict(margin_rows()[0], price=float("nan"), chg=float("inf"), rz=10 ** 400)]
+        table, nulled = mm_job.history_table("margin", {"as_of": "2026-11-18", "rows": rows})
+        self.assertEqual([table.column(c).to_pylist() for c in ("price", "chg", "rz")], [[None]] * 3)
+        self.assertEqual((nulled["price"], nulled["chg"], nulled["rz"]), (1, 1, 1))
+
+    def test_the_nulled_count_is_logged(self):
+        e = Env(self)
+        rows = margin_rows()
+        rows[0]["price"] = "x"
+        self.write_margin(e, rows)
+        import contextlib
+        import io
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            mm_job.publish("margin", e.work, e.out)
+        self.assertIn("price=1", buf.getvalue())
+        self.assertIn("history 2 rows", buf.getvalue())
+
+    def test_file_metadata_compression_and_no_leftovers(self):
+        e = Env(self)
+        self.write_margin(e, margin_rows())
+        mm_job.publish("margin", e.work, e.out)
+        path = os.path.join(e.out, "margin.history.parquet")
+        meta = pq.ParquetFile(path).metadata
+        kv = {k.decode(): v.decode() for k, v in meta.metadata.items()}
+        self.assertEqual({k: kv[k] for k in ("format", "module", "as_of")},
+                         {"format": "market-monitor.history/1", "module": "margin", "as_of": "2026-11-18"})
+        self.assertEqual(meta.row_group(0).column(0).compression, "ZSTD")
+        self.assertEqual(sorted(os.listdir(e.out)), ["margin.history.parquet", "margin.json", "risk.json"])
+
+    def test_sentiment_and_risk_have_no_history_file(self):
+        e = Env(self)
+        write(os.path.join(e.work, "workspace", "analysis", "out", "sentiment", "monitor.json"), sentiment_monitor())
+        mm_job.publish("sentiment", e.work, e.out)
+        self.assertEqual(sorted(os.listdir(e.out)), ["risk.json", "sentiment.json"])
+
+    def test_a_failing_write_leaves_no_tmp_file_and_the_snapshot_is_still_written(self):
+        # The service then refuses the run for the missing history file; the
+        # converter must not crash the job or leave a half-written file, which
+        # the service would refuse as an unexpected output.
+        e = Env(self)
+        self.write_margin(e, margin_rows())
+        real = pq.write_table
+
+        def failing(table, where, *args, **kwargs):
+            with open(where, "wb") as f:
+                f.write(b"PAR1 half")
+            raise OSError("disk full")
+        pq.write_table = failing
+        self.addCleanup(lambda: setattr(pq, "write_table", real))
+        import contextlib
+        import io
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            self.assertEqual(mm_job.publish("margin", e.work, e.out), 0)
+        self.assertEqual(sorted(os.listdir(e.out)), ["margin.json", "risk.json"])
+        self.assertIn("history not written", err.getvalue())
+        self.assertIn("disk full", err.getvalue())
+
+    def test_the_tables_match_the_specification_independently(self):
+        self.assertEqual({m: [(n, {"s": "string", "d": "double"}[k]) for n, k in c]
+                          for m, c in mm_job.HISTORY_COLUMNS.items()},
+                         {"margin": MARGIN_SCHEMA, "panorama": PANORAMA_SCHEMA, "etf": ETF_SCHEMA})
 
 
 def free_port():

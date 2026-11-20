@@ -247,6 +247,19 @@ class TheWorkflow(unittest.TestCase):
         self.assertEqual(listed, platforms)
         self.assertIn("digest-go-*.cdx.json", workflow.split("- name: Licence scan", 1)[1].split("- name:", 1)[0])
 
+    def test_the_go_sbom_covers_the_market_monitor_image_platform(self):
+        # Its first third-party modules are the parquet reader and dependencies; it ships only as a linux/amd64 image.
+        descriptor = json.loads((ROOT / "apps" / "market-monitor" / "app.v2.json").read_text())
+        platforms = {tuple(p.split("/")[:2]) for p in descriptor["backend"]["platforms"]}
+        workflow = (ROOT / ".github" / "workflows" / "check.yml").read_text()
+        step = re.search(r"- name: Go SBOMs \(market-monitor[^\n]*\n(.*?)(?=\n      - name:)", workflow, re.S)[1]
+        self.assertIn("working-directory: apps/market-monitor/service", step)
+        listed = set(re.findall(r"\b(linux)/(amd64|arm64)\b", step))
+        self.assertEqual(listed, platforms)
+        scan = workflow.split("- name: Licence scan", 1)[1].split("- name:", 1)[0]
+        self.assertIn("mm-go-*.cdx.json", scan)
+        self.assertIn("mm-go-*.cdx.json", workflow.split("- name: Keep the SBOMs", 1)[1])
+
     def test_the_npm_sbom_is_cross_checked_against_the_installed_tree(self):
         # The SBOM is built from package-lock.json, whose licence fields integrity does not cover, so the scan is
         # given the installed node_modules and npm ci runs first.

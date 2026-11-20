@@ -11,7 +11,8 @@ MM_OUTPUT_DIR (a fresh staging directory). It
    server when the job needs it, and runs the pipeline's own script for the
    job, unchanged;
 3. converts the output that this run wrote into snapshot documents in
-   MM_OUTPUT_DIR, which the service validates and installs.
+   MM_OUTPUT_DIR, plus a curated parquet history file per row-based module
+   (docs/store-v2.md), which the service validates and installs.
 
 The pipeline scripts hard-code /opt/daily-tasks; the image links that path to
 the work directory (checked before every run), and the work directory's venv/
@@ -35,6 +36,7 @@ import sys
 import time
 
 SNAPSHOT_FORMAT = "market-monitor.snapshot/1"
+HISTORY_FORMAT = "market-monitor.history/1"
 EXIT_OUTPUT_MISSING = 91
 EXIT_NOT_REFRESHED = 92
 EXIT_ENVIRONMENT = 93
@@ -50,6 +52,27 @@ JOBS = {
     "margin": ("margin_scan", ["bash", "update.sh"], "margin", False),
 }
 RISK_INPUTS = ("margin", "sentiment", "etf")
+
+# History file columns per module (market-monitor.history/1), in file order.
+# Types are explicit: "s" is a string column, "d" a double column. A schema
+# change is a new format version, never an edit of this table.
+_STR, _DBL = "s", "d"
+HISTORY_COLUMNS = {
+    "margin": (
+        [("code", _STR), ("name", _STR)]
+        + [(c, _DBL) for c in ("price", "chg", "rz", "ratio", "dratio20", "rz_chg5", "rz_chg20",
+                               "buf_call", "buf_liq", "pnl", "score", "frag")]
+        + [("state", _STR), ("level", _STR), ("tags", _STR)]
+    ),
+    "panorama": (
+        [("code", _STR), ("name", _STR), ("sw1", _STR)]
+        + [(c, _DBL) for c in ("price", "mktcap", "pe", "pb", "roe", "upside")]
+        + [("label", _STR), ("quad", _STR), ("profile", _STR)]
+        + [(c, _DBL) for c in ("s_value", "s_growth", "s_cyclical", "s_dividend", "s_momentum", "s_quality")]
+    ),
+    "etf": [("code", _STR), ("name", _STR), ("cat", _STR), ("cum_ytd", _DBL), ("cum20", _DBL)],
+}
+HISTORY_SUFFIX = ".history.parquet"
 
 OUTPUTS = {
     "margin": "margin_scan/out/payload.json",
@@ -314,7 +337,7 @@ def risk_part(module, doc):
 def build_risk(work, current):
     """Market-level readings from the margin, sentiment and ETF snapshots:
     the one this run is publishing (``current``) and the others only if the
-    service has installed them. Each part carries its own as_of; the document
+    service has installed them (as ``<as_of>.json.gz``). Each part carries its own as_of; the document
     is dated by the newest, i.e. it is "the latest readings known on that
     date"."""
     store = os.path.join(os.path.dirname(work), "snapshots")
@@ -324,7 +347,7 @@ def build_risk(work, current):
         if doc is None:
             continue
         if module != current and not os.path.exists(
-                os.path.join(store, module, str(doc.get("as_of")) + ".json")):
+                os.path.join(store, module, str(doc.get("as_of")) + ".json.gz")):
             continue
         try:
             summary[module] = risk_part(module, doc)
@@ -335,6 +358,69 @@ def build_risk(work, current):
         return None
     summary["inputs"] = inputs
     return snapshot("risk", max(inputs.values()), summary)
+
+
+def history_cast(kind, value):
+    """One cell of a history column: a number (int or float, never a bool) or
+    a string as the column type requires, otherwise None."""
+    if kind == _STR:
+        return value if isinstance(value, str) else None
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    try:
+        number = float(value)
+    except OverflowError:
+        return None
+    return number if math.isfinite(number) else None
+
+
+def history_schema(module):
+    import pyarrow as pa
+    columns = [pa.field(name, pa.string() if kind == _STR else pa.float64())
+               for name, kind in HISTORY_COLUMNS[module]]
+    return pa.schema(columns)
+
+
+def history_table(module, doc):
+    """The module's history table from a snapshot document (after ``clean``),
+    and the number of values nulled per column. A missing or null value is
+    not counted; only a value of the wrong type (a bool in a numeric column,
+    a number in a string column, a non-finite number) is."""
+    import pyarrow as pa
+    schema = history_schema(module)
+    nulled = {name: 0 for name, _ in HISTORY_COLUMNS[module]}
+    arrays = []
+    for (name, kind), field in zip(HISTORY_COLUMNS[module], schema):
+        values = []
+        for row in doc["rows"]:
+            raw = row.get(name)
+            value = history_cast(kind, raw)
+            if value is None and raw is not None:
+                nulled[name] += 1
+            values.append(value)
+        arrays.append(pa.array(values, type=field.type))
+    table = pa.Table.from_arrays(arrays, schema=schema)
+    metadata = {"format": HISTORY_FORMAT, "module": module, "as_of": doc["as_of"]}
+    return table.replace_schema_metadata(metadata), nulled
+
+
+def write_history(module, doc, path):
+    """Write ``<module>.history.parquet`` atomically (zstd, one row group per
+    1M rows) and log how many odd values became null."""
+    import pyarrow.parquet as pq
+    table, nulled = history_table(module, doc)
+    tmp = path + ".tmp"
+    try:
+        pq.write_table(table, tmp, compression="zstd")
+        os.replace(tmp, path)
+    except BaseException:
+        # Never leave a half-written file behind: the service refuses any
+        # unexpected name in the output directory.
+        if os.path.lexists(tmp):
+            os.remove(tmp)
+        raise
+    odd = ", ".join(f"{k}={v}" for k, v in nulled.items() if v) or "none"
+    print(f"[mm_job] {module}: history {len(doc['rows'])} rows, values nulled: {odd}", flush=True)
 
 
 def write_json(path, doc):
@@ -364,6 +450,13 @@ def publish(job, work, out_dir, exit_code=0, started=None):
     else:
         doc = clean(CONVERTERS[module](load_json(path)))
     write_json(os.path.join(out_dir, module + ".json"), doc)
+    if module in HISTORY_COLUMNS:
+        # A history file is mandatory for these modules. If it cannot be
+        # written the service finds it missing and refuses the whole run.
+        try:
+            write_history(module, doc, os.path.join(out_dir, module + HISTORY_SUFFIX))
+        except Exception as e:
+            print(f"[mm_job] {module}: history not written: {e!r}", file=sys.stderr)
     os.makedirs(os.path.join(work, PUBLISHED), exist_ok=True)
     write_json(os.path.join(work, PUBLISHED, module + ".json"), doc)
     if module in RISK_INPUTS:
