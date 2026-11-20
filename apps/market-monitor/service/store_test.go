@@ -233,3 +233,49 @@ func TestStoreStopsServingADateDeletedByHand(t *testing.T) {
 		t.Fatalf("deleted date still served: %v", err)
 	}
 }
+
+// TestSnapshotsFromARealRun validates job outputs produced outside the test,
+// e.g. by running pipeline/mm_job.py against real data. It runs only when
+// MM_SNAPSHOT_DIR names a directory of <module>.json files.
+func TestSnapshotsFromARealRun(t *testing.T) {
+	dir := os.Getenv("MM_SNAPSHOT_DIR")
+	if dir == "" {
+		t.Skip("MM_SNAPSHOT_DIR not set")
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil || len(entries) == 0 {
+		t.Fatalf("no snapshots in %s: %v", dir, err)
+	}
+	s := NewStore(t.TempDir())
+	for _, e := range entries {
+		raw, err := os.ReadFile(filepath.Join(dir, e.Name()))
+		if err != nil {
+			t.Fatal(err)
+		}
+		module := strings.TrimSuffix(e.Name(), ".json")
+		asOf, err := s.Install(module, raw)
+		if err != nil {
+			t.Fatalf("%s: %v", e.Name(), err)
+		}
+		snap, err := s.Load(module, asOf)
+		if err != nil {
+			t.Fatal(err)
+		}
+		page, total := queryRows(snap.Rows, rowQuery{Page: 1, Size: maxPageSize})
+		body, _ := json.Marshal(map[string]any{"items": page})
+		summary, _ := json.Marshal(snap.Summary)
+		t.Logf("%s as_of=%s rows=%d first-page=%dB summary=%dB", module, asOf, total, len(body), len(summary))
+		if len(body) > maxResponse || len(summary) > maxResponse {
+			t.Errorf("%s: a response would exceed the relay limit", module)
+		}
+		largest := 0
+		for i, row := range snap.Rows {
+			code := row["code"].(string)
+			detail, _ := json.Marshal(map[string]any{"row": snap.Rows[i], "detail": snap.Details[code]})
+			largest = max(largest, len(detail))
+		}
+		if largest > maxResponse {
+			t.Errorf("%s: a row detail response would exceed the relay limit (%d B)", module, largest)
+		}
+	}
+}

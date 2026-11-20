@@ -180,6 +180,22 @@ jobs:
       - run: go vet ./...
       - run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
       - run: go test -race ./...
+  market-monitor-pipeline:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/market-monitor/pipeline
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'  # the backend image's interpreter
+      # requests lets the Panorama freshness test run; tests needing the
+      # rest of the pipeline's dependencies skip themselves here.
+      - run: python3 -m pip install 'requests>=2.31,<3'
+        working-directory: .
+      - run: python3 tests/test_mm_job.py
+      - run: python3 tests/test_pipeline_scripts.py
   status:
     runs-on: ubuntu-latest
     steps:
