@@ -245,5 +245,14 @@
   "amt_large": "{n} tn",
   "amt_small": "{n} bn",
   "inputTooLong": "Too long (64 bytes at most)",
-  "pano_radarMissing": "No score: {names}"
+  "pano_radarMissing": "No score: {names}",
+  "pano_medianPe": "Median PE (all A)",
+  "pano_medianPb": "Median PB (all A)",
+  "pano_aboveMa120": "Above 120-day MA",
+  "pano_heat": "Six strategies × Shenwan level 1 (industry mean of market-wide percentiles)",
+  "pano_heatTip": "{industry} · {strategy}: {score}",
+  "pano_shift": "Largest valuation changes",
+  "pano_prevUpside": "Prev. upside",
+  "pano_curUpside": "Current upside",
+  "pano_unclassified": "Unclassified"
 }

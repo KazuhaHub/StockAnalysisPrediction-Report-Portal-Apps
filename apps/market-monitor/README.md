@@ -199,6 +199,8 @@ network.
    forward-fill treated as zero flow, hard-coded reporting periods).
 2. Review the proxy hosts in an installation and verify the jobs end to end
    (done in code: the forwarder is wired and the `http://` source is now
-   `https://`). Move the data server's upstream to an HTTPS host name.
-3. Panorama summary: add the industry list, market medians and valuation
-   shifts the original page showed, so the dashboard can restore them.
+   `https://`). Move the data server's upstream to an HTTPS host name (owner
+   decision, 2026-11-20); the proxy refuses IP literals and plain HTTP.
+3. Panorama: the industry breakdown, market medians and valuation shifts
+   come from the export step's page data (`site/data.js`), used only when
+   that run wrote it for the same date; see `convert_panorama`.

@@ -126,6 +126,9 @@ jobs:
       - run: npm ci
       - run: python3 -m unittest discover -s scripts/tests -v
       - run: python3 scripts/catalogue.py check --verify-downloads
+        env:
+          # Authenticated API calls avoid the shared-runner anonymous rate limit.
+          GITHUB_TOKEN: ${{ github.token }}
   protocol:
     runs-on: ubuntu-latest
     defaults:
