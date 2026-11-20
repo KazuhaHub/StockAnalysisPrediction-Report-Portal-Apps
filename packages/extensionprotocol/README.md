@@ -55,6 +55,10 @@ other verifier. All verifiers hang off the same `Verifier` (same pinned issuer,
 audience, app, registration, boot ID and keys) and share its replay store, with the
 request ID kept in a namespace per kind (`pub.`, `ing.`, `mch.`, and none for viewer
 tokens). A replay or a full store fails closed (`ErrInvalid`, `ErrCapacity`).
+Size `ReplayCapacity` for all of them together: public routes are anonymous and can
+hold up to about 600 live entries per installation (20 requests a second for 30
+seconds), on top of ingress deliveries and viewer traffic. A store that is too small
+fails closed, so viewer requests would start answering `ErrCapacity`.
 
 | Assertion | Header | Prefix | MAC domain | Verify |
 | --- | --- | --- | --- | --- |
@@ -65,7 +69,9 @@ Both are `prefix + base64url(JSON) + "." + base64url(HMAC-SHA256)`, decoded stri
 (canonical base64, no unknown field, no trailing data, a re-encoding equal to the
 received bytes), valid for exactly 30 seconds with at most five seconds of clock
 skew into the future, and bound to the installation (`portal.app/<installation>` is the
-pinned audience) and the installation generation.
+pinned audience). The generation is checked to be at least 1 and returned in the
+claims; the verifier has no expected generation to compare it with, so an app that
+must refuse a stale generation compares `claims.Generation` itself.
 
 - A public assertion is `GET` only and carries no viewer. `target` is the request path
   and canonical query as received; the claims bind the path (`/v1/public/...`) and

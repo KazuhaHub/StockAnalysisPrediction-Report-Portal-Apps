@@ -24,6 +24,7 @@ import (
 	"io"
 	"os"
 	"regexp"
+	"strings"
 	"unicode/utf8"
 )
 
@@ -305,6 +306,17 @@ func checkDescriptor(raw []byte) (string, error) {
 		Format    string `json:"format"`
 		Publisher string `json:"publisher"`
 	}
+	var top map[string]json.RawMessage
+	if json.Unmarshal(raw, &top) != nil {
+		return "", bad
+	}
+	for key := range top {
+		// encoding/json matches field names without regard to case; Portal does not, so a
+		// "Publisher" beside "publisher" must not decide what the envelope names.
+		if lower := strings.ToLower(key); (lower == "format" || lower == "publisher") && key != lower {
+			return "", bad
+		}
+	}
 	if json.Unmarshal(raw, &head) != nil || head.Format != descriptorFormat {
 		return "", errors.New("descriptor format is not " + descriptorFormat)
 	}
@@ -383,6 +395,13 @@ func readBounded(path string, limit int64) ([]byte, error) {
 
 // readPrivateKey reads the seed written by keygen and refuses a file other users can read.
 func readPrivateKey(path string) (ed25519.PrivateKey, error) {
+	// The key file itself must be what is checked: a symbolic link would let whoever controls
+	// the link's directory swap in another 0600 file.
+	if link, err := os.Lstat(path); err != nil {
+		return nil, err
+	} else if link.Mode()&os.ModeSymlink != 0 {
+		return nil, fmt.Errorf("%s is a symbolic link; point --private-key at the key file itself", path)
+	}
 	file, err := os.Open(path)
 	if err != nil {
 		return nil, err
@@ -391,6 +410,9 @@ func readPrivateKey(path string) (ed25519.PrivateKey, error) {
 	info, err := file.Stat()
 	if err != nil {
 		return nil, err
+	}
+	if link, err := os.Lstat(path); err != nil || !os.SameFile(link, info) {
+		return nil, fmt.Errorf("%s changed while it was opened", path)
 	}
 	if !info.Mode().IsRegular() {
 		return nil, fmt.Errorf("%s is not a regular file", path)

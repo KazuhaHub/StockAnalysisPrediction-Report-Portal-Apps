@@ -284,6 +284,20 @@ func TestSignRefusals(t *testing.T) {
 			t.Fatal("signature written")
 		}
 	})
+	t.Run("symlinked key file", func(t *testing.T) {
+		link := filepath.Join(dir, "link.key")
+		if err := os.Symlink(keyPath, link); err != nil {
+			t.Fatal(err)
+		}
+		out := filepath.Join(dir, "link.sig")
+		code, _, errOut := invoke(t, "sign", "--descriptor", descriptor, "--private-key", link, "--key-id", "test-key-1", "--out", out)
+		if code == 0 || !strings.Contains(errOut, "symbolic link") {
+			t.Fatalf("exit %d: %s", code, errOut)
+		}
+		if _, err := os.Stat(out); err == nil {
+			t.Fatal("signature written")
+		}
+	})
 	t.Run("malformed key file", func(t *testing.T) {
 		bad := filepath.Join(dir, "bad.key")
 		write(t, bad, []byte("not a key\n"), 0o600)
@@ -299,6 +313,7 @@ func TestSignRefusals(t *testing.T) {
 		"missing publisher": bytes.Replace(raw, []byte(`"publisher": "example-publisher",`), nil, 1),
 		"duplicate key":     bytes.Replace(raw, []byte(`"version"`), []byte(`"id": "x", "version"`), 1),
 		"nested duplicate":  bytes.Replace(raw, []byte(`"schema": 1,`), []byte(`"schema": 1, "schema": 2,`), 1),
+		"case variant":      bytes.Replace(raw, []byte(`"publisher": "example-publisher",`), []byte(`"publisher": "example-publisher", "Publisher": "other-publisher",`), 1),
 		"byte order mark":   append([]byte("\xef\xbb\xbf"), raw...),
 		"trailing json":     append(append([]byte{}, raw...), []byte("{}")...),
 		"oversized":         append(append([]byte(`{"format":"portal.app/v2","publisher":"p","pad":"`), bytes.Repeat([]byte("a"), 131072)...), []byte(`"}`)...),
