@@ -1,5 +1,9 @@
 # Experimental React own-backend client
 
+Writing the service behind it (protocol, sandbox, capabilities, local run, signing and
+installing) is covered in [backend-service-v2.md](backend-service-v2.md); start a backend
+app from `templates/react-app-v2-backend`.
+
 This is a development-only addition to `@portal-app/sdk/root-v2`. It does not
 publish a stable SDK, migrate maintained apps, install a backend or enable
 production execution. Keep the public template/catalogue/releases unchanged
@@ -81,7 +85,7 @@ Run the forwarder in one of two ways:
 
   `proxy.Serve(ctx, proxy.Options{})` alone listens and serves in one call.
   Add `COPY packages/proxy` to the image build and a `replace` for the module,
-  as `apps/market-monitor/service` does.
+  as `apps/market-monitor/service` and the `v2-backend` template do.
 - **No resident process**: ship the static `portal-egress-proxy` binary
   (`CGO_ENABLED=0 go build ./cmd/portal-egress-proxy` in `packages/proxy`) and
   start it before the code that needs it.

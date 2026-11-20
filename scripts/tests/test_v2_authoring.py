@@ -47,6 +47,30 @@ class V2AuthoringTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'PortalPage'):
             self.standard.check(self.root)
 
+    def test_backend_template_adds_a_declared_backend_a_service_and_keeps_the_frontend_standard(self):
+        self.creator.create('example-app', 'Example app', template='v2-backend', parent_origin='https://portal.example.invalid')
+        app = self.root / 'apps/example-app'
+        manifest = json.loads((app / 'app.v2.json').read_text())
+        self.assertEqual(manifest['backend']['protocol'], 'portal.backend/1')
+        self.assertEqual(manifest['backend']['platforms'], ['linux/amd64'])
+        self.assertEqual(manifest['capabilities']['required'], [])
+        self.assertEqual(manifest['capabilities']['optional'], ['background.run', 'tasks.schedule'])
+        self.assertNotIn('network_proxy', manifest)  # network.proxy is opt-in
+        self.assertIn('/example-app@sha256:', manifest['backend']['image'])
+        service = app / 'service'
+        self.assertIn('/apps/example-app/service', (service / 'go.mod').read_text())
+        self.assertIn('applicationID          = "example-app"', (service / 'platform.go').read_text())
+        for text in service.rglob('*'):
+            if text.is_file():
+                self.assertNotIn('APP_ID', text.read_text(), text.name)
+        # The overlay replaced the v2 sample with one that calls the backend; the shared standard still holds.
+        self.assertIn('useAppBackend', (app / 'frontend/src/Backend.tsx').read_text())
+        self.assertTrue(self.standard.check(self.root))
+        # The plain v2 template is unchanged by the overlay.
+        self.creator.create('plain-app', 'Plain app', template='v2', parent_origin='https://portal.example.invalid')
+        self.assertFalse((self.root / 'apps/plain-app/service').exists())
+        self.assertNotIn('backend', json.loads((self.root / 'apps/plain-app/app.v2.json').read_text()))
+
     def test_invalid_origins_names_and_template_refused_before_creating_files(self):
         for origin in ['', 'http://example.com', '//portal.example.invalid', 'https://portal.example.invalid/',
                        'https://user:secret@portal.example.invalid', 'https://portal.example.invalid?q=1',

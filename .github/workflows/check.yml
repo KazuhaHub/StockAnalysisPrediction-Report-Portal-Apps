@@ -107,6 +107,11 @@ jobs:
       - run: python3 scripts/plugin-standard.py
       - run: npm run typecheck
       - run: npm run test:sdk
+      # The backend template's Go service is vetted and tested here (no image is built).
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: packages/extensionprotocol/go.mod
+          cache: false
       - run: python3 scripts/test-app-template.py
       - run: python3 scripts/test-app-root-v2.py
       - run: npm test --workspace=portal-symbols-demo
