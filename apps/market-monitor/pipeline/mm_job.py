@@ -224,9 +224,54 @@ def convert_etf(m):
     return snapshot("etf", m["asof"], summary, m.get("funds", []))
 
 
-def convert_panorama(p):
+# Panorama's export step writes the industry breakdown, market medians and
+# the change against the previous run into its own page data (site/data.js),
+# not into site_payload.json. They are added to the summary when that file
+# was written by this run for the same date; otherwise the snapshot is
+# published without them.
+PANORAMA_SITE = "workspace/panorama/site/data.js"
+PANORAMA_SITE_PREFIX = "window.PANORAMA="
+PANORAMA_SITE_META = ("corr", "inter", "n_industries")
+PANORAMA_MARKET = ("median_pe", "median_pb", "above_ma120_pct")
+
+
+def load_panorama_site(work, started):
+    path = os.path.join(work, PANORAMA_SITE)
+    try:
+        if started is not None and os.path.getmtime(path) < started:
+            raise ValueError("not written by this run")
+        with open(path, encoding="utf-8") as f:
+            text = f.read().strip()
+        if not text.startswith(PANORAMA_SITE_PREFIX) or not text.endswith(";"):
+            raise ValueError("unexpected format")
+        site = json.loads(text[len(PANORAMA_SITE_PREFIX):-1])
+        if not isinstance(site, dict):
+            raise ValueError("not an object")
+        return site
+    except (OSError, ValueError) as e:
+        print(f"[mm_job] panorama: page data not used: {e}", file=sys.stderr)
+        return None
+
+
+def convert_panorama(p, site=None):
     rows = [dict(s, code=s["symbol"]) for s in p["stocks"]]
     summary = {k: v for k, v in p.items() if k not in ("stocks", "pct")}
+    site_meta = (site or {}).get("meta") or {}
+    asof = p["meta"]["asof"]
+    if site and site_meta.get("asof") == asof:
+        if isinstance(site.get("industries"), list):
+            summary["industries"] = site["industries"]
+        if isinstance(site.get("market"), dict):
+            summary["market"] = {k: site["market"][k] for k in PANORAMA_MARKET if k in site["market"]}
+        # diff.py compares the latest two snapshot dates, not the run date: a
+        # backfill of an older date would otherwise carry a later comparison.
+        diff = site.get("diff")
+        if isinstance(diff, dict) and diff.get("cur") == asof:
+            summary["diff"] = diff
+        summary["meta"] = {**summary["meta"],
+                           **{k: site_meta[k] for k in PANORAMA_SITE_META if k in site_meta}}
+    elif site:
+        print("[mm_job] panorama: page data is for another date, not used", file=sys.stderr)
     return snapshot("panorama", p["meta"]["asof"], summary, rows)
 
 
@@ -314,7 +359,10 @@ def publish(job, work, out_dir, exit_code=0, started=None):
     if started is not None and os.path.getmtime(path) < started:
         print(f"[mm_job] {job}: {OUTPUTS[module]} was not written by this run", file=sys.stderr)
         return EXIT_NOT_REFRESHED
-    doc = clean(CONVERTERS[module](load_json(path)))
+    if module == "panorama":
+        doc = clean(convert_panorama(load_json(path), load_panorama_site(work, started)))
+    else:
+        doc = clean(CONVERTERS[module](load_json(path)))
     write_json(os.path.join(out_dir, module + ".json"), doc)
     os.makedirs(os.path.join(work, PUBLISHED), exist_ok=True)
     write_json(os.path.join(work, PUBLISHED, module + ".json"), doc)
