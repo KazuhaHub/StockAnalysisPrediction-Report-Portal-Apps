@@ -1,0 +1,424 @@
+import { useMemo, useState } from "react";
+import {
+  Card,
+  Col,
+  Descriptions,
+  Empty,
+  Row,
+  Segmented,
+  Select,
+  Space,
+  Table,
+  Tag,
+} from "antd";
+import type { TableColumnsType } from "antd";
+import { ByteSearch } from "../components/ByteSearch";
+import { Dashboard } from "../components/Dashboard";
+import { EChart } from "../components/EChart";
+import { KpiRow, type KpiItem } from "../components/Kpi";
+import { RowTable } from "../components/RowTable";
+import { useVisual } from "../components/useVisual";
+import { useCopy, type Copy } from "../lib/copy";
+import { useRowValues } from "../lib/hooks";
+import { arr, fill, fmt, isNum, signed, DASH, type Num } from "../lib/format";
+
+const DATA_DATE_KEYS = ["share", "nav", "amount", "index", "margin"] as const;
+
+/** Names the source behind each "latest data date" key; unknown keys as is. */
+function dataDateLabel(copy: Copy, key: string): string {
+  return (DATA_DATE_KEYS as readonly string[]).includes(key)
+    ? copy[`etf_date_${key}` as keyof Copy]
+    : key;
+}
+
+type EtfSummary = {
+  scope?: { universe?: string; n_codes?: Num; note?: string };
+  current?: {
+    last_date?: string;
+    last_nf?: Num;
+    last5?: Num;
+    last20?: Num;
+    ytd?: Num;
+    idx_20d?: Num;
+  };
+  health?: {
+    light?: string;
+    label?: string;
+    items?: { k: string; v?: string; note?: string; s?: Num }[];
+  };
+  runs_top?: { start: string; end: string; days?: Num; sum?: Num }[];
+  series?: { dates?: string[]; nf?: Num[]; nf_ma20?: Num[]; idx?: Num[] };
+  broad?: { dates?: string[]; cats?: string[]; series?: Record<string, Num[]> };
+  data_health?: Record<string, string | null>;
+};
+export type EtfRow = {
+  code: string;
+  name?: string;
+  cat?: string;
+  cum_ytd?: Num;
+  cum20?: Num;
+};
+
+export function EtfPage() {
+  const { copy } = useCopy();
+  return (
+    <Dashboard<EtfSummary> module="etf" title={copy.etfTitle}>
+      {(ctx) => <EtfBody {...ctx} />}
+    </Dashboard>
+  );
+}
+
+function EtfBody({
+  summary: e,
+  date,
+  asOf,
+  revision,
+}: {
+  summary: EtfSummary;
+  date: string;
+  asOf: string;
+  revision: number;
+}) {
+  const { copy } = useCopy();
+  const v = useVisual();
+  const c = e.current ?? {};
+  const s = e.series ?? {};
+  const [range, setRange] = useState(120);
+  const [search, setSearch] = useState("");
+  const [cat, setCat] = useState<string>();
+  const filters = useMemo(() => ({ cat }), [cat]);
+  // The summary's category list misses some real values (for example
+  // 国证2000), so the filter also offers the categories found in the rows.
+  const rowCats = useRowValues("etf", date, "cat");
+  const catOptions = useMemo(() => {
+    const known = arr(e.broad?.cats);
+    const extra = rowCats.filter((x) => !known.includes(x)).sort();
+    return [...known, ...extra].map((x) => ({ value: x, label: x }));
+  }, [e.broad?.cats, rowCats]);
+  const lightColor = (
+    { red: v.danger, amber: v.warning, green: v.success } as Record<
+      string,
+      string
+    >
+  )[e.health?.light ?? ""];
+
+  const flowOption = useMemo(() => {
+    const dates = arr(s.dates);
+    const a = Math.max(0, dates.length - range);
+    return {
+      tooltip: { trigger: "axis" },
+      legend: { top: 0 },
+      grid: { left: 50, right: 56, top: 36, bottom: 30 },
+      xAxis: { type: "category", data: dates.slice(a) },
+      yAxis: [
+        { type: "value", name: copy.etf_flowAxis },
+        {
+          type: "value",
+          name: copy.etf_indexAxis,
+          scale: true,
+          splitLine: { show: false },
+        },
+      ],
+      series: [
+        {
+          name: copy.etf_flow,
+          type: "bar",
+          data: arr(s.nf)
+            .slice(a)
+            .map((x) => ({
+              value: x,
+              itemStyle: { color: isNum(x) && x < 0 ? v.down : v.up },
+            })),
+        },
+        {
+          name: copy.etf_ma20,
+          type: "line",
+          showSymbol: false,
+          data: arr(s.nf_ma20).slice(a),
+          lineStyle: { type: "dashed", color: v.orange },
+        },
+        {
+          name: copy.etf_index,
+          type: "line",
+          yAxisIndex: 1,
+          showSymbol: false,
+          data: arr(s.idx).slice(a),
+          lineStyle: { color: v.primary },
+        },
+      ],
+    };
+  }, [s, range, v, copy]);
+
+  // Category totals come from the summary's per-category daily series.
+  const catRows = useMemo(() => {
+    const dates = arr(e.broad?.dates);
+    const year = asOf.slice(0, 4);
+    const firstYtd = dates.findIndex((d) => d.startsWith(year));
+    return arr(e.broad?.cats)
+      .map((name) => {
+        const series = arr(e.broad?.series?.[name]);
+        const sum = (from: number) =>
+          series
+            .slice(from)
+            .reduce<number>((t, x) => t + (isNum(x) ? x : 0), 0);
+        return {
+          name,
+          cum20: Math.round(sum(Math.max(0, series.length - 20))),
+          ytd: Math.round(sum(firstYtd < 0 ? series.length : firstYtd)),
+        };
+      })
+      .sort((a, b) => b.cum20 - a.cum20);
+  }, [e.broad, asOf]);
+  const catOption = useMemo(
+    () => ({
+      tooltip: { trigger: "axis" },
+      legend: { top: 0 },
+      grid: { left: 84, right: 20, top: 30, bottom: 20 },
+      xAxis: { type: "value", name: copy.unit_yi },
+      yAxis: { type: "category", data: catRows.map((x) => x.name).reverse() },
+      series: [
+        {
+          name: copy.etf_last20,
+          type: "bar",
+          data: catRows.map((x) => x.cum20).reverse(),
+          itemStyle: { color: v.danger },
+        },
+        {
+          name: copy.etf_ytd,
+          type: "bar",
+          data: catRows.map((x) => x.ytd).reverse(),
+          itemStyle: { color: v.primary, opacity: 0.6 },
+        },
+      ],
+    }),
+    [catRows, v, copy],
+  );
+
+  const kpis: KpiItem[] = [
+    {
+      key: "nf",
+      title: fill(copy.etf_latest, { date: c.last_date ?? DASH }),
+      value: isNum(c.last_nf)
+        ? `${signed(c.last_nf, 1)} ${copy.unit_yi}`
+        : DASH,
+      color: isNum(c.last_nf) ? (c.last_nf >= 0 ? v.up : v.down) : undefined,
+    },
+    {
+      key: "5",
+      title: copy.etf_last5,
+      value: isNum(c.last5) ? `${signed(c.last5, 0)} ${copy.unit_yi}` : DASH,
+    },
+    {
+      key: "20",
+      title: copy.etf_last20,
+      value: isNum(c.last20) ? `${signed(c.last20, 0)} ${copy.unit_yi}` : DASH,
+    },
+    {
+      key: "y",
+      title: copy.etf_ytd,
+      value: isNum(c.ytd) ? `${signed(c.ytd, 0)} ${copy.unit_yi}` : DASH,
+    },
+    {
+      key: "i",
+      title: copy.etf_idx20,
+      value: isNum(c.idx_20d) ? `${signed(c.idx_20d, 2)}%` : DASH,
+    },
+    {
+      key: "h",
+      title: copy.etf_signal,
+      value: e.health?.label ?? DASH,
+      color: lightColor,
+    },
+  ];
+
+  const sorted = (
+    title: string,
+    field: string,
+    render: (x: Num) => React.ReactNode,
+    width: number,
+  ) => ({
+    title,
+    dataIndex: field,
+    align: "right" as const,
+    width,
+    sorter: true,
+    render,
+  });
+  const columns: TableColumnsType<EtfRow> = [
+    { title: copy.col_code, dataIndex: "code", width: 84 },
+    { title: copy.col_name, dataIndex: "name", width: 180 },
+    {
+      title: copy.etf_cat,
+      dataIndex: "cat",
+      width: 100,
+      render: (x: string) => (x ? <Tag>{x}</Tag> : DASH),
+    },
+    sorted(
+      `${copy.etf_last20} (${copy.unit_yi})`,
+      "cum20",
+      (x) => (
+        <span
+          style={{ color: isNum(x) ? (x >= 0 ? v.up : v.down) : undefined }}
+        >
+          {signed(x, 1)}
+        </span>
+      ),
+      130,
+    ),
+    sorted(
+      `${copy.etf_ytd} (${copy.unit_yi})`,
+      "cum_ytd",
+      (x) => signed(x, 1),
+      130,
+    ),
+  ];
+  const dh = e.data_health ?? {};
+
+  return (
+    <Space orientation="vertical" size="middle" style={{ width: "100%" }}>
+      <KpiRow items={kpis} />
+      <Card
+        size="small"
+        title={copy.etf_flowTitle}
+        extra={
+          <Segmented
+            size="small"
+            value={range}
+            onChange={setRange}
+            options={[
+              { label: copy.range60, value: 60 },
+              { label: copy.range120, value: 120 },
+              { label: copy.rangeYear, value: 250 },
+            ]}
+          />
+        }
+      >
+        {arr(s.dates).length ? (
+          <EChart label={copy.etf_flowTitle} option={flowOption} height={340} />
+        ) : (
+          <Empty description={copy.noData} />
+        )}
+      </Card>
+      <Row gutter={[16, 16]}>
+        <Col xs={24} lg={10}>
+          <Card size="small" title={copy.etf_catTitle}>
+            {catRows.length ? (
+              <EChart
+                label={copy.etf_catTitle}
+                option={catOption}
+                height={330}
+              />
+            ) : (
+              <Empty description={copy.noData} />
+            )}
+          </Card>
+        </Col>
+        <Col xs={24} lg={14}>
+          <Card size="small" title={copy.etf_funds}>
+            <Space wrap style={{ marginBottom: 12 }}>
+              <ByteSearch
+                placeholder={copy.searchPlaceholder}
+                width={200}
+                onSearch={setSearch}
+              />
+              <Select
+                allowClear
+                placeholder={copy.etf_cat}
+                value={cat}
+                onChange={setCat}
+                style={{ width: 140 }}
+                options={catOptions}
+              />
+            </Space>
+            <RowTable<EtfRow>
+              module="etf"
+              date={date}
+              revision={revision}
+              columns={columns}
+              defaultSort="cum20"
+              q={search}
+              filters={filters}
+              scrollX={620}
+            />
+          </Card>
+        </Col>
+      </Row>
+      <Row gutter={[16, 16]}>
+        <Col xs={24} lg={12}>
+          <Card size="small" title={copy.etf_health} style={{ height: "100%" }}>
+            {arr(e.health?.items).length === 0 && (
+              <Empty description={copy.noData} />
+            )}
+            {arr(e.health?.items).map((item) => (
+              <div key={item.k} className="mm-health">
+                <div>
+                  <span>
+                    {item.k}: <b>{item.v}</b>
+                  </span>
+                  <div className="mm-muted">{item.note}</div>
+                </div>
+                <Tag
+                  color={
+                    isNum(item.s) && item.s < 0
+                      ? "error"
+                      : isNum(item.s) && item.s > 0
+                        ? "success"
+                        : "default"
+                  }
+                >
+                  {isNum(item.s) && item.s < 0
+                    ? copy.etf_negative
+                    : isNum(item.s) && item.s > 0
+                      ? copy.etf_positive
+                      : copy.etf_neutral}
+                </Tag>
+              </div>
+            ))}
+          </Card>
+        </Col>
+        <Col xs={24} lg={12}>
+          <Card size="small" title={copy.etf_runs} style={{ height: "100%" }}>
+            <Table
+              size="small"
+              pagination={false}
+              rowKey="start"
+              dataSource={arr(e.runs_top).slice(0, 6)}
+              columns={[
+                { title: copy.etf_start, dataIndex: "start" },
+                { title: copy.etf_end, dataIndex: "end" },
+                { title: copy.etf_days, dataIndex: "days", align: "right" },
+                {
+                  title: `${copy.etf_sum} (${copy.unit_yi})`,
+                  dataIndex: "sum",
+                  align: "right",
+                  render: (x: Num) => fmt(x, 0),
+                },
+              ]}
+            />
+            {e.scope && (
+              <div className="mm-muted" style={{ marginTop: 8 }}>
+                {fill(copy.etf_scope, {
+                  universe: e.scope.universe ?? DASH,
+                  n: e.scope.n_codes ?? DASH,
+                  note: e.scope.note ?? "",
+                })}
+              </div>
+            )}
+            {Object.keys(dh).length > 0 && (
+              <Descriptions
+                size="small"
+                column={2}
+                style={{ marginTop: 8 }}
+                items={Object.entries(dh).map(([key, value]) => ({
+                  key,
+                  label: dataDateLabel(copy, key.replace(/_last$/, "")),
+                  children: value ?? DASH,
+                }))}
+              />
+            )}
+          </Card>
+        </Col>
+      </Row>
+    </Space>
+  );
+}

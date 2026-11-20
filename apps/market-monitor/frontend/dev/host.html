@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>market-monitor - development host (not Portal)</title>
+    <style>
+      body {
+        margin: 0;
+        font-family: system-ui, sans-serif;
+      }
+      #banner {
+        padding: 4px 16px;
+        font-size: 12px;
+        background: #fffbe6;
+        color: #ad6800;
+      }
+      #bar {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 12px;
+        padding: 10px 16px;
+      }
+      #bar h1 {
+        font-size: 18px;
+        margin: 0;
+        flex: 1;
+      }
+      #frame {
+        display: block;
+        width: 100%;
+        border: 0;
+        min-height: 600px;
+      }
+      button,
+      select {
+        font: inherit;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="banner">
+      Development host: a stand-in for the Portal page. Data comes from the mock
+      backend (MM_SNAPSHOT_DIR).
+    </div>
+    <div id="bar">
+      <h1 id="title"></h1>
+      <span id="actions"></span>
+      <label
+        >Locale
+        <select id="locale">
+          <option>en-US</option>
+          <option>zh-CN</option>
+          <option>zh-TW</option>
+        </select>
+      </label>
+      <label><input type="checkbox" id="dark" /> Dark</label>
+    </div>
+    <iframe
+      id="frame"
+      sandbox="allow-scripts"
+      src="/dev/app.html"
+      title="app"
+    ></iframe>
+    <script type="module" src="./host.ts"></script>
+  </body>
+</html>
