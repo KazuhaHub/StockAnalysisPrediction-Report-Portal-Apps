@@ -16,6 +16,7 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
+	_ "time/tzdata" // the schedule's zone must not depend on the image's tzdata
 )
 
 const (
@@ -75,6 +76,13 @@ func main() {
 	// Start jobs only once the service can be reached, so a failing boot
 	// does not spend a requeued run's attempts.
 	stopRunner := runner.Start()
+	// The slots are exchange times; they are not configurable.
+	loc, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		stopRunner()
+		os.Exit(7)
+	}
+	stopScheduler := NewScheduler(runner, DefaultSlots(), loc).Start()
 	srv := &http.Server{
 		ReadHeaderTimeout: time.Second,
 		ReadTimeout:       2 * time.Second,
@@ -100,6 +108,7 @@ func main() {
 			code = 4
 		}
 	}
+	stopScheduler()
 	stopRunner()
 	os.Exit(code)
 }

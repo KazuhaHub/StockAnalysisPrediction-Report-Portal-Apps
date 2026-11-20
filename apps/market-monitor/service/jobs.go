@@ -221,6 +221,19 @@ func (r *Runner) Runs() []RunView {
 	return out
 }
 
+// runsOf returns a copy of the indexed runs of one job.
+func (r *Runner) runsOf(job string) []Run {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var out []Run
+	for _, run := range r.runs {
+		if run.Job == job {
+			out = append(out, run)
+		}
+	}
+	return out
+}
+
 func (r *Runner) get(id string) (Run, bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()

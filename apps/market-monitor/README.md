@@ -44,6 +44,16 @@ socket:
 | `GET /v1/{module}/rows?date=&page=&size=&sort=&order=&q=&f.<field>=` | viewer | one page of rows (size ≤ 200) |
 | `GET /v1/{module}/rows/{code}?date=` | viewer | one row and its detail |
 
+**Schedule.** The platform cannot yet originate tasks for a managed backend
+(its `tasks/background` route is not reachable from a networkless container),
+so the service keeps the pipeline's timetable itself, in Beijing time: marketdata Mon–Fri 21:00 with a 23:30 fallback; sentiment
+00:40, panorama 00:50 and ETF 08:00 Tue–Sat; margin Mon–Fri 09:00 with a 09:50
+fallback. A fallback runs only when no run of the job queued earlier that day
+(scheduled or manual) succeeded or is pending. Each occurrence is one run with task ID
+`schedule/<job>/<YYYY-MM-DDTHH:MM>`, so ticks and restarts never repeat it; on
+start, each slot's latest occurrence in the past 20 hours runs once if it never
+did. `POST /v1/tasks/run` stays available to start a job by hand.
+
 Viewer routes verify the `X-Portal-Assertion` against the current
 registration, boot and request URI, and refuse cookies and authorization
 headers. Responses stay under the relay's 1 MiB limit, which is why rows are
