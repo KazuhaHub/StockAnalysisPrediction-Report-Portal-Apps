@@ -8,6 +8,9 @@ pandas>=2.0,<2.3
 numpy>=1.24,<3
 pyarrow>=14,<22
 
+# Spearman rank IC in workspace/panorama/health.py (pandas imports it lazily).
+scipy>=1.11,<2
+
 # HTTP 抓取（ETF 份额/净值、两融、行情快照）
 requests>=2.31,<3
 

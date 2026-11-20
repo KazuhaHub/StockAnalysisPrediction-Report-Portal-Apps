@@ -176,39 +176,17 @@ bars["date"] = pd.to_datetime(bars["date"])
 bars["price"] = bars["close"] / bars["factor"]        # 真实价
 bars = bars[bars["volume"] > 0].copy()
 
-px = bars.pivot(index="date", columns="code", values="price")
-ret = px.pct_change()
+# Returns, momentum, moving averages and volatility use back-adjusted closes;
+# traded prices are kept only for price levels (valuation, turnover).
+from features import price_panels, trend_features
+px, adj = price_panels(bars)
+ret = adj.pct_change()
 
 def last_valid(s):
     return s.dropna().iloc[-1] if s.notna().any() else np.nan
 
-feat = {}
+feat = dict(trend_features(adj))
 feat["price_loc"] = px.apply(last_valid)
-feat["px_nd"] = px.notna().sum()
-
-def ret_n(n):
-    return px.pct_change(n).apply(last_valid)
-
-feat["ret_1m"] = ret_n(21)
-feat["ret_3m"] = ret_n(63)
-feat["ret_6m"] = ret_n(126)
-feat["ret_12m"] = ret_n(252)
-feat["mom_12_1"] = px.shift(21).pct_change(231).apply(last_valid)
-
-ma20 = px.rolling(20).mean(); ma60 = px.rolling(60).mean()
-ma120 = px.rolling(120).mean(); ma250 = px.rolling(250).mean()
-feat["ma_align"] = ((px > ma20).astype(float) + (ma20 > ma60).astype(float)
-                    + (ma60 > ma120).astype(float) + (ma120 > ma250).astype(float))
-feat["ma_align"] = feat["ma_align"].apply(lambda s: s.dropna().iloc[-1] if s.notna().any() else np.nan)
-feat["above_ma120"] = ((px.iloc[-1] > ma120.iloc[-1]).astype(float)).where(px.iloc[-1].notna())
-feat["dist_high"] = (px.iloc[-1] / px.rolling(250, min_periods=60).max().iloc[-1] - 1)
-
-v20 = ret.rolling(20).std(); v120 = ret.rolling(120).std(); v250 = ret.rolling(250).std()
-feat["vol20"] = v20.apply(last_valid)
-feat["vol120"] = v120.apply(last_valid)
-feat["vol_ratio"] = (v20 / v120).apply(last_valid)
-feat["vol_ann"] = v250.apply(last_valid) * np.sqrt(252)
-feat["max_ret_20"] = ret.rolling(20).max().apply(last_valid)
 
 # 换手代理：成交额 / 市值（市值用当期价×股本近似，做相对排序够用）
 to = (bars.assign(turn=bars["amount"] / (bars["price"] * 1.0)))
@@ -222,14 +200,6 @@ feat["turnover_chg"] = (turn_ratio.rolling(20).mean() / turn_ratio.rolling(120).
 # 流动性：Amihud
 amih = (ret.abs() / (to.pivot_table(index="date", columns="code", values="amount", aggfunc="sum") / 1e8))
 feat["amihud"] = amih.rolling(60).mean().apply(last_valid)
-
-# 自身市场（等权）Beta / 相对强弱
-mkt = ret.mean(axis=1)
-cov = ret.rolling(252, min_periods=120).cov(mkt)
-var = mkt.rolling(252, min_periods=120).var()
-beta = cov.div(var, axis=0)
-feat["beta252"] = beta.apply(last_valid)
-feat["rs_market_60"] = (px.pct_change(60)).apply(last_valid) - float(px.pct_change(60).apply(last_valid).median())
 
 pf = pd.DataFrame(feat)
 pf.index.name = "symbol"
@@ -321,9 +291,14 @@ m.to_parquet(f"{DATA}/master.parquet", index=False)
 hist.to_parquet(f"{DATA}/val_hist.parquet", index=False)
 
 # ---------------------------------------------------------------- 市场层
-breadth = (px > ma120).astype(float)
+# Breadth and the equal-weighted index are time series, so they use adjusted
+# closes as well.
+ma120 = adj.rolling(120).mean()
+ma250 = adj.rolling(250).mean()
+mkt = ret.mean(axis=1)
+breadth = (adj > ma120).astype(float)
 bw = breadth.mean(axis=1)
-above250 = (px > ma250).astype(float).mean(axis=1)
+above250 = (adj > ma250).astype(float).mean(axis=1)
 mkt_idx = (1 + mkt.fillna(0)).cumprod()
 mk = {
     "asof": ASOF,

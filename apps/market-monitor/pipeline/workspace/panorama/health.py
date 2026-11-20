@@ -27,9 +27,13 @@ codes = sorted(meta.keys())
 bars = md.load(codes, start="2023-06-01", end=END)
 bars["date"] = pd.to_datetime(bars["date"])
 bars = bars[bars["volume"] > 0]
-bars["price"] = bars["close"] / bars["factor"]
-px = bars.pivot(index="date", columns="code", values="price").sort_index()
-ret = px.pct_change()
+sys.path.insert(0, D)
+from features import price_panels  # noqa: E402
+
+# Traded prices for EP/BP; back-adjusted closes for momentum, volatility and
+# forward returns, so an ex-dividend day is not counted as a loss.
+px, adj = price_panels(bars)
+ret = adj.pct_change()
 
 # ---------------- 财务（按公告日生效）
 pan = pd.DataFrame(json.load(open(f"{DATA}/panel.json")))
@@ -70,7 +74,7 @@ for d in dates:
     f = pd.DataFrame({
         "EP": e / p,
         "BP": sub["bps"].reindex(p.index) / p,
-        "MOM_12_1": px.shift(21).pct_change(231).loc[:d].iloc[-1].reindex(p.index),
+        "MOM_12_1": adj.shift(21).pct_change(231).loc[:d].iloc[-1].reindex(p.index),
         "ROE": sub["roe_ann"].reindex(p.index),
         "REV_YOY": sub["rev_yoy"].reindex(p.index),
         "LOW_VOL": -ret.rolling(120).std().loc[:d].iloc[-1].reindex(p.index) * np.sqrt(252),
@@ -85,7 +89,7 @@ for d in dates:
     f["fwd60"] = np.nan
     for h in (20, 60):
         if idx + h < len(px.index):
-            fw = (px.iloc[idx + h] / p - 1)
+            fw = (adj.iloc[idx + h] / adj.loc[d] - 1).reindex(p.index)
             f[f"fwd{h}"] = fw
     for fac in FACTORS:
         s = f[[fac, "fwd20", "fwd60", "sw1"]].dropna(subset=[fac])
