@@ -3,8 +3,10 @@
 #   docker build --platform linux/amd64 -f apps/market-monitor/service/Dockerfile .
 #
 # The platform runs it as 65532:65532 with a read-only root filesystem, no
-# network, a 16 MiB /tmp and the installation's data mounted at /data. The
-# pipeline hard-codes /opt/daily-tasks, which is linked to /data/work.
+# network (egress goes through the in-process forwarder to the broker, which
+# answers only for hosts an administrator has reviewed), a 16 MiB /tmp and the
+# installation's data mounted at /data. The pipeline hard-codes /opt/daily-tasks,
+# which is linked to /data/work.
 #
 # linux/amd64 only: py-mini-racer (an akshare dependency) publishes Linux
 # wheels for x86_64 only; build with --platform linux/amd64. Base images are
@@ -14,6 +16,7 @@
 FROM golang:1.26.11-bookworm@sha256:dc40a13b61304647ed7e5d581d246b86413dfc29d63c6d018310feb93cd98fc0 AS service
 WORKDIR /src/apps/market-monitor/service
 COPY packages/extensionprotocol /src/packages/extensionprotocol
+COPY packages/proxy /src/packages/proxy
 COPY apps/market-monitor/service/go.mod ./
 COPY apps/market-monitor/service/*.go ./
 RUN rm -f *_test.go && CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o /out/market-monitor .

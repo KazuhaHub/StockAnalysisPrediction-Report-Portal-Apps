@@ -73,6 +73,12 @@ func main() {
 	if err := os.Chmod(socket, 0600); err != nil {
 		os.Exit(3)
 	}
+	// The workers reach the network only through the forwarder, so it listens
+	// before any job can start.
+	_, stopProxy, err := startEgressProxy()
+	if err != nil {
+		os.Exit(8)
+	}
 	// Start jobs only once the service can be reached, so a failing boot
 	// does not spend a requeued run's attempts.
 	stopRunner := runner.Start()
@@ -80,6 +86,7 @@ func main() {
 	loc, err := time.LoadLocation("Asia/Shanghai")
 	if err != nil {
 		stopRunner()
+		stopProxy()
 		os.Exit(7)
 	}
 	stopScheduler := NewScheduler(runner, DefaultSlots(), loc).Start()
@@ -110,5 +117,6 @@ func main() {
 	}
 	stopScheduler()
 	stopRunner()
+	stopProxy()
 	os.Exit(code)
 }

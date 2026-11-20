@@ -132,3 +132,29 @@ class SkipHtml(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ExternalSourcesUseHttps(unittest.TestCase):
+    """Backend egress goes through an HTTPS CONNECT proxy (HTTPS_PROXY only), so a
+    plain-http source would not reach it. The one exception is the data server's
+    upstream, an address the proxy cannot carry (an IP literal, port 8000)."""
+
+    UPSTREAM = "47.237.204.217"
+
+    def test_no_plain_http_source_to_a_public_host(self):
+        import re
+        bad = []
+        for root, dirs, files in os.walk(PIPELINE):
+            dirs[:] = [d for d in dirs if d not in ("tests", "__pycache__")]
+            for name in files:
+                if not name.endswith(".py"):
+                    continue
+                path = os.path.join(root, name)
+                with open(path, encoding="utf-8", errors="replace") as f:
+                    for n, line in enumerate(f, 1):
+                        for m in re.finditer(r"http://([A-Za-z0-9._-]+)", line):
+                            host = m.group(1)
+                            if host in ("localhost", "127.0.0.1", self.UPSTREAM) or host.startswith("<"):
+                                continue
+                            bad.append("%s:%d %s" % (os.path.relpath(path, PIPELINE), n, host))
+        self.assertEqual(bad, [])
