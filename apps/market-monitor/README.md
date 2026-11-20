@@ -105,7 +105,7 @@ reviewed forward proxy's forwarder (`packages/proxy`, `egress.go`) on
 Jobs that fetch data work once an administrator has reviewed the hosts the
 descriptor suggests in `network_proxy.hosts`; until then every CONNECT is
 refused with 403 and `X-Portal-Proxy-Refusal`. The data server's upstream
-quotes API is reached at `https://quotes.anchan.kazuhahub.com` (an HTTPS name in
+quotes API is reached at `https://quotes.internal.anchan.kazuhahub.com` (an HTTPS name in
 front of the API, which used to be addressed as plain `http://47.237.204.217:8000`
 and so could not go through the proxy); `QUOTE_API` overrides it. The
 `marketdata` and `panorama` jobs need that host reviewed like the others.
@@ -219,7 +219,7 @@ network.
 2. Review the proxy hosts in an installation and verify the jobs end to end
    (done in code: the forwarder is wired and the `http://` source is now
    `https://`, and the data server's upstream is reached by its HTTPS name
-   `quotes.anchan.kazuhahub.com`). Only the installation's host review is left.
+   `quotes.internal.anchan.kazuhahub.com`). Only the installation's host review is left.
 3. Panorama: the industry breakdown, market medians and valuation shifts
    come from the export step's page data (`site/data.js`), used only when
    that run wrote it for the same date; see `convert_panorama`.

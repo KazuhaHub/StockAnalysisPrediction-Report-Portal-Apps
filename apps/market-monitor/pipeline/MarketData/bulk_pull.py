@@ -54,9 +54,7 @@ import pandas as pd  # noqa: E402
 GAP = os.path.join(HERE, "pool_gap_panorama.json")
 CACHE = os.path.join(HERE, "pull_cache")
 DONE = os.path.join(CACHE, "done.txt")
-BASE = os.environ.get("QUOTE_API", "https://quotes.anchan.kazuhahub.com") + "/api/v1/quotes/daily"
-# Cloudflare in front of QUOTE_API refuses the default "Python-urllib" agent (error 1010).
-UA = {"User-Agent": "market-monitor"}
+BASE = os.environ.get("QUOTE_API", "https://quotes.internal.anchan.kazuhahub.com") + "/api/v1/quotes/daily"
 START = "2014-06-01"
 _lock = threading.Lock()
 
@@ -103,7 +101,7 @@ def _fetch(code: str, start: str, end: str, timeout: int = 300) -> pd.DataFrame:
     for attempt in range(3):
         _pace_wait()
         try:
-            raw = urllib.request.urlopen(urllib.request.Request(url, headers=UA), timeout=timeout).read().decode("utf-8")
+            raw = urllib.request.urlopen(url, timeout=timeout).read().decode("utf-8")
             _pace_speed_up()
             break
         except urllib.error.HTTPError as e:

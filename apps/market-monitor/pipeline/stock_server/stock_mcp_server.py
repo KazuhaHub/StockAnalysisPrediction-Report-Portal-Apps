@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import Optional, Dict, Any
 
 
-QUOTE_API = os.environ.get("QUOTE_API", "https://quotes.anchan.kazuhahub.com")
+QUOTE_API = os.environ.get("QUOTE_API", "https://quotes.internal.anchan.kazuhahub.com")
 
 
 class StockQuoteAPI:

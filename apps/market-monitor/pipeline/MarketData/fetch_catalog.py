@@ -36,9 +36,7 @@ sys.path.insert(0, HERE)
 import market_data as md  # noqa: E402
 import pandas as pd  # noqa: E402
 
-API = os.environ.get("QUOTE_API", "https://quotes.anchan.kazuhahub.com")
-# Cloudflare in front of QUOTE_API refuses the default "Python-urllib" agent (error 1010).
-UA = {"User-Agent": "market-monitor"}
+API = os.environ.get("QUOTE_API", "https://quotes.internal.anchan.kazuhahub.com")
 CAT = os.path.join(HERE, "catalog.json")
 GAP = os.path.join(HERE, "pool_gap_panorama.json")
 PATCH = os.path.join(HERE, "meta_patch.json")
@@ -61,7 +59,7 @@ def fetch() -> list[dict]:
     out, off = [], 0
     while True:
         q = urllib.parse.urlencode({"type": "stock", "limit": 1000, "offset": off})
-        d = json.load(urllib.request.urlopen(urllib.request.Request(f"{API}/api/v1/instruments?{q}", headers=UA), timeout=120))
+        d = json.load(urllib.request.urlopen(f"{API}/api/v1/instruments?{q}", timeout=120))
         items = d if isinstance(d, list) else (d.get("items") or [])
         if not items:
             break

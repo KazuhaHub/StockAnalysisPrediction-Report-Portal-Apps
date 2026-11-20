@@ -26,7 +26,7 @@
 **数据流**（后一个依赖前一个，顺序不能乱）：
 
 ```
-       上游行情 API (QUOTE_API，默认 https://quotes.anchan.kazuhahub.com)
+       上游行情 API (QUOTE_API，默认 https://quotes.internal.anchan.kazuhahub.com)
                     │
                     ▼
         stock_server  :8091  ←── 常驻，挂了全链条都停
@@ -56,7 +56,7 @@
 | Python | ≥ 3.9，建议 3.11 | `python3-venv`、`python3-dev` 要装 |
 | 磁盘 | ≥ 3 GB 可用 | 解压 737 MB + 每日增量约 300 MB/年 + venv |
 | 内存 | ≥ 2 GB | Panorama compute 峰值约 1.2 GB |
-| 网络 | 能出公网 | 需要访问 `https://quotes.anchan.kazuhahub.com`（行情，可用环境变量 QUOTE_API 覆盖）、东财、腾讯、深交所 |
+| 网络 | 能出公网 | 需要访问 `https://quotes.internal.anchan.kazuhahub.com`（行情，可用环境变量 QUOTE_API 覆盖）、东财、腾讯、深交所 |
 | 权限 | root | 要写 `/etc/systemd/system`、装用户、配 nginx |
 
 **不需要**：不需要 GPU，不需要 WorkBuddy 客户端，不需要原来的 Mac。
