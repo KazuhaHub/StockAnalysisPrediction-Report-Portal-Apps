@@ -440,5 +440,21 @@ class Run(unittest.TestCase):
             self.assertIn("server up", f.read())  # kept out of the job log
 
 
+class ReferenceData(unittest.TestCase):
+    """Hand-curated tables the jobs need and no script produces; they ship
+    with the pipeline code (and are copied into the work dir)."""
+
+    def test_reference_tables_are_present(self):
+        for rel, header in (
+            ("workspace/analysis/panel/feed/universe.csv", "基金代码"),
+            ("workspace/panorama/data/code_name.csv", "code"),
+            ("workspace/panorama/data/div_seed.csv", "code"),
+        ):
+            path = os.path.join(HERE, "..", rel)
+            with open(path, encoding="utf-8-sig") as f:
+                self.assertTrue(f.readline().startswith(header), rel)
+                self.assertGreater(sum(1 for _ in f), 100, rel)
+
+
 if __name__ == "__main__":
     unittest.main()

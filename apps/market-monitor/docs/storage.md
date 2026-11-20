@@ -6,7 +6,7 @@ and single-row detail.
 
 Everything lives in the installation's `/data` mount. The Go service is the
 only writer of `snapshots/` and `runs/`; Python jobs write only to their own
-staging directory and to the market-data store.
+staging directory and to the pipeline's work directory.
 
 ```
 /data
@@ -14,8 +14,21 @@ staging directory and to the market-data store.
 ├── runs/index.json                        job history, newest first, at most 200 runs
 ├── runs/<run-id>.log                      job output, first 256 KiB per attempt
 ├── staging/<run-id>/                      a running job's output, removed when it ends
-└── marketdata/                            the bar store (bars/YYYY.parquet, meta.json)
+└── work/                                  the pipeline's working copy (/opt/daily-tasks; HOME for jobs)
+    ├── MarketData/                          bar store: bars/YYYY.parquet, meta.json
+    ├── workspace/                           Panorama, sentiment and ETF inputs and history
+    ├── margin_scan/                         margin-scan inputs and history
+    ├── stock_server/                        local data server (started by the job entry)
+    ├── .mm-published/                       last snapshots handed to the service
+    └── venv -> the image's virtual environment
 ```
+
+`work/` holds state the jobs cannot rebuild cheaply (the bar store since 2014,
+Panorama fundamentals, the Shenzhen ETF share history, which the exchange does
+not publish retroactively) next to caches they regenerate on every run. The
+code and the hand-curated reference tables (`universe.csv`, `code_name.csv`,
+`div_seed.csv`) are copied from the image on every run; a new installation
+still needs a one-time data seed for the rest (see the README).
 
 Modules: `risk`, `margin`, `sentiment`, `etf`, `panorama`.
 
