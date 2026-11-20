@@ -1,0 +1,12 @@
+[Unit]
+Description=ETF 资金面板日更（周二至周六 08:00）
+
+[Timer]
+# 08:00 取到的是上一交易日收盘后披露的份额与净值，属正常节奏
+OnCalendar=Tue..Sat 08:00
+Persistent=true
+AccuracySec=1min
+Unit=daily-etf.service
+
+[Install]
+WantedBy=timers.target

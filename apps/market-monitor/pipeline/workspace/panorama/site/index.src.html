@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Panorama · 全策略选股与九法估值</title>
+<style>
+:root{
+  --ink:#14202b; --sub:#5d6b78; --faint:#8b96a2; --line:#e2e1da; --line2:#efeee8;
+  --bg:#fbfaf6; --card:#ffffff; --red:#a8341f; --red-soft:#f6ece8;
+  --teal:#1a6b62; --teal-soft:#eaf3f1; --gold:#8f6f1c; --blue:#2a4f7c;
+  --sh:0 1px 2px rgba(20,32,43,.05), 0 8px 24px -18px rgba(20,32,43,.35);
+  --f-display:"Songti SC","Noto Serif SC","Source Han Serif SC",Georgia,serif;
+  --f-body:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  --f-num:"SF Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+body.big{font-size:17px}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.72;
+  -webkit-font-smoothing:antialiased}
+a{color:var(--red);text-decoration:none}
+a:hover{text-decoration:underline}
+h1,h2,h3,h4{font-family:var(--f-display);font-weight:600;letter-spacing:-.01em;margin:0}
+.num{font-family:var(--f-num);font-variant-numeric:tabular-nums}
+.wrap{max-width:1180px;margin:0 auto;padding:0 26px}
+
+/* ---------- header ---------- */
+header.top{position:sticky;top:0;z-index:50;background:rgba(251,250,246,.92);
+  backdrop-filter:saturate(160%) blur(10px);border-bottom:1px solid var(--line)}
+.top-in{display:flex;align-items:center;gap:18px;height:56px;max-width:1180px;margin:0 auto;padding:0 26px}
+.brand{font-family:var(--f-display);font-size:16px;letter-spacing:.14em;font-weight:600}
+.brand em{font-style:normal;color:var(--red)}
+.top nav{display:flex;gap:2px;flex:1;overflow-x:auto;scrollbar-width:none}
+.top nav::-webkit-scrollbar{display:none}
+.tab-btn{border:0;background:transparent;color:var(--sub);font-family:var(--f-body);font-size:13.5px;
+  padding:7px 11px;border-radius:6px;cursor:pointer;white-space:nowrap;transition:.15s}
+.tab-btn:hover{background:#f1efe7;color:var(--ink)}
+.tab-btn.on{background:var(--ink);color:#fff}
+.top .tools{display:flex;gap:8px;align-items:center}
+.mini{border:1px solid var(--line);background:#fff;color:var(--sub);font-size:12px;padding:5px 10px;
+  border-radius:999px;cursor:pointer;white-space:nowrap}
+.mini:hover{border-color:var(--ink);color:var(--ink)}
+
+/* ---------- generic ---------- */
+section.view{display:none;padding:34px 0 70px}
+section.view.on{display:block}
+.eyebrow{font-size:11.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--faint);
+  font-family:var(--f-num);margin-bottom:10px}
+.lead{max-width:780px;color:var(--sub);font-size:15.5px}
+.rule{height:1px;background:var(--line);margin:34px 0}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:20px 22px;box-shadow:var(--sh)}
+.grid{display:grid;gap:16px}
+.g2{grid-template-columns:repeat(2,minmax(0,1fr))}
+.g3{grid-template-columns:repeat(3,minmax(0,1fr))}
+.g4{grid-template-columns:repeat(4,minmax(0,1fr))}
+.g6{grid-template-columns:repeat(6,minmax(0,1fr))}
+@media(max-width:980px){.g3,.g4,.g6{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:640px){.g2,.g3,.g4,.g6{grid-template-columns:1fr}}
+.kpi .k{font-size:11.5px;color:var(--faint);letter-spacing:.06em}
+.kpi .v{font-family:var(--f-num);font-size:26px;font-weight:600;line-height:1.2;margin-top:2px}
+.kpi .s{font-size:11.5px;color:var(--faint)}
+
+/* ---------- landing ---------- */
+.hero{padding:56px 0 10px;border-bottom:1px solid var(--line)}
+.hero h1{font-size:clamp(30px,4.4vw,50px);line-height:1.12}
+.hero h1 span{color:var(--red)}
+.hero .sub{margin-top:16px;max-width:820px;color:var(--sub);font-size:15.5px}
+.hero .cta{margin-top:22px;display:flex;gap:10px;flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;gap:8px;border-radius:8px;padding:10px 18px;font-size:14px;
+  border:1px solid var(--ink);background:var(--ink);color:#fff;cursor:pointer;font-family:var(--f-body)}
+.btn:hover{opacity:.9;text-decoration:none}
+.btn.ghost{background:transparent;color:var(--ink)}
+.strip{border-top:1px solid var(--line);border-bottom:1px solid var(--line);background:#fff}
+.strip-in{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));max-width:1180px;margin:0 auto}
+.strip-in>div{padding:16px 18px;border-right:1px solid var(--line2)}
+.strip-in>div:last-child{border-right:0}
+@media(max-width:980px){.strip-in{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:640px){.strip-in{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.strip .k{font-size:11px;color:var(--faint)}
+.strip .v{font-family:var(--f-num);font-size:22px;font-weight:600}
+.strip .v small{font-size:11px;color:var(--faint);font-weight:400;margin-left:3px}
+.h2row{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:16px;flex-wrap:wrap}
+.h2row h2{font-size:26px}
+.h2row .note{color:var(--faint);font-size:12px;font-family:var(--f-num)}
+.mcard{border:1px solid var(--line);border-radius:10px;background:#fff;padding:14px 15px}
+.mcard .code{font-family:var(--f-num);font-size:11px;color:var(--faint);letter-spacing:.08em}
+.mcard h4{font-size:15px;margin:6px 0 4px}
+.mcard p{margin:0;color:var(--sub);font-size:12.5px;line-height:1.6}
+.mcard .cov{margin-top:8px;font-family:var(--f-num);font-size:11.5px;color:var(--faint)}
+.mcard .cov b{color:var(--ink)}
+.slist{border-top:1px solid var(--line);margin-top:6px}
+.srow{display:grid;grid-template-columns:150px 1fr auto;gap:14px;padding:15px 0;border-bottom:1px solid var(--line2);
+  align-items:start}
+.srow h4{font-size:16px}
+.srow .en{font-family:var(--f-num);font-size:11px;color:var(--faint);letter-spacing:.1em}
+.srow p{margin:2px 0 0;color:var(--sub);font-size:13px}
+.srow .f{font-family:var(--f-num);font-size:11.5px;color:var(--faint);text-align:right;white-space:nowrap}
+.pageroad{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1px;background:var(--line);
+  border:1px solid var(--line);border-radius:10px;overflow:hidden}
+@media(max-width:980px){.pageroad{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.pageroad div{background:#fff;padding:14px 16px}
+.pageroad .no{font-family:var(--f-num);color:var(--faint);font-size:11px}
+.pageroad b{display:block;font-size:14px;margin:3px 0 3px}
+.pageroad span{font-size:12px;color:var(--sub)}
+.warn{border-left:3px solid var(--red);background:var(--red-soft);padding:14px 16px;border-radius:0 8px 8px 0;
+  font-size:13.5px;color:#5d2a1e}
+.warn b{color:var(--red)}
+.foot{border-top:1px solid var(--line);padding:26px 0 60px;color:var(--faint);font-size:12px}
+.foot .wrap{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap}
+
+/* ---------- app ---------- */
+.apphead{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:18px;flex-wrap:wrap}
+.apphead h2{font-size:24px}
+.apphead .meta{font-family:var(--f-num);font-size:11.5px;color:var(--faint)}
+.chart{height:300px;width:100%}
+.chart.tall{height:380px}
+.chart.short{height:230px}
+.tblwrap{overflow:auto;border:1px solid var(--line);border-radius:10px;background:#fff;max-height:640px}
+table{border-collapse:collapse;width:100%;font-size:12.8px}
+th,td{padding:7px 10px;text-align:right;white-space:nowrap;border-bottom:1px solid var(--line2)}
+th{position:sticky;top:0;background:#f7f5ee;font-weight:600;font-size:11.5px;color:var(--sub);
+  z-index:2;cursor:pointer;user-select:none}
+th:hover{color:var(--ink)}
+td.l,th.l{text-align:left}
+tbody tr:hover{background:#fbf8f0}
+td.sym{font-family:var(--f-num);color:var(--faint)}
+.pos{color:var(--red)}
+.neg{color:var(--teal)}
+.tag{display:inline-block;font-size:11px;padding:1px 7px;border-radius:999px;border:1px solid var(--line);color:var(--sub)}
+.tag.red{background:var(--red-soft);border-color:#e7cfc7;color:var(--red)}
+.tag.teal{background:var(--teal-soft);border-color:#cfe3df;color:var(--teal)}
+.tag.gold{background:#fbf4e2;border-color:#e8d9ae;color:var(--gold)}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:#fff}
+.seg button{border:0;background:transparent;padding:6px 12px;font-size:12.5px;color:var(--sub);cursor:pointer;
+  font-family:var(--f-body)}
+.seg button.on{background:var(--ink);color:#fff}
+.ctrl{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:14px 0}
+select,input[type=text],input[type=search]{font-family:var(--f-body);font-size:13px;padding:6px 10px;
+  border:1px solid var(--line);border-radius:7px;background:#fff;color:var(--ink)}
+input[type=range]{accent-color:var(--red);width:100%}
+.fgrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+@media(max-width:980px){.fgrid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:640px){.fgrid{grid-template-columns:1fr}}
+.fitem{border:1px solid var(--line);border-radius:9px;padding:9px 11px;background:#fff}
+.fitem.on{border-color:var(--red);box-shadow:0 0 0 1px var(--red) inset}
+.fitem .t{display:flex;justify-content:space-between;gap:8px;align-items:center}
+.fitem .t label{font-size:12.8px;cursor:pointer}
+.fitem .w{font-family:var(--f-num);font-size:11.5px;color:var(--red);min-width:26px;text-align:right}
+.fitem .meta2{font-family:var(--f-num);font-size:10.5px;color:var(--faint);margin-top:2px}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:11.5px;color:var(--sub);margin-top:8px}
+.legend i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:5px}
+.notes{font-size:12px;color:var(--faint);line-height:1.7}
+.notes b{color:var(--sub)}
+.hl{background:#fff3cd}
+.small{font-size:12px}
+.mono{font-family:var(--f-num)}
+details{border:1px solid var(--line);border-radius:9px;padding:10px 14px;background:#fff;margin-bottom:10px}
+summary{cursor:pointer;font-size:13.5px;font-weight:600}
+details .body{padding-top:8px;font-size:13px;color:var(--sub);line-height:1.75}
+.badge{font-family:var(--f-num);font-size:11px;background:#f1efe7;color:var(--sub);padding:1px 6px;border-radius:4px}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="top-in">
+    <div class="brand">PANORAMA<em>·</em>全景</div>
+    <nav id="nav"></nav>
+    <div class="tools">
+      <button class="mini" id="bigbtn">大字版</button>
+    </div>
+  </div>
+</header>
+
+<main>
+<!-- ============ 落地页 ============ -->
+<section class="view on" id="v-home">
+  <div class="wrap">
+    <div class="hero">
+      <div class="eyebrow">A 股 · 全市场 · 季度更新 · 数据截至 <span id="hero-asof">—</span></div>
+      <h1>六套策略，十种估值。<br><span>同一把尺子</span>，量完 5,596 只 A 股。</h1>
+      <div class="sub" id="hero-sub"></div>
+      <div class="cta">
+        <button class="btn" data-go="overview">进入工作台 →</button>
+        <button class="btn ghost" data-go="method">先看方法与口径</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="strip"><div class="strip-in" id="strip"></div></div>
+
+  <div class="wrap" style="padding-top:44px">
+    <div class="h2row">
+      <div>
+        <div class="eyebrow">Panorama / 市场总览</div>
+        <h2>先把市场的位置标出来</h2>
+      </div>
+      <div class="note" id="mk-note"></div>
+    </div>
+    <div class="grid g4" id="mk-kpi" style="margin-bottom:18px"></div>
+    <div class="grid g2">
+      <div class="card">
+        <div class="eyebrow">宽度 / Breadth</div>
+        <div class="chart" id="c-breadth"></div>
+        <div class="notes" style="margin-top:6px" id="breadth-note"></div>
+      </div>
+      <div class="card">
+        <div class="eyebrow">六策略行业得分 · 申万一级（两端各 6 个，全市场分位口径）</div>
+        <div class="chart tall" id="c-ind"></div>
+      </div>
+    </div>
+    <div class="grid g3" style="margin-top:16px">
+      <div class="card">
+        <div class="eyebrow">估值判断标签</div>
+        <div class="chart short" id="c-label"></div>
+      </div>
+      <div class="card">
+        <div class="eyebrow">四象限 · 估值 × 质量</div>
+        <div class="chart short" id="c-quad"></div>
+      </div>
+      <div class="card">
+        <div class="eyebrow">本期最重要的一件事</div>
+        <div id="alert-box" style="font-size:13px;color:var(--sub);line-height:1.8"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="wrap">
+    <div class="rule"></div>
+    <div class="h2row">
+      <div>
+        <div class="eyebrow">Ten-Model Valuation</div>
+        <h2>十种方法并列，而不是一个「内在价值」</h2>
+      </div>
+      <div class="note">同一价格下的十种参照</div>
+    </div>
+    <p class="lead" style="margin-bottom:18px">
+      同一只股票，用相对行业 PE、自身历史 PB、两阶段 DCF（FCFE / FCFF）、DDM、EPV、PEG、剩余收益各算一遍，把结果摊开对比。
+      平台给的是<b>参照区间与分歧度</b>，不是精确的内在价值——方法之间分歧太大时，不给结论。
+    </p>
+    <div class="grid g3" id="methods"></div>
+    <div class="grid g2" style="margin-top:16px">
+      <div class="card">
+        <div class="eyebrow">方法覆盖与判断标签</div>
+        <div class="chart short" id="c-methodcov"></div>
+        <div class="notes" id="methodcov-note" style="margin-top:6px"></div>
+      </div>
+      <div class="card">
+        <div class="eyebrow">相对定价，不是内在价值</div>
+        <div style="font-size:13.2px;color:var(--sub);line-height:1.85;margin-top:4px" id="care"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="wrap">
+    <div class="rule"></div>
+    <div class="h2row">
+      <div>
+        <div class="eyebrow">Six Strategies · Twelve Templates</div>
+        <h2>不是六个标签，是六套权重</h2>
+      </div>
+      <div class="note" id="strat-note"></div>
+    </div>
+    <div class="slist" id="strat-list"></div>
+  </div>
+
+  <div class="wrap">
+    <div class="rule"></div>
+    <div class="h2row">
+      <div>
+        <div class="eyebrow">Workbench</div>
+        <h2>七个页面，一条完整的研究路径</h2>
+      </div>
+      <div class="note">从宽度到个股抽屉，判断链不断</div>
+    </div>
+    <div class="pageroad" id="pageroad"></div>
+  </div>
+
+  <div class="wrap">
+    <div class="rule"></div>
+    <div class="h2row">
+      <div>
+        <div class="eyebrow">Methodology</div>
+        <h2>先把尺子校准，再谈选股</h2>
+      </div>
+    </div>
+    <div class="grid g2">
+      <div class="card">
+        <div style="font-family:var(--f-num);color:var(--faint);font-size:11px">01</div>
+        <h4 style="margin:4px 0 6px">行业内分位，不是全市场排名</h4>
+        <p class="notes" style="font-size:13px">银行与半导体不能用同一套 PE 阈值。所有因子先按申万一级行业内转 0–100 分位，再按策略权重合成。</p>
+      </div>
+      <div class="card">
+        <div style="font-family:var(--f-num);color:var(--faint);font-size:11px">02</div>
+        <h4 style="margin:4px 0 6px">估值是相对定价，不做单一「内在价值」</h4>
+        <p class="notes" style="font-size:13px">十种方法并列计算，综合价取加权中位数，同时给出参与方法数与离散度。假设参数全部公开，可自行改算。</p>
+      </div>
+      <div class="card">
+        <div style="font-family:var(--f-num);color:var(--faint);font-size:11px">03</div>
+        <h4 style="margin:4px 0 6px">分歧大就不给结论</h4>
+        <p class="notes" style="font-size:13px">同时满足「≥2 个方法可用」且「分歧不在行业内前 15%」才输出综合价，否则只打标签。</p>
+      </div>
+      <div class="card">
+        <div style="font-family:var(--f-num);color:var(--faint);font-size:11px">04</div>
+        <h4 style="margin:4px 0 6px">因子要做体检</h4>
+        <p class="notes" style="font-size:13px" id="health-note"></p>
+      </div>
+    </div>
+    <div class="warn" style="margin-top:18px" id="warn-landing"></div>
+    <div class="grid g2" style="margin-top:16px">
+      <div class="card">
+        <div class="eyebrow">能做什么</div>
+        <div class="notes" style="font-size:13.2px;line-height:1.85" id="can-do"></div>
+      </div>
+      <div class="card">
+        <div class="eyebrow">不能做什么</div>
+        <div class="notes" style="font-size:13.2px;line-height:1.85" id="cant-do"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 01 市场总览 ============ -->
+<section class="view" id="v-overview">
+  <div class="wrap">
+    <div class="apphead">
+      <div><div class="eyebrow">01 / 市场总览</div><h2>宽度、行业、共振</h2></div>
+      <div class="meta" id="ov-meta"></div>
+    </div>
+    <div class="grid g6" id="ov-kpi" style="margin-bottom:16px"></div>
+    <div class="grid g2">
+      <div class="card"><div class="eyebrow">站上 120 日均线比例（近 60 日）</div><div class="chart" id="c-ov-breadth"></div></div>
+      <div class="card"><div class="eyebrow">等权全市场指数（近 250 日，起点=1）</div><div class="chart" id="c-ov-index"></div></div>
+    </div>
+    <div class="grid g2" style="margin-top:16px">
+      <div class="card"><div class="eyebrow">31 个申万一级 · 六维均分（全市场分位口径，两端各 9 个）</div><div class="chart tall" id="c-ov-ind"></div></div>
+      <div class="card"><div class="eyebrow">估值判断标签分布（有效组合）</div><div class="chart" id="c-ov-label"></div></div>
+    </div>
+    <div class="apphead" style="margin-top:26px">
+      <div><h2 style="font-size:19px">共振榜 · 六维一致性前 30</h2></div>
+      <div class="meta">共振分 = 均值 − 0.35×标准差 + 0.10×最高分</div>
+    </div>
+    <div class="tblwrap" id="t-resonance"></div>
+  </div>
+</section>
+
+<!-- ============ 02 策略中心 ============ -->
+<section class="view" id="v-strategy">
+  <div class="wrap">
+    <div class="apphead">
+      <div><div class="eyebrow">02 / 策略中心</div><h2>因子权重、模板与榜单</h2></div>
+      <div class="meta" id="st-meta"></div>
+    </div>
+    <div class="ctrl">
+      <div class="seg" id="seg-strat"></div>
+      <span class="notes" id="st-desc"></span>
+    </div>
+    <div class="grid g2">
+      <div class="card"><div class="eyebrow">权重结构</div><div class="chart tall" id="c-st-w"></div></div>
+      <div class="card">
+        <div class="eyebrow">模板（对全市场求交）</div>
+        <div id="st-tpl" style="margin-top:6px"></div>
+        <div class="eyebrow" style="margin-top:18px">得分分布</div>
+        <div class="chart short" id="c-st-dist"></div>
+      </div>
+    </div>
+    <div class="ctrl">
+      <select id="st-ind"><option value="">全部行业</option></select>
+      <select id="st-min">
+        <option value="0">不限分数</option>
+        <option value="60">分数 ≥ 60</option>
+        <option value="70">分数 ≥ 70</option>
+        <option value="80">分数 ≥ 80</option>
+      </select>
+      <span class="notes">点表头可排序；覆盖率为该票在该策略下的可用权重占比</span>
+    </div>
+    <div class="tblwrap" id="t-strategy"></div>
+  </div>
+</section>
+
+<!-- ============ 03 选股器 ============ -->
+<section class="view" id="v-screener">
+  <div class="wrap">
+    <div class="apphead">
+      <div><div class="eyebrow">03 / 选股器</div><h2><span id="sc-nf">54</span> 因子勾选 + 权重滑杆，客户端实时重算</h2></div>
+      <div class="meta" id="sc-meta"></div>
+    </div>
+    <div class="ctrl">
+      <button class="btn" id="sc-run" style="padding:7px 14px;font-size:13px">重算 →</button>
+      <button class="mini" id="sc-reset">清空</button>
+      <button class="mini" id="sc-save">存方案</button>
+      <button class="mini" id="sc-load">读方案</button>
+      <button class="mini" id="sc-csv">导出 CSV</button>
+      <select id="sc-ind"><option value="">全部行业</option></select>
+      <select id="sc-cap">
+        <option value="0">不限市值</option>
+        <option value="1">≥ 50 亿</option>
+        <option value="2">≥ 100 亿</option>
+        <option value="3">50–300 亿</option>
+        <option value="4">≤ 100 亿</option>
+      </select>
+      <span class="notes" id="sc-hint">勾选因子并给权重（0–100），不填权重的因子不参与</span>
+    </div>
+    <div id="sc-factors" class="fgrid"></div>
+    <div class="ctrl" style="margin-top:18px">
+      <span class="notes" id="sc-count"></span>
+    </div>
+    <div class="tblwrap" id="t-screener"></div>
+  </div>
+</section>
+
+<!-- ============ 04 个股估值 ============ -->
+<section class="view" id="v-valuation">
+  <div class="wrap">
+    <div class="apphead">
+      <div><div class="eyebrow">04 / 个股估值</div><h2>十法结论全表、四象限、单票拆解</h2></div>
+      <div class="meta" id="va-meta"></div>
+    </div>
+    <div class="grid g4" id="va-kpi" style="margin-bottom:16px"></div>
+    <div class="ctrl">
+      <input type="search" id="va-q" placeholder="输入代码或名称，如 600519 / 茅台" style="width:280px">
+      <button class="mini" id="va-go">拆解</button>
+      <select id="va-ind"><option value="">全部行业</option></select>
+      <select id="va-label">
+        <option value="">全部标签</option>
+        <option value="显著低估">显著低估</option>
+        <option value="低估">低估</option>
+        <option value="合理">合理</option>
+        <option value="高估">高估</option>
+        <option value="显著高估">显著高估</option>
+        <option value="分歧过大">分歧过大</option>
+        <option value="单一方法参考">单一方法参考</option>
+        <option value="数据不足">数据不足</option>
+      </select>
+      <span class="notes">单票拆解在下方第一张卡片</span>
+    </div>
+    <div class="grid g2" style="margin-bottom:16px">
+      <div class="card">
+        <div class="eyebrow" id="va-detail-title">单票十法拆解</div>
+        <div class="chart tall" id="c-va-detail"></div>
+        <div class="notes" id="va-detail-note" style="margin-top:6px"></div>
+      </div>
+      <div class="card">
+        <div class="eyebrow">四象限：上涨空间 × 行业质量分位</div>
+        <div class="chart tall" id="c-va-quad"></div>
+        <div class="legend" id="va-quad-legend"></div>
+      </div>
+    </div>
+    <div class="grid g2" style="margin-bottom:16px">
+      <div class="card"><div class="eyebrow">各方法的估值水平 · 估值/现价中位（右列为覆盖只数）</div><div class="chart" id="c-va-cov"></div></div>
+      <div class="card"><div class="eyebrow">画像分布</div><div class="chart" id="c-va-profile"></div></div>
+    </div>
+    <div class="tblwrap" id="t-valuation"></div>
+  </div>
+</section>
+
+<!-- ============ 05 策略对比 ============ -->
+<section class="view" id="v-compare">
+  <div class="wrap">
+    <div class="apphead">
+      <div><div class="eyebrow">05 / 策略对比</div><h2>谁和谁在抢同一批股票</h2></div>
+      <div class="meta">交集 = 同时进入两策略前 10% 的股票数</div>
+    </div>
+    <div class="grid g2">
+      <div class="card"><div class="eyebrow">6×6 交集矩阵</div><div class="chart tall" id="c-cmp-inter"></div></div>
+      <div class="card"><div class="eyebrow">策略相关性（全市场截面）</div><div class="chart tall" id="c-cmp-corr"></div></div>
+    </div>
+    <div class="card" style="margin-top:16px">
+      <div class="eyebrow">风格象限：价值分 × 成长分（每点一只，过密处按步长抽样）</div>
+      <div class="chart tall" id="c-cmp-quad"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 06 因子库 ============ -->
+<section class="view" id="v-factors">
+  <div class="wrap">
+    <div class="apphead">
+      <div><div class="eyebrow">06 / 因子库</div><h2><span id="fa-nf">54</span> 个因子的方向、覆盖率与实测 IC</h2></div>
+      <div class="meta" id="fa-meta"></div>
+    </div>
+    <div class="grid g2" style="margin-bottom:16px">
+      <div class="card"><div class="eyebrow">六个可回测因子的月度 Rank IC（20 日）</div><div class="chart tall" id="c-fa-ic"></div></div>
+      <div class="card">
+        <div class="eyebrow">动量五分层 · 前视 60 日超额（%）</div>
+        <div class="chart tall" id="c-fa-layer"></div>
+        <div class="notes" id="fa-layer-note" style="margin-top:6px"></div>
+      </div>
+    </div>
+    <div class="ctrl"><div class="seg" id="seg-fac-group"></div></div>
+    <div class="tblwrap" id="t-factors"></div>
+  </div>
+</section>
+
+<!-- ============ 07 方法与数据 ============ -->
+<section class="view" id="v-method">
+  <div class="wrap">
+    <div class="apphead">
+      <div><div class="eyebrow">07 / 方法与数据</div><h2>算法口径、估值假设、已知陷阱</h2></div>
+      <div class="meta" id="me-meta"></div>
+    </div>
+    <div class="grid g2">
+      <div class="card">
+        <div class="eyebrow">估值假设（可复核）</div>
+        <div id="me-params" style="margin-top:6px"></div>
+      </div>
+      <div class="card">
+        <div class="eyebrow">数据来源与更新</div>
+        <div class="notes" style="margin-top:6px" id="me-data"></div>
+      </div>
+    </div>
+    <div class="grid g2" style="margin-top:16px">
+      <div class="card">
+        <div class="eyebrow">十法公式</div>
+        <div id="me-formula" style="margin-top:6px"></div>
+      </div>
+      <div class="card">
+        <div class="eyebrow">适用性与门槛</div>
+        <div class="notes" style="margin-top:6px" id="me-rules"></div>
+      </div>
+    </div>
+    <div class="card" style="margin-top:16px">
+      <div class="eyebrow">已知陷阱与局限</div>
+      <div class="notes" style="margin-top:6px;font-size:13px;line-height:1.85" id="me-traps"></div>
+    </div>
+    <div class="card" style="margin-top:16px">
+      <div class="eyebrow">因子体检明细</div>
+      <div class="chart" id="c-me-health"></div>
+      <div class="tblwrap" id="t-health" style="margin-top:12px;max-height:none"></div>
+    </div>
+  </div>
+</section>
+<!-- ============ 08 今日变化 ============ -->
+<section class="view" id="v-diff">
+  <div class="wrap">
+    <div class="apphead">
+      <div><div class="eyebrow">08 / 今日变化</div><h2>今天和昨天，差在哪</h2></div>
+      <div class="meta" id="df-meta"></div>
+    </div>
+    <div class="notes" id="df-cov" style="margin:-4px 0 12px"></div>
+    <div class="grid g4" id="df-kpi"></div>
+    <div class="grid g2" style="margin-top:16px">
+      <div class="card"><div class="eyebrow">估值标签迁移（行＝上一交易日，列＝今日，仅重叠样本）</div><div class="chart tall" id="c-df-mat"></div></div>
+      <div class="card"><div class="eyebrow">标签净变化（今日 − 昨日，只）</div><div class="chart tall" id="c-df-net"></div></div>
+    </div>
+    <div class="card" style="margin-top:16px">
+      <div class="eyebrow">上涨空间位移最大 15 只（不论进出榜单）</div>
+      <div class="tblwrap" id="t-df-shift" style="max-height:none"></div>
+    </div>
+    <div class="card" style="margin-top:16px">
+      <div class="eyebrow">榜单进出 · Top50</div>
+      <div class="ctrl"><div class="seg" id="seg-df-board"></div></div>
+      <div class="grid g2">
+        <div><div class="notes" style="margin:4px 0 6px" id="df-in-note"></div><div class="tblwrap" id="t-df-in" style="max-height:420px"></div></div>
+        <div><div class="notes" style="margin:4px 0 6px" id="df-out-note"></div><div class="tblwrap" id="t-df-out" style="max-height:420px"></div></div>
+      </div>
+    </div>
+  </div>
+</section>
+</main>
+
+<div class="foot"><div class="wrap">
+  <div>Panorama · 全策略选股与十法估值 · 数据截至 <span id="foot-asof">—</span> · 财务口径 <span id="foot-rp">—</span></div>
+  <div>输出的是可复核的候选池与估值参照，不是买卖指令。</div>
+</div></div>
+
+<script src="echarts.min.js"></script>
+<script src="chart-boot.js"></script>
+<script src="data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
