@@ -5,8 +5,8 @@
       "keys": [
         {
           "key_id": "kazuha-hub-2026-11",
-          "public_key": "xzjrcK_O0WJPLnhtqJYknSgC2Cfag1ypllsar8IhhSY",
-          "public_key_sha256": "7c37b88c299ab80e8dcf505a38390b3c912c53d10dfb84adbb113d5751138073",
+          "public_key": "Z9uDuPmR0UIyQX3JIqgpKdFhQzqwJKMqHMBsNWvdIOk",
+          "public_key_sha256": "a9072bdb6b2911ebd09af406792abda71282a9eaa1e6ab94dfa5b8af721d0860",
           "not_before_ms": "0",
           "app_id_prefixes": ["kazuha-hub-"]
         }

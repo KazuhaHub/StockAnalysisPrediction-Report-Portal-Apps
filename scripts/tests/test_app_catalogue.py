@@ -17,6 +17,8 @@ def load(name, file):
 
 catalogue = load("app_catalogue", "app-catalogue.py")
 push = load("push_oci_package", "push-oci-package.py")
+branch = load("catalogue_branch", "catalogue-branch.py")
+gate = load("release_gate", "release-gate.py")
 
 BASE = "https://raw.githubusercontent.com/Owner/Apps/0123456789abcdef0123456789abcdef01234567/packages/kazuha-hub-market-monitor"
 REPOSITORY = "ghcr.io/owner/apps/kazuha-hub-market-monitor"
@@ -79,6 +81,7 @@ class ParseTests(unittest.TestCase):
         catalogue.parse(self.doc(package_oci={"repository": REPOSITORY, "digest": DIGEST}))
         catalogue.parse(self.doc(fmt="portal.catalogue/2-dev.2", package_url=BASE + "/a.portalapp"))
         catalogue.parse(self.doc())
+        catalogue.parse(self.doc(package_url=BASE + "/a.portalapp"))  # 2-dev.3 accepts package_url, as the Portal does
 
     def test_refusals(self):
         oci = {"repository": REPOSITORY, "digest": DIGEST}
@@ -92,7 +95,8 @@ class ParseTests(unittest.TestCase):
             b'{"format":"portal.catalogue/1","releases":[]}',
             self.doc(package_oci={"repository": REPOSITORY}), self.doc(package_oci=dict(oci, extra="x")),
             self.doc(package_oci="ghcr.io/x/y"), self.doc(package_oci=dict(oci, digest="sha512:" + "a" * 128)),
-            self.doc(fmt="portal.catalogue/2-dev.2", package_oci=oci), self.doc(package_url=BASE + "/a"),
+            self.doc(fmt="portal.catalogue/2-dev.2", package_oci=oci), self.doc(fmt="portal.catalogue/2-dev.1", package_url=BASE + "/a"),
+            self.doc(package_oci=None), self.doc(package_url=""),
             self.doc(package_oci=oci, package_url=BASE + "/a"),
         ]:
             with self.subTest(case=case[:90]), self.assertRaises(catalogue.CatalogueError):
@@ -103,6 +107,36 @@ class ParseTests(unittest.TestCase):
         doc["releases"].append(dict(doc["releases"][0], version="1.0.1"))
         with self.assertRaises(catalogue.CatalogueError):
             catalogue.parse(json.dumps(doc).encode())
+
+
+class RepositoryGrammarTests(unittest.TestCase):
+    """SplitOCIRepository: host[:443]/path, lower case, no localhost, a well-formed IPv4 literal."""
+
+    GOOD = ["ghcr.io/owner/apps/name", "ghcr.io:443/owner/name", "ghcr.io/a__b/c--d/e.f_g", "registry.example.com/x", "1.2.3.4/x"]
+    BAD = ["ghcr.io", "ghcr.io/", "ghcr.io:8443/a/b", "ghcr.io:/a/b", "GHCR.io/a/b", "ghcr.io/A/b", "ghcr.io/a/b/", "ghcr.io//b",
+           "ghcr.io/a___b", "ghcr.io/a._b", "ghcr.io/a-", "ghcr.io/-a", "localhost/a", "localhost:443/a", "999.1.1.1/a", "1.2.3/a",
+           "-ghcr.io/a", "ghcr..io/a", "ghcr.io/a b", "ghcr.io/a\n", "x" * 256, "ghcr.io/" + "a" * 250]
+
+    def test_good(self):
+        for repository in self.GOOD:
+            with self.subTest(repository=repository):
+                catalogue.split_oci_repository(repository)
+                push.Registry(repository)
+
+    def test_bad(self):
+        for repository in self.BAD:
+            with self.subTest(repository=repository), self.assertRaises(catalogue.CatalogueError):
+                catalogue.split_oci_repository(repository)
+
+    def test_push_script_applies_the_same_grammar_to_remote_hosts(self):
+        for repository in self.BAD:
+            if repository.startswith("localhost"):
+                continue
+            with self.subTest(repository=repository), self.assertRaises(SystemExit):
+                push.Registry(repository)
+
+    def test_local_test_registry_may_use_any_port(self):
+        push.Registry("127.0.0.1:25999/kazuhahub/portal-apps/x")
 
 
 class ManifestTests(unittest.TestCase):
@@ -128,6 +162,18 @@ class ManifestTests(unittest.TestCase):
 
 
 class CheckAbsentTests(unittest.TestCase):
+    def test_token_endpoint_denial_is_tolerated_too(self):
+        import urllib.error
+        from unittest import mock
+
+        def denied(self):
+            raise urllib.error.HTTPError("https://ghcr.io/token", 403, "x", {}, None)
+
+        with mock.patch.object(push.Registry, "login", denied):
+            self.assertEqual(push.main(["--repository", REPOSITORY, "--tag", "1.0.0", "--check-absent", "--tolerate-denied"]), 0)
+            with self.assertRaises(urllib.error.HTTPError):
+                push.main(["--repository", REPOSITORY, "--tag", "1.0.0", "--check-absent"])
+
     def run_check(self, error, extra):
         import urllib.error
         from unittest import mock
@@ -148,6 +194,67 @@ class CheckAbsentTests(unittest.TestCase):
         import urllib.error
         with self.assertRaises(urllib.error.HTTPError):
             self.run_check(500, ["--tolerate-denied"])
+
+
+class CatalogueBranchTests(unittest.TestCase):
+    def test_only_status_two_means_absent(self):
+        self.assertTrue(branch.interpret_ls_remote(0))
+        self.assertFalse(branch.interpret_ls_remote(2))
+        for status in (1, 128, 255, -9):
+            with self.subTest(status=status), self.assertRaises(branch.BranchError):
+                branch.interpret_ls_remote(status)
+
+    def prepare(self, ls_status):
+        import subprocess
+        calls = []
+
+        def run(directory, *args, check=True):
+            calls.append(args[0])
+            return subprocess.CompletedProcess(args, ls_status if args[0] == "ls-remote" else 0)
+
+        return calls, run
+
+    def test_existing_branch_is_fetched(self):
+        calls, run = self.prepare(0)
+        self.assertTrue(branch.prepare("d", "https://example.com/r.git", run))
+        self.assertEqual(calls, ["init", "remote", "ls-remote", "fetch", "reset"])
+
+    def test_absent_branch_starts_orphan_without_fetching(self):
+        calls, run = self.prepare(2)
+        self.assertFalse(branch.prepare("d", "https://example.com/r.git", run))
+        self.assertEqual(calls, ["init", "remote", "ls-remote"])
+
+    def test_failed_ls_remote_aborts_before_anything_else(self):
+        calls, run = self.prepare(128)
+        with self.assertRaises(branch.BranchError):
+            branch.prepare("d", "https://example.com/r.git", run)
+        self.assertEqual(calls, ["init", "remote", "ls-remote"])
+
+
+class GateTests(unittest.TestCase):
+    SHA = "a" * 40
+
+    def run_of(self, status="completed", conclusion="success", event="push", sha=None):
+        return {"head_sha": sha or self.SHA, "event": event, "status": status, "conclusion": conclusion}
+
+    def test_on_branch(self):
+        for status in ("identical", "behind"):
+            gate.require_on_branch(status, "main", self.SHA)
+        for status in ("ahead", "diverged", None):
+            with self.subTest(status=status), self.assertRaises(gate.GateError):
+                gate.require_on_branch(status, "main", self.SHA)
+
+    def test_success_passes(self):
+        gate.require_check_passed([self.run_of()], self.SHA, "check.yml")
+        gate.require_check_passed([self.run_of(conclusion="failure"), self.run_of()], self.SHA, "check.yml")
+
+    def test_refusals_say_what_to_do(self):
+        for runs, text in [([], "no push run"), ([self.run_of(status="in_progress", conclusion=None)], "still running"),
+                           ([self.run_of(conclusion="failure")], "did not succeed"),
+                           ([self.run_of(event="pull_request")], "no push run"), ([self.run_of(sha="b" * 40)], "no push run")]:
+            with self.subTest(text=text), self.assertRaises(gate.GateError) as caught:
+                gate.require_check_passed(runs, self.SHA, "check.yml")
+            self.assertIn(text, str(caught.exception))
 
 
 if __name__ == "__main__":

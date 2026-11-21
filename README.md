@@ -9,7 +9,7 @@ images. Repository sharing does not merge their processes, databases or permissi
 | demo-symbols | Existing reference app, preserved identity/version | Sandboxed frontend |
 | notes-sample | Development v2 reference app, not in the catalogue | Sandboxed frontend, no backend |
 | scheduled-digest | Development v2 reference backend (the neutral fixture), not in the catalogue | Sandboxed frontend and independent Go service |
-| kazuha-hub-market-monitor | Development v2 app, the first real backend app and the reference for new ones; not in the catalogue | Sandboxed frontend; one image with a Go service and a Python pipeline, with optional `network.proxy` |
+| kazuha-hub-market-monitor | Beta v2 app, the first real backend app and the reference for new ones; released by CI as an OCI package listed in the `catalogue` branch's `catalogue.json` (docs/publisher-v2.md), not in the root `index.json` | Sandboxed frontend; one image with a Go service and a Python pipeline, with optional `network.proxy` |
 | status | In development, not in the install catalogue | Sandboxed frontend and separate service |
 
 `index.json` is the installation catalogue. It lists only available verified assets.

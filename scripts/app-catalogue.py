@@ -22,8 +22,36 @@ DIGEST = re.compile(r"^[a-f0-9]{64}$")
 VERSION = re.compile(r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?(\+[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$")
 RELEASE_KEYS = {"app_id", "publisher_id", "version", "descriptor_sha256", "descriptor_url", "signature_url", "package_url", "package_oci"}
 REQUIRED_KEYS = RELEASE_KEYS - {"package_url", "package_oci"}
-REPOSITORY = re.compile(r"^[a-z0-9.-]+(:[0-9]+)?(/[a-z0-9]+([._-][a-z0-9]+)*)+$")
-OCI_DIGEST = re.compile(r"^sha256:[a-f0-9]{64}$")
+OCI_DIGEST = re.compile(r"^sha256:[a-f0-9]{64}\Z")
+# The Portal's ociHostPattern and ociPathPattern (internal/appplatform/oci.go), kept identical.
+OCI_PATH = re.compile(r"[a-z0-9]+(?:(?:\.|_|__|-+)[a-z0-9]+)*(?:/[a-z0-9]+(?:(?:\.|_|__|-+)[a-z0-9]+)*)*")
+OCI_HOST = re.compile(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*")
+
+
+def split_oci_repository(repository):
+    """The Portal's SplitOCIRepository: host[:443]/path. Returns (host, path); syntax only."""
+    if not isinstance(repository, str) or not repository or len(repository) > 255:
+        raise CatalogueError("package_oci repository")
+    authority, found, path = repository.partition("/")
+    if not found:
+        raise CatalogueError("package_oci repository")
+    host, colon, port = authority.partition(":")
+    if colon and port != "443":
+        raise CatalogueError("package_oci repository port")
+    if not OCI_HOST.fullmatch(host) or host == "localhost" or not OCI_PATH.fullmatch(path):
+        raise CatalogueError("package_oci repository")
+    if not host.strip("0123456789.") and not _is_ipv4(host):
+        raise CatalogueError("package_oci repository")
+    return host, path
+
+
+def _is_ipv4(host):
+    import ipaddress
+    try:
+        ipaddress.IPv4Address(host)
+        return True
+    except ValueError:
+        return False
 
 
 class CatalogueError(ValueError):
@@ -87,15 +115,15 @@ def parse(raw):
         validate_url(release["descriptor_url"])
         validate_url(release["signature_url"])
         if "package_url" in release:
-            if doc["format"] != "portal.catalogue/2-dev.2" or not release["package_url"]:
+            if doc["format"] == "portal.catalogue/2-dev.1" or not release["package_url"]:
                 raise CatalogueError("package_url")
             validate_url(release["package_url"])
         if "package_oci" in release:
             oci = release["package_oci"]
             if (doc["format"] != FORMAT or "package_url" in release or not isinstance(oci, dict) or set(oci) != {"repository", "digest"}
-                    or not isinstance(oci["repository"], str) or len(oci["repository"]) > 255 or not REPOSITORY.match(oci["repository"])
                     or not isinstance(oci["digest"], str) or not OCI_DIGEST.match(oci["digest"])):
                 raise CatalogueError("package_oci")
+            split_oci_repository(oci["repository"])
         seen.update((identity, release["descriptor_sha256"]))
     return doc
 

@@ -126,14 +126,23 @@ sign new releases with it, then have the old key revoked. A key ID is never reus
 
 ## Release signing in CI
 
-`kazuha-hub-market-monitor` is signed by the `release-market-monitor` workflow, so no person holds
-its key. The private key lives only in the Actions secrets `PORTAL_PUBLISHER_KEY` (the
-exact file `portal-sign-descriptor keygen` writes) and `PORTAL_PUBLISHER_KEY_ID`. The
-workflow writes the key to the runner's temporary directory with mode 0600 inside the
-signing step and removes it in the same step. The public record the administrator
-enrolled, and that the workflow verifies against, is [publisher-keys.json](publisher-keys.json):
-publisher `kazuha-hub` (display name "Kazuha Hub"), key ID, public key,
-SHA-256, `not_before_ms` and the app ID prefix `kazuha-hub-` (the publisher owns every app ID starting with it).
+`kazuha-hub-market-monitor` is signed by the `release-market-monitor` workflow, so no person
+holds its key. The private key lives only as the secrets `PORTAL_PUBLISHER_KEY` (the exact file
+`portal-sign-descriptor keygen` writes) and `PORTAL_PUBLISHER_KEY_ID` of the GitHub environment
+`app-release`, whose deployment branches are limited to `main`; there are no repository-level
+copies. Only the workflow's `sign` job uses that environment. It runs no package manager and no
+code from the build: it builds `portal-sign-descriptor` from the checkout with the network off
+(the module has no dependencies), signs the descriptor bytes the build job produced, writes the
+key to the runner's temporary directory with mode 0600 and removes it in the same step, and
+verifies the signature against [publisher-keys.json](publisher-keys.json): publisher `kazuha-hub`
+(display name "Kazuha Hub"), key ID, public key, SHA-256, `not_before_ms` and the app ID prefix
+`kazuha-hub-` (the publisher owns every app ID starting with it).
+
+A release is CI-gated: the workflow starts with a gate job that requires the dispatched commit to
+be on `main` and `check.yml`'s push run for exactly that commit to have succeeded
+(`scripts/release-gate.py`). It checks once and does not wait; if the run is still going, wait for
+it and dispatch again. The workflow's own jobs therefore skip the test suites and only build,
+sign and publish.
 
 Each run pushes the signed `.portalapp` to GHCR as an OCI artifact,
 `ghcr.io/kazuhahub/portal-apps/kazuha-hub-market-monitor:VERSION`: manifest
@@ -172,7 +181,7 @@ fails closed on anything but a clean 404, so an existing tag is still refused be
 push. The app's directory is `apps/kazuha-hub-market-monitor` because the authoring tools
 require the directory name to equal the app ID.
 
-To rotate: generate a new key with a new key ID, set both secrets to the new values,
+To rotate: generate a new key with a new key ID, set both `app-release` environment secrets to the new values,
 have the administrator `add_key` it, add it to `publisher-keys.json` (the workflow
 verifies against the entry whose key ID equals the secret), sign a release with it, then
 have the old key revoked and remove its entry.

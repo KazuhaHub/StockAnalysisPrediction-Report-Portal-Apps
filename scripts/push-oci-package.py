@@ -10,6 +10,7 @@ needs none (a local test registry) is used anonymously.
 import argparse
 import base64
 import hashlib
+import ipaddress
 import json
 import os
 import re
@@ -24,7 +25,11 @@ ARTIFACT_TYPE = "application/vnd.portal.app.package.v2"
 LAYER_TYPE = "application/vnd.portal.app.package.v2+zip"
 EMPTY_TYPE = "application/vnd.oci.empty.v1+json"
 EMPTY_DIGEST = "sha256:44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
-REPOSITORY = re.compile(r"^[a-z0-9.-]+(:[0-9]+)?(/[a-z0-9]+([._-][a-z0-9]+)*)+$")
+# The Portal's repository grammar (SplitOCIRepository): host[:443]/path, lower case, path components with
+# single separators or `__` or runs of `-`. A local test registry (127.0.0.1 or localhost) may use any port.
+PATH_PART = r"[a-z0-9]+(?:(?:\.|_|__|-+)[a-z0-9]+)*"
+HOST = r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*"
+REPOSITORY = re.compile("(?:" + HOST + r"(?::443)?|(?:127\.0\.0\.1|localhost):[0-9]+)/" + PATH_PART + "(?:/" + PATH_PART + ")*")
 TAG = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$")
 
 
@@ -53,9 +58,15 @@ def build_manifest(layer_digest, layer_size, annotations=None):
 
 class Registry:
     def __init__(self, repository):
-        if not REPOSITORY.match(repository):
+        if len(repository) > 255 or not REPOSITORY.fullmatch(repository):
             raise SystemExit("repository must be a lowercase registry/path name")
         self.host, _, self.name = repository.partition("/")
+        bare = self.host.split(":")[0]
+        if not bare.strip("0123456789."):  # a dotted all-digit host is an IPv4 literal; it must be well formed
+            try:
+                ipaddress.IPv4Address(bare)
+            except ValueError:
+                raise SystemExit("repository host is not a valid IPv4 address") from None
         local = self.host.split(":")[0] in ("127.0.0.1", "localhost")
         self.base = ("http://" if local else "https://") + self.host
         self.token = None
@@ -143,8 +154,8 @@ def main(argv=None):
     if not TAG.match(args.tag):
         raise SystemExit("invalid tag")
     registry = Registry(args.repository)
-    registry.login()
     try:
+        registry.login()
         exists = registry.tag_exists(args.tag)
     except urllib.error.HTTPError as err:
         if args.check_absent and args.tolerate_denied and err.code in (401, 403):
