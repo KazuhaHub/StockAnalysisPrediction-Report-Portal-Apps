@@ -18,12 +18,12 @@ def load(name, file):
 catalogue = load("app_catalogue", "app-catalogue.py")
 push = load("push_oci_package", "push-oci-package.py")
 
-BASE = "https://raw.githubusercontent.com/Owner/Apps/0123456789abcdef0123456789abcdef01234567/packages/market-monitor"
-REPOSITORY = "ghcr.io/owner/apps/market-monitor"
+BASE = "https://raw.githubusercontent.com/Owner/Apps/0123456789abcdef0123456789abcdef01234567/packages/kazuha-hub-market-monitor"
+REPOSITORY = "ghcr.io/owner/apps/kazuha-hub-market-monitor"
 DIGEST = "sha256:" + "ab" * 32
 
 
-def descriptor(version="0.1.0-beta.1", app="market-monitor"):
+def descriptor(version="0.1.0-beta.1", app="kazuha-hub-market-monitor"):
     return json.dumps({"format": "portal.app/v2", "id": app, "version": version, "publisher": "kazuha-hub"}).encode()
 
 
@@ -125,6 +125,29 @@ class ManifestTests(unittest.TestCase):
         for bad in ["ghcr.io", "GHCR.io/a/b", "ghcr.io/a b/c", "ghcr.io//b"]:
             with self.subTest(bad=bad), self.assertRaises(SystemExit):
                 push.Registry(bad)
+
+
+class CheckAbsentTests(unittest.TestCase):
+    def run_check(self, error, extra):
+        import urllib.error
+        from unittest import mock
+
+        def denied(self, tag):
+            raise urllib.error.HTTPError("https://ghcr.io", error, "x", {}, None)
+
+        with mock.patch.object(push.Registry, "login", lambda self: None), mock.patch.object(push.Registry, "tag_exists", denied):
+            return push.main(["--repository", REPOSITORY, "--tag", "1.0.0", "--check-absent"] + extra)
+
+    def test_denied_is_tolerated_only_when_asked(self):
+        import urllib.error
+        self.assertEqual(self.run_check(403, ["--tolerate-denied"]), 0)
+        with self.assertRaises(urllib.error.HTTPError):
+            self.run_check(403, [])
+
+    def test_server_errors_are_never_tolerated(self):
+        import urllib.error
+        with self.assertRaises(urllib.error.HTTPError):
+            self.run_check(500, ["--tolerate-denied"])
 
 
 if __name__ == "__main__":

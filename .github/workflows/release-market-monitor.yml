@@ -1,5 +1,5 @@
 name: Release Market Monitor
-# Builds market-monitor's managed image package from the dispatched commit, signs its descriptor with the
+# Builds the kazuha-hub-market-monitor managed image package from the dispatched commit, signs its descriptor with the
 # publisher key held only in the PORTAL_PUBLISHER_KEY and PORTAL_PUBLISHER_KEY_ID secrets, and publishes the
 # signed .portalapp to GHCR as an OCI artifact and lists it, by manifest digest, in catalogue.json on the
 # `catalogue` branch. No GitHub Release is created. See docs/publisher-v2.md ("Release signing in CI").
@@ -7,11 +7,11 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: Exact market-monitor version, equal to apps/market-monitor/app.v2.json
+        description: Exact app version, equal to apps/kazuha-hub-market-monitor/app.v2.json
         type: string
         required: true
       confirmation:
-        description: Repeat the exact market-monitor/vVERSION identifier
+        description: Repeat the exact kazuha-hub-market-monitor/vVERSION identifier
         type: string
         required: true
       notes:
@@ -28,7 +28,7 @@ env:
   VERSION: ${{ inputs.version }}
   CONFIRMATION: ${{ inputs.confirmation }}
   RELEASE_NOTES: ${{ inputs.notes }}
-  OCI_REPOSITORY: ghcr.io/kazuhahub/portal-apps/market-monitor
+  OCI_REPOSITORY: ghcr.io/kazuhahub/portal-apps/kazuha-hub-market-monitor
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -48,21 +48,21 @@ jobs:
           set -euo pipefail
           test "$REF" = refs/heads/main || { echo "Release only from main, not $REF"; exit 1; }
           [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]] || { echo "version is not a semantic version"; exit 1; }
-          test "$CONFIRMATION" = "market-monitor/v$VERSION" || { echo "confirmation must be market-monitor/v$VERSION"; exit 1; }
+          test "$CONFIRMATION" = "kazuha-hub-market-monitor/v$VERSION" || { echo "confirmation must be kazuha-hub-market-monitor/v$VERSION"; exit 1; }
           python3 - <<'PY'
           import json, os
-          descriptor = json.load(open('apps/market-monitor/app.v2.json'))
-          if descriptor['id'] != 'market-monitor' or descriptor['version'] != os.environ['VERSION']:
-              raise SystemExit('app.v2.json declares ' + descriptor['id'] + ' ' + descriptor['version'] + ', not market-monitor ' + os.environ['VERSION'])
+          descriptor = json.load(open('apps/kazuha-hub-market-monitor/app.v2.json'))
+          if descriptor['id'] != 'kazuha-hub-market-monitor' or descriptor['version'] != os.environ['VERSION']:
+              raise SystemExit('app.v2.json declares ' + descriptor['id'] + ' ' + descriptor['version'] + ', not kazuha-hub-market-monitor ' + os.environ['VERSION'])
           PY
       - name: Refuse an existing package version
         env:
           REGISTRY_USER: ${{ github.actor }}
           REGISTRY_PASSWORD: ${{ github.token }}
-        run: python3 scripts/push-oci-package.py --repository "$OCI_REPOSITORY" --tag "$VERSION" --check-absent
+        run: python3 scripts/push-oci-package.py --repository "$OCI_REPOSITORY" --tag "$VERSION" --check-absent --tolerate-denied
       - uses: actions/setup-go@v5
         with:
-          go-version-file: apps/market-monitor/service/go.mod
+          go-version-file: apps/kazuha-hub-market-monitor/service/go.mod
           cache: false
       - uses: actions/setup-node@v4
         with:
@@ -72,7 +72,7 @@ jobs:
           python-version: '3.11' # the backend image's interpreter, for the pipeline tests
       - run: python3 -m pip install 'requests>=2.31,<3' pyarrow==21.0.0
       - name: Pipeline tests
-        working-directory: apps/market-monitor/pipeline
+        working-directory: apps/kazuha-hub-market-monitor/pipeline
         env:
           MM_REQUIRE_PYARROW: '1'
         run: |
@@ -83,10 +83,10 @@ jobs:
           python-version: '3.13'
       - run: npm ci
       - run: python3 scripts/plugin-standard.py
-      - run: npm run typecheck --workspace=apps/market-monitor/frontend
-      - run: npm test --workspace=apps/market-monitor/frontend
+      - run: npm run typecheck --workspace=apps/kazuha-hub-market-monitor/frontend
+      - run: npm test --workspace=apps/kazuha-hub-market-monitor/frontend
       - name: Service checks
-        working-directory: apps/market-monitor/service
+        working-directory: apps/kazuha-hub-market-monitor/service
         run: |
           go mod download
           go vet ./...
@@ -95,12 +95,12 @@ jobs:
       - name: Build the backend image and export its blobs
         run: |
           set -euo pipefail
-          docker build --platform linux/amd64 -f apps/market-monitor/service/Dockerfile -t market-monitor-release:build .
+          docker build --platform linux/amd64 -f apps/kazuha-hub-market-monitor/service/Dockerfile -t market-monitor-release:build .
           docker save "$(docker image inspect market-monitor-release:build --format '{{.Id}}')" --output "$RUNNER_TEMP/image.tar"
           python3 scripts/export-image-oci.py "$RUNNER_TEMP/image.tar" --platform linux/amd64 --output "$RUNNER_TEMP/image"
           rm -f "$RUNNER_TEMP/image.tar"
       - name: Build the unsigned candidate
-        run: python3 scripts/build-app-v2.py market-monitor --images "$RUNNER_TEMP/image/images.json" --output "$RUNNER_TEMP/candidate"
+        run: python3 scripts/build-app-v2.py kazuha-hub-market-monitor --images "$RUNNER_TEMP/image/images.json" --output "$RUNNER_TEMP/candidate"
       - name: Build the signing tool
         working-directory: packages/extensionprotocol
         run: go build -o "$RUNNER_TEMP/portal-sign-descriptor" ./cmd/portal-sign-descriptor
@@ -122,7 +122,7 @@ jobs:
               if publisher['publisher'] != descriptor['publisher']:
                   continue
               for entry in publisher['keys']:
-                  if entry['key_id'] == os.environ['PORTAL_PUBLISHER_KEY_ID'] and descriptor['id'] in entry['app_scopes']:
+                  if entry['key_id'] == os.environ['PORTAL_PUBLISHER_KEY_ID'] and descriptor['id'].startswith(tuple(entry['app_id_prefixes'])):
                       print(entry['public_key'])
                       raise SystemExit(0)
           raise SystemExit('no committed public key for this publisher, key ID and app')
@@ -141,10 +141,10 @@ jobs:
           mkdir "$out"
           python3 scripts/pack-offline-envelope.py --descriptor "$RUNNER_TEMP/candidate/descriptor.json" \
             --signature "$RUNNER_TEMP/descriptor.sig" --frontend "$RUNNER_TEMP/candidate/frontend.zip" \
-            --image-blobs "$RUNNER_TEMP/image/blobs" --output "$out/market-monitor.portalapp"
+            --image-blobs "$RUNNER_TEMP/image/blobs" --output "$out/kazuha-hub-market-monitor.portalapp"
           cp "$RUNNER_TEMP/candidate/descriptor.json" "$out/descriptor.json"
           cp "$RUNNER_TEMP/descriptor.sig" "$out/descriptor.sig"
-          echo "market-monitor.portalapp: $(( $(stat -c %s "$out/market-monitor.portalapp") / 1048576 )) MiB"
+          echo "kazuha-hub-market-monitor.portalapp: $(( $(stat -c %s "$out/kazuha-hub-market-monitor.portalapp") / 1048576 )) MiB"
       - uses: actions/upload-artifact@v4
         with:
           name: market-monitor-release-${{ github.run_id }}-${{ github.run_attempt }}
@@ -193,26 +193,26 @@ jobs:
           python3 scripts/app-catalogue.py --current "$branch/catalogue.json" --descriptor "$out/descriptor.json" \
             --descriptor-url https://example.invalid/d --signature-url https://example.invalid/s \
             --repository "$OCI_REPOSITORY" --digest "sha256:$(printf '0%.0s' {1..64})" --output /dev/null
-          python3 scripts/push-oci-package.py --repository "$OCI_REPOSITORY" --tag "$VERSION" --package "$out/market-monitor.portalapp" \
+          python3 scripts/push-oci-package.py --repository "$OCI_REPOSITORY" --tag "$VERSION" --package "$out/kazuha-hub-market-monitor.portalapp" \
             --annotation "org.opencontainers.image.source=$site" --annotation "org.opencontainers.image.revision=$GITHUB_SHA" \
-            --annotation "org.opencontainers.image.version=$VERSION" --annotation "org.opencontainers.image.title=market-monitor" \
+            --annotation "org.opencontainers.image.version=$VERSION" --annotation "org.opencontainers.image.title=kazuha-hub-market-monitor" \
             --digest-out "$RUNNER_TEMP/oci.digest"
           digest=$(cat "$RUNNER_TEMP/oci.digest")
           # Commit one holds the small files; the catalogue then pins URLs to that commit's SHA, so a later
           # change to the branch cannot alter what a published entry points at.
-          dir="packages/market-monitor/$VERSION"
+          dir="packages/kazuha-hub-market-monitor/$VERSION"
           mkdir -p "$branch/$dir"
           cp "$out/descriptor.json" "$out/descriptor.sig" "$branch/$dir/"
-          DIGEST="$digest" PACKAGE_SHA256=$(sha256sum "$out/market-monitor.portalapp" | cut -d' ' -f1) \
+          DIGEST="$digest" PACKAGE_SHA256=$(sha256sum "$out/kazuha-hub-market-monitor.portalapp" | cut -d' ' -f1) \
             python3 - "$branch/$dir/provenance.json" <<'PY'
           import json, os, sys
-          record = {'app_id': 'market-monitor', 'version': os.environ['VERSION'], 'commit': os.environ['GITHUB_SHA'],
+          record = {'app_id': 'kazuha-hub-market-monitor', 'version': os.environ['VERSION'], 'commit': os.environ['GITHUB_SHA'],
                     'run_url': os.environ['RUN_URL'], 'package_oci': {'repository': os.environ['OCI_REPOSITORY'], 'digest': os.environ['DIGEST']},
                     'package_sha256': os.environ['PACKAGE_SHA256'], 'notes': os.environ['RELEASE_NOTES']}
           open(sys.argv[1], 'w').write(json.dumps(record, indent=2) + '\n')
           PY
           repo_git add "$dir/descriptor.json" "$dir/descriptor.sig" "$dir/provenance.json"
-          repo_git commit -q -m "Add market-monitor $VERSION files"
+          repo_git commit -q -m "Add kazuha-hub-market-monitor $VERSION files"
           sha=$(repo_git rev-parse HEAD)
           raw="https://raw.githubusercontent.com/$GITHUB_REPOSITORY/$sha/$dir"
           python3 scripts/app-catalogue.py --current "$branch/catalogue.json" --descriptor "$out/descriptor.json" \
@@ -220,6 +220,6 @@ jobs:
             --repository "$OCI_REPOSITORY" --digest "$digest" --output "$RUNNER_TEMP/catalogue.json.new"
           mv "$RUNNER_TEMP/catalogue.json.new" "$branch/catalogue.json"
           repo_git add catalogue.json
-          repo_git commit -q -m "List market-monitor $VERSION in the catalogue"
+          repo_git commit -q -m "List kazuha-hub-market-monitor $VERSION in the catalogue"
           repo_git push -q origin catalogue
-          echo "Published market-monitor $VERSION as $OCI_REPOSITORY@$digest"
+          echo "Published kazuha-hub-market-monitor $VERSION as $OCI_REPOSITORY@$digest"

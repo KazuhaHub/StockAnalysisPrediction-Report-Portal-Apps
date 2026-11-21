@@ -126,17 +126,17 @@ sign new releases with it, then have the old key revoked. A key ID is never reus
 
 ## Release signing in CI
 
-`market-monitor` is signed by the `release-market-monitor` workflow, so no person holds
+`kazuha-hub-market-monitor` is signed by the `release-market-monitor` workflow, so no person holds
 its key. The private key lives only in the Actions secrets `PORTAL_PUBLISHER_KEY` (the
 exact file `portal-sign-descriptor keygen` writes) and `PORTAL_PUBLISHER_KEY_ID`. The
 workflow writes the key to the runner's temporary directory with mode 0600 inside the
 signing step and removes it in the same step. The public record the administrator
 enrolled, and that the workflow verifies against, is [publisher-keys.json](publisher-keys.json):
 publisher `kazuha-hub` (display name "Kazuha Hub"), key ID, public key,
-SHA-256, `not_before_ms` and the app scope (exactly `market-monitor`).
+SHA-256, `not_before_ms` and the app ID prefix `kazuha-hub-` (the publisher owns every app ID starting with it).
 
 Each run pushes the signed `.portalapp` to GHCR as an OCI artifact,
-`ghcr.io/kazuhahub/portal-apps/market-monitor:VERSION`: manifest
+`ghcr.io/kazuhahub/portal-apps/kazuha-hub-market-monitor:VERSION`: manifest
 `application/vnd.oci.image.manifest.v1+json`, `artifactType`
 `application/vnd.portal.app.package.v2`, the OCI empty descriptor as config and exactly one
 layer, `application/vnd.portal.app.package.v2+zip`, holding the package bytes. The tag is for
@@ -144,7 +144,7 @@ people; the catalogue pins the manifest digest. A tag that exists is never overw
 No GitHub Release is created.
 
 The run then commits to the orphan branch `catalogue`: first
-`packages/market-monitor/VERSION/{descriptor.json,descriptor.sig,provenance.json}`
+`packages/kazuha-hub-market-monitor/VERSION/{descriptor.json,descriptor.sig,provenance.json}`
 (provenance records the commit, run URL, package hash, digest and notes), then
 `catalogue.json` (format `portal.catalogue/2-dev.3`, one entry per app version with
 `descriptor_url` and `signature_url` as raw.githubusercontent.com URLs pinned to the first
@@ -161,9 +161,16 @@ Online application catalogue:
 https://raw.githubusercontent.com/KazuhaHub/StockAnalysisPrediction-Report-Portal-Apps/catalogue/catalogue.json
 ```
 
-A new GHCR package starts private. The owner must make `portal-apps/market-monitor` public
-once (GitHub, Packages, portal-apps/market-monitor, Package settings, visibility), because
+A new GHCR package starts private. The owner must make `portal-apps/kazuha-hub-market-monitor` public
+once (GitHub, Packages, portal-apps/kazuha-hub-market-monitor, Package settings, visibility), because
 the Portal pulls it without credentials.
+
+First run: the package does not exist yet, and GHCR may answer the early "tag exists?"
+check in the build job with 401 or 403 instead of 404. That job tolerates the denial (it
+cannot tell it from a missing package); the publish job checks again with write access and
+fails closed on anything but a clean 404, so an existing tag is still refused before any
+push. The app's directory is `apps/kazuha-hub-market-monitor` because the authoring tools
+require the directory name to equal the app ID.
 
 To rotate: generate a new key with a new key ID, set both secrets to the new values,
 have the administrator `add_key` it, add it to `publisher-keys.json` (the workflow

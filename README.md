@@ -9,7 +9,7 @@ images. Repository sharing does not merge their processes, databases or permissi
 | demo-symbols | Existing reference app, preserved identity/version | Sandboxed frontend |
 | notes-sample | Development v2 reference app, not in the catalogue | Sandboxed frontend, no backend |
 | scheduled-digest | Development v2 reference backend (the neutral fixture), not in the catalogue | Sandboxed frontend and independent Go service |
-| market-monitor | Development v2 app, the first real backend app and the reference for new ones; not in the catalogue | Sandboxed frontend; one image with a Go service and a Python pipeline, with optional `network.proxy` |
+| kazuha-hub-market-monitor | Development v2 app, the first real backend app and the reference for new ones; not in the catalogue | Sandboxed frontend; one image with a Go service and a Python pipeline, with optional `network.proxy` |
 | status | In development, not in the install catalogue | Sandboxed frontend and separate service |
 
 `index.json` is the installation catalogue. It lists only available verified assets.
@@ -44,7 +44,7 @@ task, opt-in `network.proxy` and a non-root Dockerfile). The developer guide,
 [docs/backend-service-v2.md](docs/backend-service-v2.md), covers the `portal.backend/1`
 protocol, the sandbox, every capability and what an administrator reviews, background
 tasks, outbound HTTP, running the image locally with `scripts/run-backend-local.py`, the
-build, sign and install flow, and what is not yet available. `apps/market-monitor` is the
+build, sign and install flow, and what is not yet available. `apps/kazuha-hub-market-monitor` is the
 worked example.
 
 ## Marketplace publication and installation

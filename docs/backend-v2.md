@@ -85,7 +85,7 @@ Run the forwarder in one of two ways:
 
   `proxy.Serve(ctx, proxy.Options{})` alone listens and serves in one call.
   Add `COPY packages/proxy` to the image build and a `replace` for the module,
-  as `apps/market-monitor/service` and the `v2-backend` template do.
+  as `apps/kazuha-hub-market-monitor/service` and the `v2-backend` template do.
 - **No resident process**: ship the static `portal-egress-proxy` binary
   (`CGO_ENABLED=0 go build ./cmd/portal-egress-proxy` in `packages/proxy`) and
   start it before the code that needs it.

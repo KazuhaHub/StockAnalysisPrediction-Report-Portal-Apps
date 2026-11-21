@@ -1,4 +1,4 @@
-module github.com/KazuhaHub/StockAnalysisPrediction-Report-Portal-Apps/apps/market-monitor/service
+module github.com/KazuhaHub/StockAnalysisPrediction-Report-Portal-Apps/apps/kazuha-hub-market-monitor/service
 
 go 1.26.11
 

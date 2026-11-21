@@ -6,20 +6,20 @@
 .development
 
 # market-monitor: only the pipeline's runtime code goes into the image.
-apps/market-monitor/pipeline/tests
-apps/market-monitor/pipeline/systemd
-apps/market-monitor/pipeline/config
-apps/market-monitor/pipeline/install.sh
-apps/market-monitor/pipeline/uninstall.sh
-apps/market-monitor/pipeline/**/logs
-apps/market-monitor/pipeline/**/out
-apps/market-monitor/pipeline/**/data
-apps/market-monitor/pipeline/**/*.parquet
-apps/market-monitor/pipeline/**/*.db
-apps/market-monitor/pipeline/**/.env
-apps/market-monitor/pipeline/**/*.key
-apps/market-monitor/pipeline/**/*.pem
+apps/kazuha-hub-market-monitor/pipeline/tests
+apps/kazuha-hub-market-monitor/pipeline/systemd
+apps/kazuha-hub-market-monitor/pipeline/config
+apps/kazuha-hub-market-monitor/pipeline/install.sh
+apps/kazuha-hub-market-monitor/pipeline/uninstall.sh
+apps/kazuha-hub-market-monitor/pipeline/**/logs
+apps/kazuha-hub-market-monitor/pipeline/**/out
+apps/kazuha-hub-market-monitor/pipeline/**/data
+apps/kazuha-hub-market-monitor/pipeline/**/*.parquet
+apps/kazuha-hub-market-monitor/pipeline/**/*.db
+apps/kazuha-hub-market-monitor/pipeline/**/.env
+apps/kazuha-hub-market-monitor/pipeline/**/*.key
+apps/kazuha-hub-market-monitor/pipeline/**/*.pem
 # Hand-curated reference tables the jobs read and no script produces.
-!apps/market-monitor/pipeline/workspace/analysis/panel/feed/universe.csv
-!apps/market-monitor/pipeline/workspace/panorama/data/code_name.csv
-!apps/market-monitor/pipeline/workspace/panorama/data/div_seed.csv
+!apps/kazuha-hub-market-monitor/pipeline/workspace/analysis/panel/feed/universe.csv
+!apps/kazuha-hub-market-monitor/pipeline/workspace/panorama/data/code_name.csv
+!apps/kazuha-hub-market-monitor/pipeline/workspace/panorama/data/div_seed.csv

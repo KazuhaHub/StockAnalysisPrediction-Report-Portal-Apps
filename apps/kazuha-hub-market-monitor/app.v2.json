@@ -1,6 +1,6 @@
 {
   "format": "portal.app/v2",
-  "id": "market-monitor",
+  "id": "kazuha-hub-market-monitor",
   "version": "0.1.0-beta.1",
   "publisher": "kazuha-hub",
   "compatibility": {

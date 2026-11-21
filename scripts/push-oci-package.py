@@ -135,13 +135,23 @@ def main(argv=None):
     parser.add_argument("--package", type=Path, help=".portalapp to push; omit with --check-absent")
     parser.add_argument("--annotation", action="append", default=[], metavar="KEY=VALUE")
     parser.add_argument("--check-absent", action="store_true", help="only fail when the tag already exists")
+    parser.add_argument("--tolerate-denied", action="store_true",
+                        help="with --check-absent: a 401/403 (for example a package that does not exist yet) is not a failure; "
+                             "the push itself re-checks with write access")
     parser.add_argument("--digest-out", type=Path, help="file to write the manifest digest to")
     args = parser.parse_args(argv)
     if not TAG.match(args.tag):
         raise SystemExit("invalid tag")
     registry = Registry(args.repository)
     registry.login()
-    if registry.tag_exists(args.tag):
+    try:
+        exists = registry.tag_exists(args.tag)
+    except urllib.error.HTTPError as err:
+        if args.check_absent and args.tolerate_denied and err.code in (401, 403):
+            print("cannot tell whether " + args.tag + " exists (HTTP " + str(err.code) + "); the publish step checks again", file=sys.stderr)
+            return 0
+        raise
+    if exists:
         print("tag " + args.tag + " already exists in " + args.repository + "; packages are immutable", file=sys.stderr)
         return 1
     if args.check_absent:

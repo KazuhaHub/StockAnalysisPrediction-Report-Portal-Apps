@@ -73,7 +73,7 @@ jobs:
       - name: Go SBOMs (market-monitor service, the linux target of its container image)
         # The image is linux/amd64 only (app.v2.json). The service's third-party modules are the parquet reader
         # and its dependencies; its two local modules are judged as components of it, like scheduled-digest's.
-        working-directory: apps/market-monitor/service
+        working-directory: apps/kazuha-hub-market-monitor/service
         run: |
           for target in linux/amd64; do
             IFS=/ read -r goos goarch <<< "$target"
@@ -210,15 +210,15 @@ jobs:
         with:
           python-version: '3.13'
       - run: npm ci
-      - run: npm run typecheck --workspace=apps/market-monitor/frontend
-      - run: npm test --workspace=apps/market-monitor/frontend
+      - run: npm run typecheck --workspace=apps/kazuha-hub-market-monitor/frontend
+      - run: npm test --workspace=apps/kazuha-hub-market-monitor/frontend
       - run: python3 scripts/plugin-standard.py
-      - run: python3 scripts/build-app-v2.py market-monitor --output "$RUNNER_TEMP/market-monitor-candidate"
+      - run: python3 scripts/build-app-v2.py kazuha-hub-market-monitor --output "$RUNNER_TEMP/market-monitor-candidate"
       # The preview harness (frontend/dev) must never reach the package. The
       # bundle is minified, so check the source graph and the zip contents.
       - name: No development harness in the package
         run: |
-          if grep -rEn "['\"][^'\"]*(\.\.?/dev(/|['\"])|vite\.dev\.config)" apps/market-monitor/frontend/src; then
+          if grep -rEn "['\"][^'\"]*(\.\.?/dev(/|['\"])|vite\.dev\.config)" apps/kazuha-hub-market-monitor/frontend/src; then
             echo "src imports the development harness"; exit 1
           fi
           unzip -Z1 "$RUNNER_TEMP/market-monitor-candidate/frontend.zip" > "$RUNNER_TEMP/mm-files"
@@ -231,12 +231,12 @@ jobs:
     timeout-minutes: 30
     defaults:
       run:
-        working-directory: apps/market-monitor/service
+        working-directory: apps/kazuha-hub-market-monitor/service
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version-file: apps/market-monitor/service/go.mod
+          go-version-file: apps/kazuha-hub-market-monitor/service/go.mod
           cache: false
       # The service's third-party modules (go.sum pins them); download first so a
       # registry failure is reported as that, not as a vet or test failure.
@@ -245,7 +245,7 @@ jobs:
       - run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
       - run: go test -race ./...
       - name: Backend image
-        run: docker build --platform linux/amd64 -f apps/market-monitor/service/Dockerfile -t market-monitor-development .
+        run: docker build --platform linux/amd64 -f apps/kazuha-hub-market-monitor/service/Dockerfile -t market-monitor-development .
         working-directory: .
       - name: Image imports and package size
         working-directory: .
@@ -262,7 +262,7 @@ jobs:
           mkdir -m 777 "$RUNNER_TEMP/mm-history"
           docker run --rm --user 65532:65532 --read-only --network none --cap-drop ALL \
             --tmpfs /tmp:rw,nosuid,nodev,noexec,size=16777216 \
-            -v "$GITHUB_WORKSPACE/apps/market-monitor/service/testdata:/testdata:ro" -v "$RUNNER_TEMP/mm-history:/out" \
+            -v "$GITHUB_WORKSPACE/apps/kazuha-hub-market-monitor/service/testdata:/testdata:ro" -v "$RUNNER_TEMP/mm-history:/out" \
             --entrypoint /app/venv/bin/python market-monitor-development /testdata/make_history.py /out
           # The shipped binary's own validator (the one install runs in a child process) accepts them
           # under the same restrictions, with its memory cap in force.
@@ -283,12 +283,12 @@ jobs:
             docker run --rm -i --user 65532:65532 --read-only --network none --cap-drop ALL \
               --tmpfs /tmp:rw,nosuid,nodev,noexec,size=16777216 \
               --entrypoint /app/market-monitor market-monitor-development validate-history "$module" 2026-11-16 \
-              < "apps/market-monitor/service/testdata/crafted/$file.parquet" > /dev/null 2>&1 || status=$?
+              < "apps/kazuha-hub-market-monitor/service/testdata/crafted/$file.parquet" > /dev/null 2>&1 || status=$?
             if [ "$status" != "$want" ]; then
               echo "crafted file $file: exit $status, want $want"; exit 1
             fi
           done
-          (cd apps/market-monitor/service && MM_IMAGE_HISTORY_DIR="$RUNNER_TEMP/mm-history" go test -count=1 -run TestHistoryFilesFromTheImage -v .)
+          (cd apps/kazuha-hub-market-monitor/service && MM_IMAGE_HISTORY_DIR="$RUNNER_TEMP/mm-history" go test -count=1 -run TestHistoryFilesFromTheImage -v .)
           size=$(docker save market-monitor-development | gzip -1 | wc -c)
           echo "compressed image: $((size / 1048576)) MiB (package limit 384 MiB)"
           test "$size" -lt $((350 * 1048576))
@@ -296,7 +296,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: apps/market-monitor/pipeline
+        working-directory: apps/kazuha-hub-market-monitor/pipeline
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

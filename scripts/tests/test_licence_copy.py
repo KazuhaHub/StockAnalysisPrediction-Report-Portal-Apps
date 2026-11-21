@@ -249,11 +249,11 @@ class TheWorkflow(unittest.TestCase):
 
     def test_the_go_sbom_covers_the_market_monitor_image_platform(self):
         # Its first third-party modules are the parquet reader and dependencies; it ships only as a linux/amd64 image.
-        descriptor = json.loads((ROOT / "apps" / "market-monitor" / "app.v2.json").read_text())
+        descriptor = json.loads((ROOT / "apps" / "kazuha-hub-market-monitor" / "app.v2.json").read_text())
         platforms = {tuple(p.split("/")[:2]) for p in descriptor["backend"]["platforms"]}
         workflow = (ROOT / ".github" / "workflows" / "check.yml").read_text()
         step = re.search(r"- name: Go SBOMs \(market-monitor[^\n]*\n(.*?)(?=\n      - name:)", workflow, re.S)[1]
-        self.assertIn("working-directory: apps/market-monitor/service", step)
+        self.assertIn("working-directory: apps/kazuha-hub-market-monitor/service", step)
         listed = set(re.findall(r"\b(linux)/(amd64|arm64)\b", step))
         self.assertEqual(listed, platforms)
         scan = workflow.split("- name: Licence scan", 1)[1].split("- name:", 1)[0]
