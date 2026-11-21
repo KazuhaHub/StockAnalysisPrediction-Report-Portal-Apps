@@ -123,3 +123,49 @@ shared corpus envelope byte for byte from the RFC 8032 test key (never enroll th
 
 To rotate, create a new key with a new key ID, have the administrator `add_key` it,
 sign new releases with it, then have the old key revoked. A key ID is never reused.
+
+## Release signing in CI
+
+`market-monitor` is signed by the `release-market-monitor` workflow, so no person holds
+its key. The private key lives only in the Actions secrets `PORTAL_PUBLISHER_KEY` (the
+exact file `portal-sign-descriptor keygen` writes) and `PORTAL_PUBLISHER_KEY_ID`. The
+workflow writes the key to the runner's temporary directory with mode 0600 inside the
+signing step and removes it in the same step. The public record the administrator
+enrolled, and that the workflow verifies against, is [publisher-keys.json](publisher-keys.json):
+publisher `kazuha-hub` (display name "Kazuha Hub"), key ID, public key,
+SHA-256, `not_before_ms` and the app scope (exactly `market-monitor`).
+
+Each run pushes the signed `.portalapp` to GHCR as an OCI artifact,
+`ghcr.io/kazuhahub/portal-apps/market-monitor:VERSION`: manifest
+`application/vnd.oci.image.manifest.v1+json`, `artifactType`
+`application/vnd.portal.app.package.v2`, the OCI empty descriptor as config and exactly one
+layer, `application/vnd.portal.app.package.v2+zip`, holding the package bytes. The tag is for
+people; the catalogue pins the manifest digest. A tag that exists is never overwritten.
+No GitHub Release is created.
+
+The run then commits to the orphan branch `catalogue`: first
+`packages/market-monitor/VERSION/{descriptor.json,descriptor.sig,provenance.json}`
+(provenance records the commit, run URL, package hash, digest and notes), then
+`catalogue.json` (format `portal.catalogue/2-dev.3`, one entry per app version with
+`descriptor_url` and `signature_url` as raw.githubusercontent.com URLs pinned to the first
+commit's SHA, and `package_oci` of repository and digest; at most 256 entries). A duplicate
+app version is refused before anything is pushed. `scripts/app-catalogue.py` applies the
+Portal's `ParseCatalogue` rules and `scripts/push-oci-package.py` speaks plain registry HTTP.
+The workflow's concurrency group stops two publishes racing. If the branch push fails after
+the GHCR push, the version cannot be re-run (its tag exists); use the next version.
+
+An administrator enters this catalogue URL once in Portal, Apps, Application platform,
+Online application catalogue:
+
+```
+https://raw.githubusercontent.com/KazuhaHub/StockAnalysisPrediction-Report-Portal-Apps/catalogue/catalogue.json
+```
+
+A new GHCR package starts private. The owner must make `portal-apps/market-monitor` public
+once (GitHub, Packages, portal-apps/market-monitor, Package settings, visibility), because
+the Portal pulls it without credentials.
+
+To rotate: generate a new key with a new key ID, set both secrets to the new values,
+have the administrator `add_key` it, add it to `publisher-keys.json` (the workflow
+verifies against the entry whose key ID equals the secret), sign a release with it, then
+have the old key revoked and remove its entry.

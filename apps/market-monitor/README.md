@@ -4,10 +4,11 @@ Daily A-share market monitoring: margin-financing pressure, market sentiment,
 broad-ETF fund flows and the Panorama multi-strategy screener, plus the
 market-level series intended for a systemic-risk monitor.
 
-**Status: development app.** `app.v2.json` declares five document routes
+**Status: beta.** `app.v2.json` declares five document routes
 (overview, margin, sentiment, ETF, Panorama) and the backend image; the image
-digest is a placeholder until a release is built, so nothing is published to
-the catalogue yet.
+digest is a placeholder in the source, replaced when the
+`release-market-monitor` workflow builds, signs and publishes a package
+(docs/publisher-v2.md, "Release signing in CI").
 
 ## `frontend/` — dashboards
 
