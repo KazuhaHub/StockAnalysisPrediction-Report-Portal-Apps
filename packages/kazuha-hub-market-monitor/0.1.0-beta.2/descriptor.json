@@ -1,0 +1,158 @@
+{
+  "format": "portal.app/v2",
+  "id": "kazuha-hub-market-monitor",
+  "version": "0.1.0-beta.2",
+  "publisher": "kazuha-hub",
+  "compatibility": {
+    "platform_api": ">=2.0.0-0 <3.0.0-0",
+    "runner_protocol": ">=1.0.0-0 <2.0.0-0"
+  },
+  "presentation": {
+    "name_key": "title",
+    "description_key": "description",
+    "entry": "index.html",
+    "locales": [
+      "en-US",
+      "zh-CN",
+      "zh-TW"
+    ],
+    "routes": [
+      {
+        "id": "overview",
+        "path": "/",
+        "layout": "document"
+      },
+      {
+        "id": "margin",
+        "path": "/margin",
+        "layout": "document"
+      },
+      {
+        "id": "sentiment",
+        "path": "/sentiment",
+        "layout": "document"
+      },
+      {
+        "id": "etf",
+        "path": "/etf",
+        "layout": "document"
+      },
+      {
+        "id": "panorama",
+        "path": "/panorama",
+        "layout": "document"
+      }
+    ],
+    "display": {
+      "icon": "dashboard",
+      "texts": [
+        {
+          "locale": "en-US",
+          "name": "Market Monitor",
+          "description": "Daily A-share margin, sentiment, ETF-flow and valuation dashboards"
+        },
+        {
+          "locale": "zh-CN",
+          "name": "市场监测",
+          "description": "A 股融资盘、情绪、ETF 资金与估值的每日看板"
+        },
+        {
+          "locale": "zh-TW",
+          "name": "市場監測",
+          "description": "A 股融資盤、情緒、ETF 資金與估值的每日看板"
+        }
+      ]
+    }
+  },
+  "frontend": {
+    "artifact": "frontend.zip",
+    "sha256": "5abbb1a9bc374a352d615fbb11fbdcde7187d306b38a4c439784278cb0da9662"
+  },
+  "backend": {
+    "kind": "oci",
+    "platforms": [
+      "linux/amd64"
+    ],
+    "protocol": "portal.backend/1",
+    "resources": {
+      "memory_mib": 2048,
+      "cpu_millis": 1000,
+      "pids": 128
+    },
+    "images": [
+      {
+        "platform": "linux/amd64",
+        "manifest_digest": "a405529754c12da701406aabb5f1b0fe17173d7194e5470d91f96577da6f5012",
+        "config_digest": "61b716ec046b9406fb4e65405022667c429b4be4eae4980c4bc1c1ae2353841a",
+        "layers": [
+          {
+            "diff_id": "1d7b9dd8778ebc4d9bf2f64436dd358640718cb349f5640b33bebaea4ffd62c2",
+            "uncompressed_bytes": 77946880
+          },
+          {
+            "diff_id": "9ae7def604682355f0b9a3468566bbb06aaae177e47a961444995169178590d2",
+            "uncompressed_bytes": 8844288
+          },
+          {
+            "diff_id": "bd3e172fa0bc2e7382210f6ffe9292e1ce66a4962721cc583787fe726d705f53",
+            "uncompressed_bytes": 47776256
+          },
+          {
+            "diff_id": "3306b96cb7baf10267980832b85ae4056efdc2b3dd659fa42d77af2f850e778d",
+            "uncompressed_bytes": 5120
+          },
+          {
+            "diff_id": "7e47231b84c61abb6af4cf24d7bde0465dc9d18b59635fa579e77f908fa68a85",
+            "uncompressed_bytes": 667774976
+          },
+          {
+            "diff_id": "3d99969a895de2de183d6b11abbadce482577d4250fab4b81f895c3ae0bbc206",
+            "uncompressed_bytes": 11303424
+          },
+          {
+            "diff_id": "622203f3c0602489a15344b91745ef086329f7295af4fab13f42932ab2b1bff4",
+            "uncompressed_bytes": 1986560
+          },
+          {
+            "diff_id": "5e68040069cf964cf90b67c1c4335315bfc599bf5a065aecca79f0c16abbb820",
+            "uncompressed_bytes": 2048
+          }
+        ]
+      }
+    ]
+  },
+  "capabilities": {
+    "required": [
+      "background.run",
+      "tasks.schedule"
+    ],
+    "optional": [
+      "network.proxy"
+    ]
+  },
+  "network_proxy": {
+    "hosts": [
+      "*.eastmoney.com",
+      "*.push2.eastmoney.com",
+      "api.fund.eastmoney.com",
+      "finance.sina.com.cn",
+      "qt.gtimg.cn",
+      "query.sse.com.cn",
+      "quotes.internal.anchan.kazuhahub.com",
+      "vip.stock.finance.sina.com.cn",
+      "web.ifzq.gtimg.cn",
+      "www.szse.cn"
+    ]
+  },
+  "data": {
+    "schema": 2,
+    "readable_schemas": [
+      2
+    ],
+    "writes_on_startup": false,
+    "quota": {
+      "bytes": 6442450944,
+      "inodes": 100000
+    }
+  }
+}
