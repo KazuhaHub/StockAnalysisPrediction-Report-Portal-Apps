@@ -1,13 +1,14 @@
-# market-monitor
+# kazuha-hub-market-monitor
 
 Daily A-share market monitoring: margin-financing pressure, market sentiment,
 broad-ETF fund flows and the Panorama multi-strategy screener, plus the
 market-level series intended for a systemic-risk monitor.
 
-**Status: development app.** `app.v2.json` declares five document routes
+**Status: beta.** `app.v2.json` declares five document routes
 (overview, margin, sentiment, ETF, Panorama) and the backend image; the image
-digest is a placeholder until a release is built, so nothing is published to
-the catalogue yet.
+digest is a placeholder in the source, replaced when the
+`release-market-monitor` workflow builds, signs and publishes a package
+(docs/publisher-v2.md, "Release signing in CI").
 
 ## `frontend/` — dashboards
 
@@ -21,7 +22,7 @@ green.
 Local preview with real snapshots (development only, never packaged):
 
 ```sh
-cd apps/market-monitor/frontend
+cd apps/kazuha-hub-market-monitor/frontend
 MM_SNAPSHOT_DIR=/path/to/snapshots npm run dev   # <dir>/<module>/<date>.json
 ```
 
@@ -111,7 +112,7 @@ and so could not go through the proxy); `QUOTE_API` overrides it. The
 `marketdata` and `panorama` jobs need that host reviewed like the others.
 
 ```sh
-cd apps/market-monitor/service && go test -race ./...
+cd apps/kazuha-hub-market-monitor/service && go test -race ./...
 ```
 
 ## `pipeline/mm_job.py` — the job entry
@@ -179,7 +180,7 @@ its `summary.data_health` shows each source's last date.
 ## Backend image
 
 ```sh
-docker build --platform linux/amd64 -f apps/market-monitor/service/Dockerfile -t market-monitor .
+docker build --platform linux/amd64 -f apps/kazuha-hub-market-monitor/service/Dockerfile -t market-monitor .
 ```
 
 One image holds the Go service (`/app/market-monitor`, the entrypoint), the

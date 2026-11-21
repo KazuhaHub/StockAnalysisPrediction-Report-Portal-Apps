@@ -1,0 +1,283 @@
+name: Release Market Monitor
+# Builds the kazuha-hub-market-monitor managed image package from the dispatched commit, signs its descriptor with
+# the publisher key, pushes the signed .portalapp to GHCR as an OCI artifact and lists it, by manifest digest, in
+# catalogue.json on the `catalogue` branch. No GitHub Release is created. See docs/publisher-v2.md
+# ("Release signing in CI").
+#
+# Trust layout: the signing key exists only as secrets of the `app-release` environment (deployment branches: main),
+# and only the `sign` job uses that environment. That job runs no package manager and no code from the build job:
+# it builds the signing tool from the checkout with the network off (the module has no dependencies), signs the
+# descriptor bytes the build job produced, and checks them against docs/publisher-keys.json.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Exact app version, equal to apps/kazuha-hub-market-monitor/app.v2.json
+        type: string
+        required: true
+      confirmation:
+        description: Repeat the exact kazuha-hub-market-monitor/vVERSION identifier
+        type: string
+        required: true
+      notes:
+        description: Reader-facing release notes
+        type: string
+        required: true
+permissions:
+  contents: read
+concurrency:
+  group: market-monitor-release
+  cancel-in-progress: false
+env:
+  GOWORK: 'off'
+  VERSION: ${{ inputs.version }}
+  CONFIRMATION: ${{ inputs.confirmation }}
+  RELEASE_NOTES: ${{ inputs.notes }}
+  OCI_REPOSITORY: ghcr.io/kazuhahub/portal-apps/kazuha-hub-market-monitor
+  APP_ID: kazuha-hub-market-monitor
+jobs:
+  gate:
+    # Checked once, not polled: if main's check workflow is still running, wait for it and dispatch again.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      # The default branch's guard, not the dispatched commit's: a guard supplied by the thing it guards is not one.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+      - name: Require the commit to be on main and main's check workflow to have passed for it
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REF: ${{ github.ref }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          test "$REF" = refs/heads/main || { echo "Release only from main, not $REF"; exit 1; }
+          python3 scripts/release-gate.py --repo "$GITHUB_REPOSITORY" --sha "$SHA" --branch main --workflow check.yml
+  build:
+    needs: gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Refuse a mismatched version or confirmation
+        run: |
+          set -euo pipefail
+          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]] || { echo "version is not a semantic version"; exit 1; }
+          test "$CONFIRMATION" = "$APP_ID/v$VERSION" || { echo "confirmation must be $APP_ID/v$VERSION"; exit 1; }
+          python3 - <<'PY'
+          import json, os
+          descriptor = json.load(open('apps/kazuha-hub-market-monitor/app.v2.json'))
+          if descriptor['id'] != os.environ['APP_ID'] or descriptor['version'] != os.environ['VERSION']:
+              raise SystemExit('app.v2.json declares ' + descriptor['id'] + ' ' + descriptor['version'] + ', not ' + os.environ['APP_ID'] + ' ' + os.environ['VERSION'])
+          PY
+      - name: Refuse an existing package version
+        # The token endpoint or the manifest check may answer 401 or 403 while the package does not exist yet;
+        # this early check tolerates that. The publish job checks again, strictly, before any push.
+        env:
+          REGISTRY_USER: ${{ github.actor }}
+          REGISTRY_PASSWORD: ${{ github.token }}
+        run: python3 scripts/push-oci-package.py --repository "$OCI_REPOSITORY" --tag "$VERSION" --check-absent --tolerate-denied
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24'
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.13'
+      - run: npm ci
+      - run: python3 scripts/plugin-standard.py
+      - name: Build the backend image and export its blobs
+        run: |
+          set -euo pipefail
+          docker build --platform linux/amd64 -f apps/kazuha-hub-market-monitor/service/Dockerfile -t market-monitor-release:build .
+          docker save "$(docker image inspect market-monitor-release:build --format '{{.Id}}')" --output "$RUNNER_TEMP/image.tar"
+          python3 scripts/export-image-oci.py "$RUNNER_TEMP/image.tar" --platform linux/amd64 --output "$RUNNER_TEMP/image"
+          rm -f "$RUNNER_TEMP/image.tar"
+      - name: Build the unsigned candidate
+        run: python3 scripts/build-app-v2.py kazuha-hub-market-monitor --images "$RUNNER_TEMP/image/images.json" --output "$RUNNER_TEMP/candidate"
+      - name: Stage the small descriptor and the package payload apart
+        run: |
+          set -euo pipefail
+          mkdir "$RUNNER_TEMP/descriptor" "$RUNNER_TEMP/payload"
+          cp "$RUNNER_TEMP/candidate/descriptor.json" "$RUNNER_TEMP/descriptor/"
+          cp "$RUNNER_TEMP/candidate/frontend.zip" "$RUNNER_TEMP/payload/"
+          cp -r "$RUNNER_TEMP/image/blobs" "$RUNNER_TEMP/payload/blobs"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: market-monitor-descriptor-${{ github.run_id }}
+          path: ${{ runner.temp }}/descriptor/
+          retention-days: 7
+          overwrite: true
+          if-no-files-found: error
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: market-monitor-payload-${{ github.run_id }}
+          path: ${{ runner.temp }}/payload/
+          retention-days: 7
+          overwrite: true
+          if-no-files-found: error
+  sign:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: app-release
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: packages/extensionprotocol/go.mod
+          cache: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: market-monitor-descriptor-${{ github.run_id }}
+          path: ${{ runner.temp }}/descriptor
+      - name: Build the signing tool from this checkout, offline
+        # The module has no dependencies; with the proxy off, a missing one fails the build instead of downloading.
+        working-directory: packages/extensionprotocol
+        env:
+          GOFLAGS: -mod=readonly
+          GOPROXY: 'off'
+          GOTOOLCHAIN: local
+          CGO_ENABLED: '0'
+        run: go build -trimpath -o "$RUNNER_TEMP/portal-sign-descriptor" ./cmd/portal-sign-descriptor
+      - name: Sign the descriptor and verify it against the committed public key
+        env:
+          PORTAL_PUBLISHER_KEY: ${{ secrets.PORTAL_PUBLISHER_KEY }}
+          PORTAL_PUBLISHER_KEY_ID: ${{ secrets.PORTAL_PUBLISHER_KEY_ID }}
+        run: |
+          set -euo pipefail
+          umask 077
+          key="$RUNNER_TEMP/publisher.key"
+          descriptor="$RUNNER_TEMP/descriptor/descriptor.json"
+          trap 'rm -f "$key"' EXIT
+          test -n "$PORTAL_PUBLISHER_KEY" && test -n "$PORTAL_PUBLISHER_KEY_ID" || { echo "signing secrets are not set"; exit 1; }
+          public_key=$(python3 - "$descriptor" <<'PY'
+          import json, os, sys
+          descriptor = json.load(open(sys.argv[1]))
+          if descriptor['id'] != os.environ['APP_ID'] or descriptor['version'] != os.environ['VERSION']:
+              raise SystemExit('the descriptor to sign is not ' + os.environ['APP_ID'] + ' ' + os.environ['VERSION'])
+          record = json.load(open('docs/publisher-keys.json'))
+          for publisher in record['publishers']:
+              if publisher['publisher'] != descriptor['publisher']:
+                  continue
+              for entry in publisher['keys']:
+                  if entry['key_id'] == os.environ['PORTAL_PUBLISHER_KEY_ID'] and descriptor['id'].startswith(tuple(entry['app_id_prefixes'])):
+                      print(entry['public_key'])
+                      raise SystemExit(0)
+          raise SystemExit('no committed public key for this publisher, key ID and app')
+          PY
+          )
+          printf '%s' "$PORTAL_PUBLISHER_KEY" > "$key"
+          "$RUNNER_TEMP/portal-sign-descriptor" sign --descriptor "$descriptor" \
+            --private-key "$key" --key-id "$PORTAL_PUBLISHER_KEY_ID" --out "$RUNNER_TEMP/descriptor.sig"
+          rm -f "$key"
+          "$RUNNER_TEMP/portal-sign-descriptor" verify --descriptor "$descriptor" \
+            --signature "$RUNNER_TEMP/descriptor.sig" --public-key "$public_key" --key-id "$PORTAL_PUBLISHER_KEY_ID"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: market-monitor-signature-${{ github.run_id }}
+          path: ${{ runner.temp }}/descriptor.sig
+          retention-days: 7
+          overwrite: true
+          if-no-files-found: error
+  publish:
+    needs: [build, sign]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+      packages: write
+    steps:
+      # The scripts come from the dispatched commit, never from a downloaded file.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: market-monitor-descriptor-${{ github.run_id }}
+          path: ${{ runner.temp }}/release
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: market-monitor-signature-${{ github.run_id }}
+          path: ${{ runner.temp }}/release
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: market-monitor-payload-${{ github.run_id }}
+          path: ${{ runner.temp }}/payload
+      - name: Pack the envelope
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/release"
+          python3 scripts/pack-offline-envelope.py --descriptor "$out/descriptor.json" --signature "$out/descriptor.sig" \
+            --frontend "$RUNNER_TEMP/payload/frontend.zip" --image-blobs "$RUNNER_TEMP/payload/blobs" \
+            --output "$out/kazuha-hub-market-monitor.portalapp"
+          echo "kazuha-hub-market-monitor.portalapp: $(( $(stat -c %s "$out/kazuha-hub-market-monitor.portalapp") / 1048576 )) MiB"
+      - name: Push the package to GHCR and list it in the catalogue branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REGISTRY_USER: ${{ github.actor }}
+          REGISTRY_PASSWORD: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/release"
+          site="https://github.com/$GITHUB_REPOSITORY"
+          auth=$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)
+          echo "::add-mask::$auth"
+          export CATALOGUE_AUTH="AUTHORIZATION: basic $auth"
+          branch="$RUNNER_TEMP/catalogue"
+          repo_git() { git -C "$branch" -c "http.https://github.com/.extraheader=$CATALOGUE_AUTH" -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' "$@"; }
+          mkdir "$branch"
+          # Only "branch absent" starts an orphan branch; any other failure aborts before the GHCR push.
+          python3 scripts/catalogue-branch.py --dir "$branch" --remote "$site.git"
+          # Refuse a duplicate version or a full catalogue before anything is pushed.
+          python3 scripts/app-catalogue.py --current "$branch/catalogue.json" --descriptor "$out/descriptor.json" \
+            --descriptor-url https://example.invalid/d --signature-url https://example.invalid/s \
+            --repository "$OCI_REPOSITORY" --digest "sha256:$(printf '0%.0s' {1..64})" --output /dev/null
+          # Strict here: the token has write access, so a missing package answers 404 and anything else aborts.
+          python3 scripts/push-oci-package.py --repository "$OCI_REPOSITORY" --tag "$VERSION" --package "$out/kazuha-hub-market-monitor.portalapp" \
+            --annotation "org.opencontainers.image.source=$site" --annotation "org.opencontainers.image.revision=$GITHUB_SHA" \
+            --annotation "org.opencontainers.image.version=$VERSION" --annotation "org.opencontainers.image.title=$APP_ID" \
+            --digest-out "$RUNNER_TEMP/oci.digest"
+          digest=$(cat "$RUNNER_TEMP/oci.digest")
+          # Commit one holds the small files; the catalogue then pins URLs to that commit's SHA, so a later
+          # change to the branch cannot alter what a published entry points at.
+          dir="packages/$APP_ID/$VERSION"
+          mkdir -p "$branch/$dir"
+          cp "$out/descriptor.json" "$out/descriptor.sig" "$branch/$dir/"
+          DIGEST="$digest" PACKAGE_SHA256=$(sha256sum "$out/kazuha-hub-market-monitor.portalapp" | cut -d' ' -f1) \
+            python3 - "$branch/$dir/provenance.json" <<'PY'
+          import json, os, sys
+          record = {'app_id': os.environ['APP_ID'], 'version': os.environ['VERSION'], 'commit': os.environ['GITHUB_SHA'],
+                    'run_url': os.environ['RUN_URL'], 'package_oci': {'repository': os.environ['OCI_REPOSITORY'], 'digest': os.environ['DIGEST']},
+                    'package_sha256': os.environ['PACKAGE_SHA256'], 'notes': os.environ['RELEASE_NOTES']}
+          open(sys.argv[1], 'w').write(json.dumps(record, indent=2) + '\n')
+          PY
+          repo_git add "$dir/descriptor.json" "$dir/descriptor.sig" "$dir/provenance.json"
+          repo_git commit -q -m "Add $APP_ID $VERSION files"
+          sha=$(repo_git rev-parse HEAD)
+          raw="https://raw.githubusercontent.com/$GITHUB_REPOSITORY/$sha/$dir"
+          python3 scripts/app-catalogue.py --current "$branch/catalogue.json" --descriptor "$out/descriptor.json" \
+            --descriptor-url "$raw/descriptor.json" --signature-url "$raw/descriptor.sig" \
+            --repository "$OCI_REPOSITORY" --digest "$digest" --output "$RUNNER_TEMP/catalogue.json.new"
+          mv "$RUNNER_TEMP/catalogue.json.new" "$branch/catalogue.json"
+          repo_git add catalogue.json
+          repo_git commit -q -m "List $APP_ID $VERSION in the catalogue"
+          repo_git push -q origin catalogue
+          echo "Published $APP_ID $VERSION as $OCI_REPOSITORY@$digest"

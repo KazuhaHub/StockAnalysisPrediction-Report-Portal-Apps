@@ -20,7 +20,7 @@ import (
 // reference backend; keep them in step with the platform contract docs.
 
 const (
-	applicationID          = "market-monitor"
+	applicationID          = "kazuha-hub-market-monitor"
 	taskRequestFormat      = "portal.app-task.request/1-dev.1"
 	taskResponseFormat     = "portal.app-task.response/1-dev.1"
 	serviceIdentityFormat  = "portal.app.service-identity/1-dev.1"

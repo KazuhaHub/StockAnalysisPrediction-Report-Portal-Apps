@@ -1,6 +1,6 @@
 # market-monitor backend image: the Go service, the Python pipeline and its
 # virtual environment. Build from the repository root:
-#   docker build --platform linux/amd64 -f apps/market-monitor/service/Dockerfile .
+#   docker build --platform linux/amd64 -f apps/kazuha-hub-market-monitor/service/Dockerfile .
 #
 # The platform runs it as 65532:65532 with a read-only root filesystem, no
 # network (egress goes through the in-process forwarder to the broker, which
@@ -14,19 +14,19 @@
 # still not bit-identical: pip timestamps and the jsonpath sdist build vary).
 
 FROM golang:1.26.11-bookworm@sha256:dc40a13b61304647ed7e5d581d246b86413dfc29d63c6d018310feb93cd98fc0 AS service
-WORKDIR /src/apps/market-monitor/service
+WORKDIR /src/apps/kazuha-hub-market-monitor/service
 COPY packages/extensionprotocol /src/packages/extensionprotocol
 COPY packages/proxy /src/packages/proxy
-COPY apps/market-monitor/service/go.mod apps/market-monitor/service/go.sum ./
+COPY apps/kazuha-hub-market-monitor/service/go.mod apps/kazuha-hub-market-monitor/service/go.sum ./
 # The first third-party modules of the service (the parquet reader and its
 # dependencies). Downloaded in their own layer, keyed by go.mod and go.sum, so
 # a source change does not download them again; go.sum pins every hash.
 RUN go mod download
-COPY apps/market-monitor/service/*.go ./
+COPY apps/kazuha-hub-market-monitor/service/*.go ./
 RUN rm -f *_test.go && CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o /out/market-monitor .
 
 FROM python:3.11-slim-bookworm@sha256:a83ba18aef0f865b1a4a611c2cf460fe446f2795673bbb9fe43be570439e3b39 AS venv
-COPY apps/market-monitor/pipeline/requirements.lock /tmp/requirements.lock
+COPY apps/kazuha-hub-market-monitor/pipeline/requirements.lock /tmp/requirements.lock
 # Byte-compile at build time: the root filesystem is read-only at run time,
 # so nothing could cache compiled modules there later.
 RUN python -m venv /app/venv \
@@ -45,7 +45,7 @@ ENV PYTHONUNBUFFERED=1 \
 COPY --from=venv /app/venv /app/venv
 COPY --from=service /out/market-monitor /app/market-monitor
 # .dockerignore keeps tests, install/systemd files and caches out of this copy.
-COPY apps/market-monitor/pipeline /app/pipeline
+COPY apps/kazuha-hub-market-monitor/pipeline /app/pipeline
 RUN chmod -R a+rX /app/pipeline \
  && ln -s /data/work /opt/daily-tasks
 USER 65532:65532

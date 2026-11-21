@@ -4,7 +4,7 @@ This guide is for writing the container behind a v2 app: the Go service that
 answers the app's frontend, runs background work and, when an administrator
 allows it, reaches the network. The frontend side is
 [backend-v2.md](backend-v2.md) (`useAppBackend`). Reference implementations are
-[`apps/market-monitor/service`](../apps/market-monitor/service) (the first real
+[`apps/kazuha-hub-market-monitor/service`](../apps/kazuha-hub-market-monitor/service) (the first real
 backend app: a Go wrapper around a Python pipeline) and
 [`apps/scheduled-digest/service`](../apps/scheduled-digest/service) (a neutral
 fixture).
@@ -273,7 +273,7 @@ Replace `jobs["example"]` with your work. Keep the queue bounded (it answers
 destination in a payload (the platform refuses them), and let the app, not the
 payload, decide what a job may reach. If work is long, report progress through
 your own viewer routes. Examples of heavier designs are in
-`apps/market-monitor/service` (`jobs.go`, `scheduler.go`: a process group per
+`apps/kazuha-hub-market-monitor/service` (`jobs.go`, `scheduler.go`: a process group per
 job, a persisted run history, an internal schedule).
 
 ## 7. Outbound traffic at a glance
