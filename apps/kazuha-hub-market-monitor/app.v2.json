@@ -1,7 +1,7 @@
 {
   "format": "portal.app/v2",
   "id": "kazuha-hub-market-monitor",
-  "version": "0.1.0-beta.1",
+  "version": "0.1.0-beta.2",
   "publisher": "kazuha-hub",
   "compatibility": {
     "platform_api": ">=2.0.0-0 <3.0.0-0",
@@ -94,8 +94,8 @@
     ]
   },
   "data": {
-    "schema": 1,
-    "readable_schemas": [1],
+    "schema": 2,
+    "readable_schemas": [2],
     "writes_on_startup": false,
     "quota": { "bytes": 6442450944, "inodes": 100000 }
   }

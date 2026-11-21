@@ -12,6 +12,10 @@ import (
 	"strings"
 )
 
+// readinessDataFormat is the on-disk format of docs/store-v2.md. It must equal app.v2.json data.schema:
+// the runner admits the backend only when the two agree.
+const readinessDataFormat = "2"
+
 // Viewer routes (all GET, all require a verified X-Portal-Assertion):
 //
 //	/v1/runs                         job history
@@ -52,7 +56,7 @@ func (s *server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, "refused")
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"protocol": "portal.backend/1", "ready": true, "data_format": "2"})
+		writeJSON(w, http.StatusOK, map[string]any{"protocol": "portal.backend/1", "ready": true, "data_format": readinessDataFormat})
 	case r.Method == http.MethodPost && r.URL.Path == "/v1/handshake":
 		s.handshake(w, r)
 	case r.Method == http.MethodPost && r.URL.Path == "/v1/tasks/run":
