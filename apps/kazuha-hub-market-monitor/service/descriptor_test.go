@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -57,5 +58,29 @@ func TestDescriptorDeclaresTheForwardProxy(t *testing.T) {
 		if !slices.Contains(hosts, want) {
 			t.Errorf("missing %s", want)
 		}
+	}
+}
+
+// The runner admits the backend only when /health/ready reports the data format the descriptor declares
+// (data.schema). A mismatch leaves an install waiting at probe forever, as 0.1.0-beta.1 did on production.
+func TestDescriptorDataSchemaMatchesReadiness(t *testing.T) {
+	raw, err := os.ReadFile("../app.v2.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var d struct {
+		Data struct {
+			Schema          int   `json:"schema"`
+			ReadableSchemas []int `json:"readable_schemas"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(raw, &d); err != nil {
+		t.Fatal(err)
+	}
+	if got := strconv.Itoa(d.Data.Schema); got != readinessDataFormat {
+		t.Fatalf("app.v2.json data.schema is %s, /health/ready reports %s", got, readinessDataFormat)
+	}
+	if !slices.Contains(d.Data.ReadableSchemas, d.Data.Schema) {
+		t.Fatalf("readable_schemas %v does not include schema %d", d.Data.ReadableSchemas, d.Data.Schema)
 	}
 }
