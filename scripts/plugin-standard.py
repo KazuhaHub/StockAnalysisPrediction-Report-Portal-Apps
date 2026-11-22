@@ -30,6 +30,13 @@ def check(root):
         experimental = manifest == v2
         if experimental and (declaration.get("format") != "portal.app/v2" or declaration.get("id") != app.name):
             raise ValueError(f"{app.name}: invalid v2 authoring identity")
+        if experimental:
+            try:
+                display = authoring.display_block(declaration)
+                if display is not None and display.get("icon_png") is not None:
+                    authoring.validate_icon_png(authoring.decode_icon_base64(display["icon_png"]))
+            except ValueError as error:
+                raise ValueError(f"{app.name}: invalid presentation.display: {error}") from None
         frontend = app / "frontend"
         if frontend.is_symlink():
             raise ValueError(f"{app.name}: unsafe frontend directory")

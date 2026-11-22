@@ -52,3 +52,11 @@ Read
 [reviewed network client](../../docs/network-v2.md) and
 [current-viewer reports client](../../docs/reports-v2.md) and
 [application object client](../../docs/objects-v2.md) for boundaries and tests.
+
+## Publisher name and icon
+
+`parseDescriptor` accepts the optional `publisher_name` and `presentation.display.icon_png`
+fields and enforces their cheap checks (see
+[Publisher name and custom icon](../../docs/descriptor-v2.md#publisher-name-and-custom-icon));
+the Portal does the full PNG decode. Embed an icon with `scripts/app-icon.py`. Upgrade the Portal
+and the app-runner before publishing a package that uses either field.
