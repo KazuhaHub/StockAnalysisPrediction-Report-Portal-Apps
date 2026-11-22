@@ -32,6 +32,22 @@ def make_png(width=64, height=64, color_type=6, extra=b''):
             chunk(b'IDAT', zlib.compress(row * height)) + extra + chunk(b'IEND', b''))
 
 
+def raw_png(width, height, depth, color, data, interlace=0, palette=False):
+    ihdr = struct.pack('>IIBBBBB', width, height, depth, color, 0, 0, interlace)
+    mid = chunk(b'PLTE', b'\x00\x00\x00' * 2) if palette else b''
+    return (b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', ihdr) + mid +
+            chunk(b'IDAT', zlib.compress(data)) + chunk(b'IEND', b''))
+
+
+def adam7_length(size, bits_per_pixel):
+    total = 0
+    for xs, ys, dx, dy in ((0, 0, 8, 8), (4, 0, 8, 8), (0, 4, 4, 8), (2, 0, 4, 4), (0, 2, 2, 4), (1, 0, 2, 2), (0, 1, 1, 2)):
+        if size > xs and size > ys:
+            width, rows = (size - xs + dx - 1) // dx, (size - ys + dy - 1) // dy
+            total += rows * (1 + (width * bits_per_pixel + 7) // 8)
+    return total
+
+
 class IconValidationTests(unittest.TestCase):
     def setUp(self):
         self.authoring = module('icon_authoring', 'app_authoring.py')
@@ -77,6 +93,43 @@ class IconValidationTests(unittest.TestCase):
                  chunk(b'IDAT', zlib.compress(b'\x00' * 100)) + chunk(b'IEND', b''))
         with self.assertRaises(ValueError):
             self.check(short)
+
+
+    def test_refuses_invalid_colour_type_and_depth_pairs(self):
+        rows = b'\x00' * 64 * (1 + 64 * 3 // 2)
+        with self.assertRaises(ValueError):
+            self.check(raw_png(64, 64, 4, 2, rows))
+        with self.assertRaises(ValueError):
+            self.check(raw_png(64, 64, 16, 3, b'\x00' * 64 * 129, palette=True))
+        self.assertEqual(self.check(raw_png(64, 64, 8, 0, (b'\x00' + b'\x80' * 64) * 64)), (64, 64))
+
+    def test_palette_images_need_a_palette(self):
+        data = (b'\x00' + b'\x00' * 64) * 64
+        with self.assertRaises(ValueError):
+            self.check(raw_png(64, 64, 8, 3, data))
+        self.assertEqual(self.check(raw_png(64, 64, 8, 3, data, palette=True)), (64, 64))
+
+    def test_interlaced_images_are_checked_against_the_adam7_length(self):
+        for size in (64, 65 + 0, 100):
+            if size < 64:
+                continue
+            need = adam7_length(size, 32)
+            self.assertEqual(self.check(raw_png(size, size, 8, 6, b'\x00' * need, interlace=1)), (size, size))
+            with self.assertRaises(ValueError):
+                self.check(raw_png(size, size, 8, 6, b'\x00' * (need - 1), interlace=1))
+            with self.assertRaises(ValueError):
+                self.check(raw_png(size, size, 8, 6, b'\x00' * (need + 1), interlace=1))
+
+
+class StrictBase64Tests(unittest.TestCase):
+    def setUp(self):
+        self.authoring = module('b64_authoring', 'app_authoring.py')
+
+    def test_round_trips_canonical_text_only(self):
+        self.assertEqual(self.authoring.decode_icon_base64('QQ=='), b'A')
+        for bad in ('QR==', 'QQ=', 'QQ', 'QQ==\n', 'QQ==  ', '', 'Q-==', 'data:image/png;base64,QQ==', 'A' * 21852, None, 5):
+            with self.assertRaises(ValueError, msg=repr(bad)):
+                self.authoring.decode_icon_base64(bad)
 
 
 class IconCommandTests(unittest.TestCase):
@@ -135,6 +188,42 @@ class IconCommandTests(unittest.TestCase):
         self.manifest.unlink()
         with self.assertRaises(ValueError):
             self.tool.apply(self.png, self.app)
+
+    def test_original_file_mode_is_preserved(self):
+        self.manifest.chmod(0o640)
+        self.png.write_bytes(make_png())
+        self.tool.apply(self.png, self.app)
+        self.assertEqual(self.manifest.stat().st_mode & 0o777, 0o640)
+
+    def test_non_object_presentation_or_display_is_a_clean_error(self):
+        self.png.write_bytes(make_png())
+        standard = module('shape_standard', 'plugin-standard.py')
+        pristine = self.manifest.read_text()
+        for key, value in (('presentation', None), ('presentation', []), ('display', []), ('display', 'x')):
+            self.manifest.write_text(pristine)
+            data = self.declaration()
+            if key == 'presentation':
+                data['presentation'] = value
+            else:
+                data['presentation']['display'] = value
+            self.manifest.write_text(json.dumps(data))
+            with self.assertRaises(ValueError, msg=repr((key, value))):
+                self.tool.apply(self.png, self.app)
+            with self.assertRaises(ValueError, msg=repr((key, value))):
+                standard.check(self.root)
+
+    def test_plugin_standard_refuses_non_strict_base64(self):
+        standard = module('b64_standard', 'plugin-standard.py')
+        data = self.declaration()
+        encoded = base64.b64encode(make_png(64, 64)).decode()  # 209 bytes: one pad char
+        alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
+        pad = len(encoded) - len(encoded.rstrip('='))
+        at = len(encoded) - pad - 1
+        dirty = encoded[:at] + alphabet[(alphabet.index(encoded[at]) + 1) % 64] + encoded[at + 1:]
+        data['presentation']['display']['icon_png'] = dirty
+        self.manifest.write_text(json.dumps(data))
+        with self.assertRaises(ValueError):
+            standard.check(self.root)
 
     def test_plugin_standard_accepts_new_fields_and_refuses_a_bad_icon(self):
         standard = module('icon_standard', 'plugin-standard.py')

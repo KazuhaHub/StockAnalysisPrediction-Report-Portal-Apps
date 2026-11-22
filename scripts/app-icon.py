@@ -32,16 +32,25 @@ def apply(png_path, app_dir):
         raise ValueError('Custom icons require a v2 application, not a legacy one')
     manifest = app_dir / 'app.v2.json'
     declaration = authoring.read_json(manifest)
-    display = declaration.get('presentation', {}).get('display') if isinstance(declaration, dict) else None
-    if not isinstance(display, dict):
+    display = authoring.display_block(declaration)
+    if display is None:
         raise ValueError('Add presentation.display (icon and texts) before embedding a custom icon')
     display['icon_png'] = base64.b64encode(raw).decode('ascii')
     text = json.dumps(declaration, ensure_ascii=False, indent=2) + '\n'
+    mode = manifest.stat().st_mode & 0o7777
     handle, temporary = tempfile.mkstemp(dir=app_dir, prefix='.app.v2.', suffix='.tmp')
     try:
         with os.fdopen(handle, 'w', encoding='utf-8') as target:
             target.write(text)
+            target.flush()
+            os.fchmod(target.fileno(), mode)
+            os.fsync(target.fileno())
         os.replace(temporary, manifest)
+        directory = os.open(app_dir, os.O_RDONLY)
+        try:
+            os.fsync(directory)
+        finally:
+            os.close(directory)
     except BaseException:
         if os.path.exists(temporary):
             os.unlink(temporary)

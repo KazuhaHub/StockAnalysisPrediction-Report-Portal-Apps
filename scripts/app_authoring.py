@@ -1,4 +1,6 @@
 """Shared offline checks for application authoring tools, not admission authority."""
+import base64
+import binascii
 import json
 import re
 import struct
@@ -56,6 +58,10 @@ MAX_ICON_PNG_BYTES = 16 * 1024
 MIN_ICON_PIXELS, MAX_ICON_PIXELS = 64, 256
 _PNG_SIGNATURE = b'\x89PNG\r\n\x1a\n'
 _PNG_CHANNELS = {0: 1, 2: 3, 3: 1, 4: 2, 6: 4}
+# Valid (colour type, bit depth) pairs from the PNG specification.
+_PNG_DEPTHS = {0: (1, 2, 4, 8, 16), 2: (8, 16), 3: (1, 2, 4, 8), 4: (8, 16), 6: (8, 16)}
+_ADAM7 = ((0, 0, 8, 8), (4, 0, 8, 8), (0, 4, 4, 8), (2, 0, 4, 4), (0, 2, 2, 4), (1, 0, 2, 2), (0, 1, 1, 2))
+MAX_ICON_BASE64 = (MAX_ICON_PNG_BYTES + 2) // 3 * 4
 _MAX_INFLATED = 4 << 20
 
 
@@ -70,7 +76,7 @@ def validate_icon_png(raw):
         raise ValueError('The icon is not a PNG file')
     if len(raw) > MAX_ICON_PNG_BYTES:
         raise ValueError(f'The icon is {len(raw)} bytes; the limit is {MAX_ICON_PNG_BYTES}')
-    pos, header, idat, ended = len(_PNG_SIGNATURE), None, bytearray(), False
+    pos, header, idat, ended, palette = len(_PNG_SIGNATURE), None, bytearray(), False, False
     while pos < len(raw) and not ended:
         if pos + 12 > len(raw):
             raise ValueError('The PNG is truncated')
@@ -85,6 +91,8 @@ def validate_icon_png(raw):
             if kind != b'IHDR' or length != 13:
                 raise ValueError('The PNG must start with an IHDR chunk')
             header = struct.unpack('>IIBBBBB', raw[pos + 8:end])
+        elif kind == b'PLTE':
+            palette = True
         elif kind == b'IDAT':
             idat += raw[pos + 8:end]
         elif kind == b'IEND':
@@ -95,8 +103,10 @@ def validate_icon_png(raw):
     width, height, depth, color, _compression, _filter, interlace = header
     if width != height or not MIN_ICON_PIXELS <= width <= MAX_ICON_PIXELS:
         raise ValueError(f'The icon is {width}x{height}; it must be square, {MIN_ICON_PIXELS}-{MAX_ICON_PIXELS} px')
-    if color not in _PNG_CHANNELS or depth not in (1, 2, 4, 8, 16) or interlace not in (0, 1):
-        raise ValueError('Unsupported PNG header')
+    if depth not in _PNG_DEPTHS.get(color, ()) or interlace not in (0, 1):
+        raise ValueError('Unsupported PNG colour type, bit depth or interlace method')
+    if color == 3 and not palette:
+        raise ValueError('A palette PNG needs a PLTE chunk')
     inflater = zlib.decompressobj()
     try:
         pixels = inflater.decompress(bytes(idat), _MAX_INFLATED)
@@ -104,8 +114,38 @@ def validate_icon_png(raw):
         raise ValueError('The PNG pixel data does not decode') from None
     if not inflater.eof:
         raise ValueError('The PNG pixel data is incomplete or oversized')
+    bits = _PNG_CHANNELS[color] * depth
     if interlace == 0:
-        stride = (width * _PNG_CHANNELS[color] * depth + 7) // 8
-        if len(pixels) != height * (1 + stride):
-            raise ValueError('The PNG pixel data has the wrong length')
+        expected = height * (1 + (width * bits + 7) // 8)
+    else:
+        expected = 0
+        for x0, y0, dx, dy in _ADAM7:
+            if width > x0 and height > y0:
+                expected += ((height - y0 + dy - 1) // dy) * (1 + (((width - x0 + dx - 1) // dx) * bits + 7) // 8)
+    if len(pixels) != expected:
+        raise ValueError('The PNG pixel data has the wrong length')
     return width, height
+
+
+def decode_icon_base64(text):
+    """Strict standard base64 like Go's StdEncoding.Strict(): canonical, padded, no whitespace, capped."""
+    if not isinstance(text, str) or not text or len(text) > MAX_ICON_BASE64 or len(text) % 4:
+        raise ValueError('icon_png must be non-empty padded standard base64 within the size cap')
+    try:
+        raw = base64.b64decode(text, validate=True)
+    except (binascii.Error, ValueError):
+        raise ValueError('icon_png is not valid standard base64') from None
+    # Re-encoding rejects non-zero padding bits and other non-canonical forms.
+    if base64.b64encode(raw).decode('ascii') != text:
+        raise ValueError('icon_png is not canonical base64 (non-zero padding bits)')
+    return raw
+
+
+def display_block(declaration):
+    """Return presentation.display (or None), raising a clean error for a wrong shape."""
+    if not isinstance(declaration, dict) or not isinstance(declaration.get('presentation'), dict):
+        raise ValueError('presentation must be an object')
+    display = declaration['presentation'].get('display')
+    if display is not None and not isinstance(display, dict):
+        raise ValueError('presentation.display must be an object')
+    return display

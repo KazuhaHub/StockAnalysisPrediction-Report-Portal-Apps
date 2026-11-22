@@ -1,5 +1,4 @@
 """Validate the common maintained-application frontend foundation."""
-import base64
 import json
 import importlib.util
 from pathlib import Path
@@ -32,13 +31,12 @@ def check(root):
         if experimental and (declaration.get("format") != "portal.app/v2" or declaration.get("id") != app.name):
             raise ValueError(f"{app.name}: invalid v2 authoring identity")
         if experimental:
-            display = declaration.get("presentation", {}).get("display")
-            icon = display.get("icon_png") if isinstance(display, dict) else None
-            if icon is not None:
-                try:
-                    authoring.validate_icon_png(base64.b64decode(icon, validate=True))
-                except (ValueError, TypeError) as error:
-                    raise ValueError(f"{app.name}: invalid display.icon_png: {error}") from None
+            try:
+                display = authoring.display_block(declaration)
+                if display is not None and display.get("icon_png") is not None:
+                    authoring.validate_icon_png(authoring.decode_icon_base64(display["icon_png"]))
+            except ValueError as error:
+                raise ValueError(f"{app.name}: invalid presentation.display: {error}") from None
         frontend = app / "frontend"
         if frontend.is_symlink():
             raise ValueError(f"{app.name}: unsafe frontend directory")

@@ -185,7 +185,8 @@ python3 scripts/app-icon.py path/to/icon.png apps/APP_ID
 The SDK parser checks the publisher name rules and the cheap icon checks (base64,
 size cap, PNG signature, IHDR dimensions). It does not decode pixel data. The
 Portal does the full decode and re-encodes the icon canonically, so a descriptor
-the SDK accepts can still be refused there.
+the SDK accepts can still be refused there. The NFC and format-character checks follow
+each runtime's own Unicode tables, so the Portal's verdict is authoritative.
 
 **Deploy order.** Upgrade the Portal and the app-runner before publishing a package
 that uses either field. An older Portal or runner parses descriptors strictly and
