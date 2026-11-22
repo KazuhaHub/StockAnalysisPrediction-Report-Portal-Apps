@@ -1,0 +1,12 @@
+{
+  "app_id": "kazuha-hub-market-monitor",
+  "version": "0.1.0-beta.3",
+  "commit": "5475184c07415fd6feba64033a65f6508abb26c3",
+  "run_url": "https://github.com/KazuhaHub/StockAnalysisPrediction-Report-Portal-Apps/actions/runs/45005517641",
+  "package_oci": {
+    "repository": "ghcr.io/kazuhahub/portal-apps/kazuha-hub-market-monitor",
+    "digest": "sha256:ae538d47cc46733b8937e16136bdc5de7d9117d3e92d6bfe3bfe5fde54f6ec7a"
+  },
+  "package_sha256": "1f1ffd36e74a4f8fd47c229c3ce310704fc94fb39af1fa26ade3373bf636eaf8",
+  "notes": "Fixes the app failing to connect on any Portal other than the developer preview: the frontend no longer carries a build-time Portal address and derives it from its own page, so the same package works on every Portal. No feature changes."
+}
