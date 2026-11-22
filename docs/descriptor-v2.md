@@ -150,8 +150,9 @@ All three locales occur exactly once. Names contain 1–80 Unicode code points;
 descriptions contain 1–320. Leading/trailing whitespace, control/format characters
 and malformed/replacement Unicode characters are refused. Values are plain text,
 not HTML. Icons are the closed shared Ant set `appstore`, `file-text`, `dashboard`,
-`calendar`, `bar-chart`, `cloud`, `tool`, `experiment`. Custom raster/SVG branding
-requires a separate validated asset policy; it is not accepted as a URL here.
+`calendar`, `bar-chart`, `cloud`, `tool`, `experiment`. SVG and external icon URLs
+are not accepted; a custom raster icon is the optional `icon_png` described under
+[Publisher name and custom icon](#publisher-name-and-custom-icon).
 
 The display object is nullable/optional only for compatibility with existing
 unpublished pre-freeze development fixtures. Such packages use an ID/generic-icon
@@ -160,3 +161,32 @@ the publisher tool must require complete metadata and its install/market path
 must be tested. Never mutate already signed descriptor bytes to add labels:
 create and sign a new app-qualified release. Current legacy catalogue packages
 are unchanged and are not v2 conversions.
+
+### Publisher name and custom icon
+
+Two optional fields let a package show its own branding. Both are covered by the
+descriptor signature, display only, and never affect trust, which stays keyed on
+`publisher`.
+
+- `publisher_name` (top level): 1-64 characters, Unicode NFC, no control or format
+  characters, no leading or trailing space and no doubled spaces. Example:
+  `"publisher_name": "Kazuha Hub"`.
+- `presentation.display.icon_png`: a standard base64 PNG (alphabet `A-Za-z0-9+/`,
+  padded, no line breaks, no `data:` prefix), at most 16 KiB decoded, square and
+  64-256 px on a side. `display.icon` stays required as the fallback.
+
+Embed an icon with the authoring helper, which validates the file (signature,
+chunks, size, dimensions, pixel data) and writes the base64 into `app.v2.json`:
+
+```sh
+python3 scripts/app-icon.py path/to/icon.png apps/APP_ID
+```
+
+The SDK parser checks the publisher name rules and the cheap icon checks (base64,
+size cap, PNG signature, IHDR dimensions). It does not decode pixel data. The
+Portal does the full decode and re-encodes the icon canonically, so a descriptor
+the SDK accepts can still be refused there.
+
+**Deploy order.** Upgrade the Portal and the app-runner before publishing a package
+that uses either field. An older Portal or runner parses descriptors strictly and
+refuses unknown fields, so such a package would fail to install or run.

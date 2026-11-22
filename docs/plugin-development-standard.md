@@ -317,5 +317,8 @@ check current installation identity and backend pairing before resuming operatio
 For experimental v2 host cards/titles, provide the signed
 [`presentation.display` metadata](descriptor-v2.md#signed-host-display-metadata)
 in all three panel languages. Choose its icon from the shared Ant vocabulary;
-never replace the host name with HTML or an external icon URL. This provisional
+never replace the host name with HTML or an external icon URL. Optional
+`publisher_name` and `display.icon_png` (embedded with `scripts/app-icon.py`) are
+described under [Publisher name and custom icon](descriptor-v2.md#publisher-name-and-custom-icon);
+upgrade the Portal and the app-runner before publishing a package that uses them. This provisional
 extension does not publish or convert the existing legacy applications.

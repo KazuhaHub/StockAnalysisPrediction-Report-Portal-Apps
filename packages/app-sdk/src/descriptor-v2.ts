@@ -219,11 +219,83 @@ function displayText(value: unknown, max: number): boolean {
     !/[\p{Cc}\p{Cf}\uD800-\uDFFF\uFFFD]/u.test(value)
   );
 }
+const MAX_PUBLISHER_NAME_CHARACTERS = 64;
+const MAX_ICON_PNG_BYTES = 16 * 1024;
+const MIN_ICON_PIXELS = 64;
+const MAX_ICON_PIXELS = 256;
+const MAX_ICON_BASE64 = Math.ceil(MAX_ICON_PNG_BYTES / 3) * 4;
+const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+const BASE64_ALPHABET = /^[A-Za-z0-9+/]*={0,2}$/;
+
+// Mirrors the Portal's validPublisherName: display text that is already NFC with no doubled spaces.
+function validPublisherName(value: unknown): boolean {
+  return (
+    value == null ||
+    (displayText(value, MAX_PUBLISHER_NAME_CHARACTERS) &&
+      (value as string).normalize("NFC") === value &&
+      !(value as string).includes("  "))
+  );
+}
+
+let crcTable: Uint32Array | undefined;
+function crc32(bytes: Uint8Array): number {
+  if (!crcTable) {
+    crcTable = new Uint32Array(256);
+    for (let n = 0; n < 256; n++) {
+      let c = n;
+      for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+      crcTable[n] = c >>> 0;
+    }
+  }
+  let c = 0xffffffff;
+  for (const b of bytes) c = crcTable[(c ^ b) & 0xff] ^ (c >>> 8);
+  return (c ^ 0xffffffff) >>> 0;
+}
+
+// Cheap structural check of display.icon_png: strict standard base64, size cap, PNG signature and a valid IHDR
+// declaring a square 64-256 px image. The Portal additionally decodes the whole image (pixel data included)
+// and re-encodes it canonically before serving; that full decode is deliberately not done here, so a
+// descriptor that passes this check can still be refused by the Portal.
+function validIconPNG(value: unknown): boolean {
+  if (value == null) return true;
+  if (
+    typeof value !== "string" ||
+    value.length === 0 ||
+    value.length > MAX_ICON_BASE64 ||
+    value.length % 4 !== 0 ||
+    !BASE64_ALPHABET.test(value)
+  )
+    return false;
+  let binary: string;
+  try {
+    binary = atob(value);
+  } catch {
+    return false;
+  }
+  // Re-encoding rejects non-zero padding bits, which a strict decoder refuses.
+  if (btoa(binary) !== value || binary.length > MAX_ICON_PNG_BYTES)
+    return false;
+  // Signature (8) + IHDR length (4) + type (4) + data (13) + CRC (4).
+  if (binary.length < 33) return false;
+  const raw = Uint8Array.from(binary, (c) => c.charCodeAt(0));
+  if (!PNG_SIGNATURE.every((b, i) => raw[i] === b)) return false;
+  const view = new DataView(raw.buffer);
+  if (view.getUint32(8) !== 13 || view.getUint32(12) !== 0x49484452)
+    return false;
+  if (view.getUint32(29) !== crc32(raw.subarray(12, 29))) return false;
+  const width = view.getUint32(16);
+  return (
+    width === view.getUint32(20) &&
+    width >= MIN_ICON_PIXELS &&
+    width <= MAX_ICON_PIXELS
+  );
+}
 function validDisplay(value: unknown): boolean {
   if (
     !record(value, DESCRIPTOR_FIELDS.AppDisplay) ||
     typeof value.icon !== "string" ||
     !(DESCRIPTOR_DISPLAY_ICONS as readonly string[]).includes(value.icon) ||
+    !validIconPNG(value.icon_png) ||
     !Array.isArray(value.texts) ||
     value.texts.length !== DESCRIPTOR_LOCALES.length
   )
@@ -252,6 +324,7 @@ function validManifest(value: unknown): value is Descriptor {
     value.format !== DESCRIPTOR_CONSTANTS.descriptorFormat ||
     !match(value.id, slug) ||
     !match(value.publisher, slug) ||
+    !validPublisherName(value.publisher_name) ||
     !validVersion(value.version)
   )
     return false;
