@@ -18,9 +18,8 @@ python3 scripts/plugin-standard.py
 python3 scripts/build-app-v2.py notes-sample
 ```
 
-The trusted parent origin remains compiled in
-`frontend/src/bootstrap.json`. Do not derive it from a query string, parent DOM,
-referrer or arbitrary message.
+The app carries no Portal origin; the bridge client derives it from its own document
+URL (the Portal serves app documents with `frame-ancestors 'self'`).
 
 ## Ownership
 

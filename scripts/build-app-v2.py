@@ -72,7 +72,7 @@ def package_frontend(app_id, output, root=ROOT, validator=validate_descriptor, i
     if (app / 'app.json').exists():
         raise ValueError('The v2 builder cannot accept a legacy or dual-format application')
     frontend = app / 'frontend'
-    authoring.bootstrap(frontend)
+    authoring.refuse_baked_origin(frontend)
     manifest_path = app / 'app.v2.json'
     declaration = authoring.read_json(manifest_path)
     validator(manifest_path.read_bytes())
@@ -140,7 +140,7 @@ def build(app_id, output=None, root=ROOT, images=None):
         raise ValueError('The v2 builder cannot accept legacy or dual-format declarations')
     if (app/'frontend').is_symlink():
         raise ValueError('Unsafe frontend build directory')
-    authoring.bootstrap(app / 'frontend')
+    authoring.refuse_baked_origin(app / 'frontend')
     # Refuse bad declarations before invoking the application build script.
     authoring.read_json(app / 'app.v2.json')
     validate_descriptor((app / 'app.v2.json').read_bytes())

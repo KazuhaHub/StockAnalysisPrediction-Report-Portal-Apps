@@ -449,17 +449,16 @@ const failureText = {
   "zh-TW": "應用程式連線已中斷，請重新開啟。",
 };
 export interface AppRootProps {
-  parentOrigin: string;
   localWindow?: Window;
   parentWindow?: Window;
   children: ReactNode;
   onFailure?: (code: BridgeFailure) => void;
 }
-// parentOrigin must come from trusted immutable bootstrap configuration. The
-// caller must mount this once per sandbox document, never infer origin from an
-// arbitrary message/referrer. The host must keep its loading cover until ready.
+// The caller must mount this once per sandbox document. The bridge client
+// derives the Portal origin from the document's own URL (the Portal serves app
+// documents with frame-ancestors 'self'); it never trusts a message or referrer.
+// The host must keep its loading cover until ready.
 export function AppRoot({
-  parentOrigin,
   localWindow = window,
   parentWindow = window.parent,
   children,
@@ -551,7 +550,6 @@ export function AppRoot({
     connection = createBridgeClient({
       localWindow,
       parentWindow,
-      parentOrigin,
       onPresentation: (presentation, context, signal) =>
         new Promise<void>((resolve, reject) => {
           if (!active || stopped || signal.aborted) {
@@ -737,7 +735,7 @@ export function AppRoot({
       current.current?.dispose();
       current.current = null;
     };
-  }, [parentOrigin, localWindow, parentWindow]);
+  }, [localWindow, parentWindow]);
   if (failed) return <div role="alert">{failureText[locale.current]}</div>;
   if (!pending) return null;
   return (

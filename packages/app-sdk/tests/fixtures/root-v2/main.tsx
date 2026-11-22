@@ -10,9 +10,8 @@ function Fixture() {
     </Button>
   );
 }
-// Production bootstrap must bind this to an independently trusted Portal origin.
 createRoot(document.getElementById("app")!).render(
-  <AppRoot parentOrigin="https://portal.example.invalid">
+  <AppRoot>
     <Fixture />
   </AppRoot>,
 );

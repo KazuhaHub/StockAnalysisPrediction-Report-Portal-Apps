@@ -88,7 +88,7 @@ Generate an unlisted development app explicitly:
 
 ```sh
 python3 scripts/create-app.py my-app --name "My app" --template v2 \
-  --parent-origin https://portal.example.invalid --publisher development-publisher
+  --publisher development-publisher
 npm install
 python3 scripts/plugin-standard.py
 npm run typecheck
@@ -96,11 +96,12 @@ npm test --workspace=apps/my-app/frontend
 python3 scripts/build-app-v2.py my-app
 ```
 
-Choose the trusted development Portal origin, never a real credential. HTTPS or
-canonical loopback HTTP is accepted. This origin is compiled from immutable
-bootstrap configuration; it is not inferred from the parent DOM, referrer, query
-or arbitrary message. Cross-deployment distribution bootstrap remains a release
-gate before promoting this provisional template to the public default.
+The app carries no Portal origin. The bridge client derives it from the origin of
+its own document URL, which is safe because the Portal serves every app document
+with `frame-ancestors 'self'`; it is never taken from the parent DOM, referrer,
+query or an arbitrary message. `scripts/plugin-standard.py` and the builder refuse
+a leftover `frontend/src/bootstrap.json`, and `create-app.py` no longer accepts
+`--parent-origin`.
 
 ### Apps with a backend
 
@@ -145,7 +146,7 @@ still produces the unchanged version 1 envelope.
 | Area | Legacy published composition | Experimental v2 composition |
 | --- | --- | --- |
 | Manifest | `app.json` | `app.v2.json` source, generated `descriptor.json` |
-| Root | PortalClient + PortalAppProvider | AppRoot with immutable trusted bootstrap |
+| Root | PortalClient + PortalAppProvider | AppRoot (parent origin derived from the document URL) |
 | Page | PortalPage inside document | useAppPage rendered by Portal |
 | Locale | usePortalLocale compatibility behavior | useAppPresentation; follows committed Portal locale |
 | Navigation | Legacy host APIs | useAppNavigation with signed routes |

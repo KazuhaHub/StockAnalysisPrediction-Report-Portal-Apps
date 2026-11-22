@@ -36,6 +36,12 @@ function windows() {
   ];
   const ports: MessagePort[] = [];
   const peers = [0, 1].map((index) => ({
+    location: {
+      href:
+        index === 1
+          ? "https://portal.example.invalid/app-documents/x/index.html"
+          : "https://portal.example.invalid/",
+    },
     addEventListener: (_type: string, listener: (event: MessageEvent) => void) =>
       listeners[index].add(listener),
     removeEventListener: (
@@ -139,7 +145,7 @@ test("useAppObjects converts content and keeps stable lifecycles", async () => {
     <AppRoot
       localWindow={w.child}
       parentWindow={w.host}
-      parentOrigin="https://portal.example.invalid"
+     
     >
       <ObjectsApp />
     </AppRoot>,
@@ -220,7 +226,7 @@ test("useAppObjects is unavailable and maps stable host failures", async () => {
     <AppRoot
       localWindow={w.child}
       parentWindow={w.host}
-      parentOrigin="https://portal.example.invalid"
+     
     >
       <ObjectsApp />
     </AppRoot>,
@@ -256,7 +262,7 @@ test("useAppObjects validates content and propagates conflicts", async () => {
     <AppRoot
       localWindow={w.child}
       parentWindow={w.host}
-      parentOrigin="https://portal.example.invalid"
+     
     >
       <ObjectsApp />
     </AppRoot>,

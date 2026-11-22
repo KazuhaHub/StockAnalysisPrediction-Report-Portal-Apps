@@ -14,16 +14,15 @@ authoring = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(authoring)
 
 
-def create(app_id, name, template="legacy", parent_origin=None, publisher="development-publisher"):
+def create(app_id, name, template="legacy", publisher="development-publisher"):
     if template not in {"legacy", "v2", "v2-backend"}:
         raise ValueError("Unknown application template")
     if template in {"v2", "v2-backend"}:
-        authoring.parent_origin(parent_origin)
         authoring.display_name(name)
         if not re.fullmatch(r"[a-z][a-z0-9-]{0,63}", publisher):
             raise ValueError("Invalid publisher identifier")
-    elif parent_origin is not None or publisher != "development-publisher":
-        raise ValueError("Origin and publisher options require the v2 template")
+    elif publisher != "development-publisher":
+        raise ValueError("The publisher option requires the v2 template")
     if not re.fullmatch(r"[a-z][a-z0-9-]{0,63}", app_id):
         raise ValueError("Use a lowercase application identifier")
     target = authoring.app_folder(ROOT, app_id)
@@ -35,7 +34,7 @@ def create(app_id, name, template="legacy", parent_origin=None, publisher="devel
         # The backend template is the v2 starter plus an overlay: its own descriptor,
         # a frontend that calls the backend, and the Go service.
         shutil.copytree(ROOT / "templates/react-app-v2-backend", target, dirs_exist_ok=True)
-    replacements={"APP_ID":app_id,"APP_NAME_JSON":json.dumps(name),"PARENT_ORIGIN_JSON":json.dumps(parent_origin),"PUBLISHER_JSON":json.dumps(publisher)}
+    replacements={"APP_ID":app_id,"APP_NAME_JSON":json.dumps(name),"PUBLISHER_JSON":json.dumps(publisher)}
     markers=re.compile("|".join(re.escape(marker) for marker in sorted(replacements,key=len,reverse=True)))
     for path in target.rglob("*"):
         if path.is_file():
@@ -55,7 +54,6 @@ if __name__ == "__main__":
     parser.add_argument("app_id")
     parser.add_argument("--name", required=True)
     parser.add_argument("--template", choices=["legacy", "v2", "v2-backend"], default="legacy")
-    parser.add_argument("--parent-origin", help="Immutable trusted Portal origin; required for development v2 and v2-backend")
     parser.add_argument("--publisher", default="development-publisher")
     args = parser.parse_args()
-    create(args.app_id, args.name, args.template, args.parent_origin, args.publisher)
+    create(args.app_id, args.name, args.template, args.publisher)

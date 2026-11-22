@@ -225,6 +225,19 @@ jobs:
           if grep -E '(^|/)dev/|mock' "$RUNNER_TEMP/mm-files" || unzip -p "$RUNNER_TEMP/market-monitor-candidate/frontend.zip" app.js | grep -q '__mock'; then
             echo "development harness found in frontend.zip"; exit 1
           fi
+      # The bridge client derives the Portal origin from its own document URL. A build-time origin (the
+      # beta.2 package carried http://127.0.0.1:31935 and could not connect on production) must not return.
+      - name: No baked parent origin in the package
+        run: |
+          if [ -e apps/kazuha-hub-market-monitor/frontend/src/bootstrap.json ]; then
+            echo "frontend/src/bootstrap.json must not exist"; exit 1
+          fi
+          bundle="$RUNNER_TEMP/mm-app.js"
+          unzip -p "$RUNNER_TEMP/market-monitor-candidate/frontend.zip" app.js > "$bundle"
+          test -s "$bundle"
+          if grep -E 'https?://(127\.0\.0\.1|localhost|\[::1\])(:[0-9]+)?|31935|parentOrigin' "$bundle"; then
+            echo "a hard-coded parent origin is in the frontend bundle"; exit 1
+          fi
 
   market-monitor:
     runs-on: ubuntu-latest

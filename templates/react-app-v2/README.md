@@ -11,20 +11,15 @@ inside an already generated app. Run all commands from the Apps repository root:
 
 ```sh
 python3 scripts/create-app.py APP_ID --name "My app" --template v2 \
-  --parent-origin https://portal.example.invalid --publisher development-publisher
+  --publisher development-publisher
 npm install
 ```
 
-Replace the example parent origin with the trusted development Portal origin.
-Use HTTPS, or exact loopback HTTP such as `http://127.0.0.1:31935` for a disposable
-local test. Paths, credentials, query strings and noncanonical origins are refused.
-`frontend/src/bootstrap.json` is immutable build configuration. Do not derive this
-value from a URL parameter, referrer, arbitrary message or the parent DOM. No user
-or administrator enters a backend URL during app installation.
-
-This per-development-deployment bootstrap is provisional. Cross-deployment
-trusted bootstrap/distribution must be accepted before promoting this template to
-a stable public default. A local candidate is not an installable trusted release.
+The app carries no Portal origin: the bridge client derives it from its own document
+URL (the Portal serves app documents with `frame-ancestors 'self'`), so the same build
+works on every Portal. There is no `frontend/src/bootstrap.json`; a leftover one is
+refused by `scripts/plugin-standard.py`. No user or administrator enters a backend URL
+during app installation. A local candidate is not an installable trusted release.
 
 The app declares no required/optional capabilities and no backend. The data
 compatibility declaration reserves an empty format; it creates no database or

@@ -38,7 +38,7 @@ with tempfile.TemporaryDirectory(prefix="portal-template-") as directory:
     if not (frontend / "dist/app.js").is_file():
         raise ValueError("Generated application did not produce its classic-script bundle")
 
-    creator.create("template-v2-check", "Template v2 check", template="v2", parent_origin="http://127.0.0.1:31935")
+    creator.create("template-v2-check", "Template v2 check", template="v2")
     frontend=target/"apps/template-v2-check/frontend"
     for command in ["typecheck", "test"]:
         subprocess.run(["npm", "run", command], cwd=frontend, check=True)
@@ -52,7 +52,7 @@ with tempfile.TemporaryDirectory(prefix="portal-template-") as directory:
 
     # The backend template: frontend checks and candidate, then the Go service's vet and tests.
     # No image is built here; that needs Docker and is a local step (docs/backend-service-v2.md).
-    creator.create("template-backend-check", "Template backend check", template="v2-backend", parent_origin="http://127.0.0.1:31935")
+    creator.create("template-backend-check", "Template backend check", template="v2-backend")
     app = target / "apps/template-backend-check"
     frontend = app / "frontend"
     for command in ["typecheck", "test"]:

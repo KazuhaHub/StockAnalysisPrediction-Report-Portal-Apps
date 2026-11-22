@@ -35,6 +35,12 @@ function windows() {
   ];
   const ports: MessagePort[] = [];
   const peers = [0, 1].map((index) => ({
+    location: {
+      href:
+        index === 1
+          ? "https://portal.example.invalid/app-documents/x/index.html"
+          : "https://portal.example.invalid/",
+    },
     addEventListener: (
       _type: string,
       listener: (event: MessageEvent) => void,
@@ -169,7 +175,7 @@ test("useAppReports exposes current viewer query/get and retires old closures", 
     <AppRoot
       localWindow={w.child}
       parentWindow={w.host}
-      parentOrigin="https://portal.example.invalid"
+     
     >
       <ReportsApp />
     </AppRoot>,
@@ -223,7 +229,7 @@ test("useAppReports is unavailable without the exact current grant", async () =>
     <AppRoot
       localWindow={w.child}
       parentWindow={w.host}
-      parentOrigin="https://portal.example.invalid"
+     
     >
       <ReportsApp />
     </AppRoot>,
@@ -262,7 +268,7 @@ test("useAppReports keeps validation and host failures closed", async () => {
     <AppRoot
       localWindow={w.child}
       parentWindow={w.host}
-      parentOrigin="https://portal.example.invalid"
+     
     >
       <ReportsApp />
     </AppRoot>,
