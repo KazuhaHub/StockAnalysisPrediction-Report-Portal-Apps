@@ -31,6 +31,12 @@ function windows() {
   ];
   const ports: MessagePort[] = [];
   const peers = [0, 1].map((index) => ({
+    location: {
+      href:
+        index === 1
+          ? "https://portal.example.invalid/app-documents/x/index.html"
+          : "https://portal.example.invalid/",
+    },
     addEventListener: (_type: string, listener: (event: MessageEvent) => void) =>
       listeners[index].add(listener),
     removeEventListener: (
@@ -129,7 +135,7 @@ test("useAppNetwork converts binary bodies and retires old requests with the pre
     <AppRoot
       localWindow={w.child}
       parentWindow={w.host}
-      parentOrigin="https://portal.example.invalid"
+     
     >
       <NetworkApp />
     </AppRoot>,
@@ -196,7 +202,7 @@ test("useAppNetwork exposes only a stable credential binding name", async () => 
     <AppRoot
       localWindow={w.child}
       parentWindow={w.host}
-      parentOrigin="https://portal.example.invalid"
+     
     >
       <NetworkApp />
     </AppRoot>,
@@ -236,7 +242,7 @@ test("useAppNetwork is unavailable without the exact host grant", async () => {
     <AppRoot
       localWindow={w.child}
       parentWindow={w.host}
-      parentOrigin="https://portal.example.invalid"
+     
     >
       <NetworkApp />
     </AppRoot>,
@@ -280,7 +286,7 @@ test("useAppNetwork streams ordered bytes through the exact host grant", async (
     <AppRoot
       localWindow={w.child}
       parentWindow={w.host}
-      parentOrigin="https://portal.example.invalid"
+     
     >
       <NetworkApp />
     </AppRoot>,
@@ -342,7 +348,7 @@ test("useAppNetwork stream stays unavailable without network.stream", async () =
     <AppRoot
       localWindow={w.child}
       parentWindow={w.host}
-      parentOrigin="https://portal.example.invalid"
+     
     >
       <NetworkApp />
     </AppRoot>,

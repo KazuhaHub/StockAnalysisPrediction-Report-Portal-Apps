@@ -18,11 +18,13 @@ function Application() {
   return <Button>{presentation.locale} / {presentation.timeZone}</Button>;
 }
 
-// An immutable trusted bootstrap value, not a query string, referrer, arbitrary
-// postMessage origin, browser storage value or application-selected destination.
-const portalOrigin = 'https://portal.example.invalid';
+// AppRoot takes no origin. The bridge client reads the origin of its own document
+// URL (the Portal serves every app document with frame-ancestors 'self', so the
+// Portal is the only possible parent); a baked-in or message-supplied origin is
+// never used. An opaque document URL (about:srcdoc, data:, blob:) fails closed
+// as invalid_context.
 createRoot(document.getElementById('app')!).render(
-  <AppRoot parentOrigin={portalOrigin}><Application /></AppRoot>,
+  <AppRoot><Application /></AppRoot>,
 );
 ```
 

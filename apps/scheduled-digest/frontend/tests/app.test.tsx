@@ -15,8 +15,8 @@ import {
   type PageActionSnapshot,
 } from "@portal-app/sdk/bridge-v2";
 import { Application } from "../src/App";
-import bootstrap from "../src/bootstrap.json";
 
+const portalOrigin = "https://portal.example.invalid";
 const close: Array<() => void> = [];
 afterEach(() => {
   cleanup();
@@ -30,6 +30,9 @@ function windows() {
     new Set<(event: MessageEvent) => void>(),
   ];
   const peers = [0, 1].map((index) => ({
+    location: {
+      href: `${portalOrigin}${index === 1 ? "/app-documents/x/index.html" : "/"}`,
+    },
     addEventListener: (
       _name: string,
       listener: (event: MessageEvent) => void,
@@ -48,7 +51,7 @@ function windows() {
       const event = {
         ...copy,
         source: peers[1 - index],
-        origin: index === 1 ? bootstrap.parentOrigin : "null",
+        origin: index === 1 ? portalOrigin : "null",
       } as unknown as MessageEvent;
       queueMicrotask(() =>
         listeners[index].forEach((listener) => listener(event)),
@@ -139,7 +142,6 @@ test("renders backend digest state and uses host navigation without a duplicate 
   close.push(() => host.close());
   render(
     <AppRoot
-      parentOrigin={bootstrap.parentOrigin}
       localWindow={child}
       parentWindow={parent}
     >

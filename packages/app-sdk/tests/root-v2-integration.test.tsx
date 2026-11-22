@@ -42,6 +42,12 @@ function windows() {
   ];
   const ports: MessagePort[] = [];
   const peers = [0, 1].map((index) => ({
+    location: {
+      href:
+        index === 1
+          ? "https://portal.example.invalid/app-documents/x/index.html"
+          : "https://portal.example.invalid/",
+    },
     addEventListener: (_type: string, fn: (event: MessageEvent) => void) =>
       listeners[index].add(fn),
     removeEventListener: (_type: string, fn: (event: MessageEvent) => void) =>
@@ -126,7 +132,7 @@ test("real bridge host sees committed React locale/theme and live updates preser
       <AppRoot
         localWindow={w.child}
         parentWindow={w.host}
-        parentOrigin="https://portal.example.invalid"
+       
       >
         <App />
       </AppRoot>
@@ -166,7 +172,7 @@ test("a fresh host challenge clears prior context and remounts app state for the
     <AppRoot
       localWindow={w.child}
       parentWindow={w.host}
-      parentOrigin="https://portal.example.invalid"
+     
     >
       <App />
     </AppRoot>,
@@ -242,7 +248,7 @@ test("real React backend hook waits for ready and presentation changes do not re
       <AppRoot
         localWindow={w.child}
         parentWindow={w.host}
-        parentOrigin="https://portal.example.invalid"
+       
       >
         <BackendApp />
       </AppRoot>
@@ -296,7 +302,7 @@ test("generated app harness closes changed OU, retired bridge and missing runtim
     <AppRoot
       localWindow={first.child}
       parentWindow={first.host}
-      parentOrigin="https://portal.example.invalid"
+     
     >
       <App />
     </AppRoot>,
@@ -325,7 +331,6 @@ test("generated app harness closes changed OU, retired bridge and missing runtim
   const missingClient = createBridgeClient({
     localWindow: second.child,
     parentWindow: second.host,
-    parentOrigin: "https://portal.example.invalid",
     onPresentation: () => {},
   });
   disposals.push(() => missingClient.close());
@@ -375,7 +380,7 @@ test("draft hook aggregates forms, survives presentation changes and retires own
       <AppRoot
         localWindow={w.child}
         parentWindow={w.host}
-        parentOrigin="https://portal.example.invalid"
+       
       >
         <Forms />
       </AppRoot>
@@ -437,7 +442,7 @@ test("navigation hook follows host commits without replacing mounted form state"
     <AppRoot
       localWindow={w.child}
       parentWindow={w.host}
-      parentOrigin="https://portal.example.invalid"
+     
     >
       <Routed />
     </AppRoot>,
@@ -516,7 +521,7 @@ test("navigation query is typed only after the host commits canonical search", a
     <AppRoot
       localWindow={w.child}
       parentWindow={w.host}
-      parentOrigin="https://portal.example.invalid"
+     
     >
       <QueryApp />
     </AppRoot>,
@@ -598,7 +603,7 @@ test("shared page hook retains live callbacks across appearance updates and reti
       <AppRoot
         localWindow={w.child}
         parentWindow={w.host}
-        parentOrigin="https://portal.example.invalid"
+       
       >
         <Page />
       </AppRoot>
@@ -663,7 +668,7 @@ test("invalid page metadata after ready closes the real bridge", async () => {
     <AppRoot
       localWindow={w.child}
       parentWindow={w.host}
-      parentOrigin="https://portal.example.invalid"
+     
     >
       <Toggle />
     </AppRoot>,

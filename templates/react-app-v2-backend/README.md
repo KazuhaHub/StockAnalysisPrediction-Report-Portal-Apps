@@ -34,8 +34,7 @@ template and then this one over it.
 ## Generate and check
 
 ```sh
-python3 scripts/create-app.py my-app --name "My app" --template v2-backend \
-  --parent-origin http://127.0.0.1:31935
+python3 scripts/create-app.py my-app --name "My app" --template v2-backend
 npm install
 npm run typecheck
 npm test --workspace=apps/my-app/frontend

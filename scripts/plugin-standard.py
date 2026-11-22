@@ -34,7 +34,7 @@ def check(root):
         if frontend.is_symlink():
             raise ValueError(f"{app.name}: unsafe frontend directory")
         if experimental:
-            authoring.bootstrap(frontend)
+            authoring.refuse_baked_origin(frontend)
         package = frontend / "package.json"
         if not package.is_file():
             raise ValueError(f"Missing shared frontend foundation: {package.relative_to(root)}")

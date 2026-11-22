@@ -35,6 +35,12 @@ function windows() {
   ];
   const ports: MessagePort[] = [];
   const peers = [0, 1].map((index) => ({
+    location: {
+      href:
+        index === 1
+          ? "https://portal.example.invalid/app-documents/x/index.html"
+          : "https://portal.example.invalid/",
+    },
     addEventListener: (
       _type: string,
       listener: (event: MessageEvent) => void,
@@ -98,7 +104,7 @@ function mount(host: Window, child: Window, ui: () => React.ReactNode) {
     <AppRoot
       localWindow={child}
       parentWindow={host}
-      parentOrigin="https://portal.example.invalid"
+     
     >
       {ui()}
     </AppRoot>,

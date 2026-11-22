@@ -35,6 +35,12 @@ function windows() {
   ];
   const ports: MessagePort[] = [];
   const peers = [0, 1].map((index) => ({
+    location: {
+      href:
+        index === 1
+          ? "https://portal.example.invalid/app-documents/x/index.html"
+          : "https://portal.example.invalid/",
+    },
     addEventListener: (
       _type: string,
       listener: (event: MessageEvent) => void,
@@ -135,7 +141,7 @@ test("useAppNotifications publishes the stable occurrence request", async () => 
     <AppRoot
       localWindow={w.child}
       parentWindow={w.host}
-      parentOrigin="https://portal.example.invalid"
+     
     >
       <NotificationsApp />
     </AppRoot>,
@@ -172,7 +178,7 @@ test("useAppNotifications fails closed without the exact grant", async () => {
     <AppRoot
       localWindow={w.child}
       parentWindow={w.host}
-      parentOrigin="https://portal.example.invalid"
+     
     >
       <NotificationsApp />
     </AppRoot>,

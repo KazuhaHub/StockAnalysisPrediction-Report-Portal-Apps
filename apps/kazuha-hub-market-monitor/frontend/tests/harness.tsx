@@ -8,7 +8,6 @@ import {
   type PageActionSnapshot,
 } from "@portal-app/sdk/bridge-v2";
 import { Application } from "../src/App";
-import bootstrap from "../src/bootstrap.json";
 import manifest from "../../app.v2.json";
 
 export type Reply = { status: number; body: unknown };
@@ -17,6 +16,7 @@ export type Handler = (
   params: URLSearchParams,
 ) => Reply | Promise<Reply>;
 
+const portalOrigin = "https://portal.example.invalid";
 const close: Array<() => void> = [];
 afterEach(() => {
   cleanup();
@@ -30,6 +30,9 @@ function windows() {
     new Set<(event: MessageEvent) => void>(),
   ];
   const peers = [0, 1].map((index) => ({
+    location: {
+      href: `${portalOrigin}${index === 1 ? "/app-documents/x/index.html" : "/"}`,
+    },
     addEventListener: (_n: string, l: (event: MessageEvent) => void) =>
       listeners[index].add(l),
     removeEventListener: (_n: string, l: (event: MessageEvent) => void) =>
@@ -44,7 +47,7 @@ function windows() {
       const event = {
         ...copy,
         source: peers[1 - index],
-        origin: index === 1 ? bootstrap.parentOrigin : "null",
+        origin: index === 1 ? portalOrigin : "null",
       } as unknown as MessageEvent;
       queueMicrotask(() => listeners[index].forEach((l) => l(event)));
     },
@@ -118,7 +121,6 @@ export async function mount(
   close.push(() => host.close());
   render(
     <AppRoot
-      parentOrigin={bootstrap.parentOrigin}
       localWindow={child}
       parentWindow={parent}
     >

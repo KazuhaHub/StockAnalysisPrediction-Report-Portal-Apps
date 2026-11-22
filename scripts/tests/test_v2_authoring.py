@@ -2,6 +2,8 @@ import importlib.util
 import json
 from pathlib import Path
 import shutil
+import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -24,7 +26,7 @@ class V2AuthoringTests(unittest.TestCase):
         self.standard = module('v2_standard', 'plugin-standard.py')
 
     def create(self, **options):
-        self.creator.create('example-app', 'Example app', template='v2', parent_origin='https://portal.example.invalid', **options)
+        self.creator.create('example-app', 'Example app', template='v2', **options)
         return self.root / 'apps/example-app'
 
     def test_explicit_v2_is_unlisted_zero_authority_and_uses_shared_shell(self):
@@ -48,7 +50,7 @@ class V2AuthoringTests(unittest.TestCase):
             self.standard.check(self.root)
 
     def test_backend_template_adds_a_declared_backend_a_service_and_keeps_the_frontend_standard(self):
-        self.creator.create('example-app', 'Example app', template='v2-backend', parent_origin='https://portal.example.invalid')
+        self.creator.create('example-app', 'Example app', template='v2-backend')
         app = self.root / 'apps/example-app'
         manifest = json.loads((app / 'app.v2.json').read_text())
         self.assertEqual(manifest['backend']['protocol'], 'portal.backend/1')
@@ -67,30 +69,24 @@ class V2AuthoringTests(unittest.TestCase):
         self.assertIn('useAppBackend', (app / 'frontend/src/Backend.tsx').read_text())
         self.assertTrue(self.standard.check(self.root))
         # The plain v2 template is unchanged by the overlay.
-        self.creator.create('plain-app', 'Plain app', template='v2', parent_origin='https://portal.example.invalid')
+        self.creator.create('plain-app', 'Plain app', template='v2')
         self.assertFalse((self.root / 'apps/plain-app/service').exists())
         self.assertNotIn('backend', json.loads((self.root / 'apps/plain-app/app.v2.json').read_text()))
 
-    def test_invalid_origins_names_and_template_refused_before_creating_files(self):
-        for origin in ['', 'http://example.com', '//portal.example.invalid', 'https://portal.example.invalid/',
-                       'https://user:secret@portal.example.invalid', 'https://portal.example.invalid?q=1',
-                       'https://portal.example.invalid#x', 'https://PORTAL.example.invalid', 'https://portal.example.invalid:443', 'https://127.1', 'https://0x7f000001']:
-            with self.subTest(origin=origin), self.assertRaises(ValueError):
-                self.creator.create('example-app', 'Example', template='v2', parent_origin=origin)
-            self.assertFalse((self.root / 'apps/example-app').exists())
+    def test_invalid_names_and_template_refused_before_creating_files(self):
         with self.assertRaises(ValueError):
             self.creator.create('example-app', 'Example', template='unknown')
         for index,name in enumerate(['', ' ', 'x'*81, '\ud800', 'x\n', '\u202e', ' x', 'x ', 'x\u200b', 'x\ufffd']):
             identity=f'invalid-name-{index}'
             with self.subTest(name=repr(name)):
                 with self.assertRaises(ValueError):
-                    self.creator.create(identity, name, template='v2', parent_origin='http://127.0.0.1:31935')
+                    self.creator.create(identity, name, template='v2')
                 self.assertFalse((self.root/'apps'/identity).exists())
         self.assertFalse((self.root / 'apps/example-app').exists())
 
     def test_names_containing_template_markers_remain_literal_text(self):
         name='PARENT_ORIGIN_JSON / PUBLISHER_JSON "quoted"'
-        self.creator.create('example-app',name,template='v2',parent_origin='https://portal.example.invalid')
+        self.creator.create('example-app',name,template='v2')
         app=self.root/'apps/example-app'
         manifest=json.loads((app/'app.v2.json').read_text())
         self.assertEqual(manifest['presentation']['display']['texts'][0]['name'],name)
@@ -107,12 +103,29 @@ class V2AuthoringTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'frontend/package.json'):
             self.standard.check(self.root)
 
-    def test_v2_origin_validation_does_not_derive_trust_from_a_browser(self):
+    def test_parent_origin_is_no_longer_an_authoring_input(self):
+        with self.assertRaises(TypeError):
+            self.creator.create('example-app', 'Example', template='v2', parent_origin='https://portal.example.invalid')
+        self.assertFalse((self.root / 'apps/example-app').exists())
+        result = subprocess.run([sys.executable, str(ROOT / 'scripts/create-app.py'), 'cli-app', '--name', 'Cli',
+                                 '--template', 'v2', '--parent-origin', 'https://portal.example.invalid'],
+                                capture_output=True, text=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('--parent-origin', result.stderr)
+        self.assertFalse((ROOT / 'apps/cli-app').exists())
+
+    def test_a_created_app_carries_no_baked_origin(self):
         app = self.create()
-        source = app / 'frontend/src/bootstrap.json'
-        self.assertEqual(json.loads(source.read_text()), {'parentOrigin':'https://portal.example.invalid'})
-        source.write_text('{"parentOrigin":"https://user:secret@portal.example.invalid"}')
-        with self.assertRaisesRegex(ValueError, 'origin'):
+        self.assertFalse((app / 'frontend/src/bootstrap.json').exists())
+        for path in (app / 'frontend').rglob('*'):
+            if path.is_file():
+                self.assertNotIn('parentOrigin', path.read_text(), str(path))
+        self.assertTrue(self.standard.check(self.root))
+
+    def test_a_stale_bootstrap_json_is_refused_by_the_standard(self):
+        app = self.create()
+        (app / 'frontend/src/bootstrap.json').write_text('{"parentOrigin":"http://127.0.0.1:31935"}')
+        with self.assertRaisesRegex(ValueError, 'bootstrap.json'):
             self.standard.check(self.root)
 
 
@@ -123,7 +136,7 @@ class V2PackagingTests(unittest.TestCase):
         self.root = Path(self.directory.name)
         shutil.copytree(ROOT / 'templates', self.root / 'templates')
         creator = module('v2_package_creator','create-app.py');creator.ROOT=self.root
-        creator.create('sample','Sample',template='v2',parent_origin='http://127.0.0.1:31935')
+        creator.create('sample','Sample',template='v2')
         self.app=self.root/'apps/sample'
         self.dist=self.app/'frontend/dist';self.dist.mkdir()
         for name,content in {'index.html':'<!doctype html><script src="app.js"></script>','app.js':'console.log("sample");','style.css':'body{margin:0}'}.items():
@@ -158,13 +171,13 @@ class V2PackagingTests(unittest.TestCase):
         with self.assertRaises(ValueError):self.candidate()
         self.assertFalse((self.root/'one').exists())
 
-    def test_validator_failure_or_invalid_origin_leaves_no_candidate(self):
+    def test_validator_failure_or_stale_bootstrap_leaves_no_candidate(self):
         def reject(_raw):raise ValueError('descriptor refused')
         with self.assertRaises(ValueError):
             self.builder.package_frontend('sample',self.root/'one',root=self.root,validator=reject)
         self.assertFalse((self.root/'one').exists())
-        (self.app/'frontend/src/bootstrap.json').write_text('{"parentOrigin":"http://remote.example.invalid"}')
-        with self.assertRaises(ValueError):self.candidate()
+        (self.app/'frontend/src/bootstrap.json').write_text('{"parentOrigin":"http://127.0.0.1:31935"}')
+        with self.assertRaisesRegex(ValueError,'bootstrap.json'):self.candidate()
         self.assertFalse((self.root/'one').exists())
 
     def test_package_validator_consumes_the_shared_descriptor_corpus(self):

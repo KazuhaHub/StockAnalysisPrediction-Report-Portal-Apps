@@ -20,12 +20,11 @@ promise.
 
 ```sh
 python3 scripts/create-app.py my-app --name "My app" --template v2-backend \
-  --parent-origin http://127.0.0.1:31935 --publisher development-publisher
+  --publisher development-publisher
 npm install
 ```
 
-`--parent-origin` is the origin of the Portal that will host the app, compiled
-into the frontend (see [section 11](#11-build-sign-install)). The command adds
+The command adds
 `apps/my-app` with the v2 frontend (`frontend/`), an `app.v2.json` with a
 `backend` block, and the service:
 
@@ -512,12 +511,10 @@ management, then Publishers (Portal docs 63, 64).
   prefix), and your Ed25519 public key (a key ID and 43 characters of unpadded
   base64url). A registration starts **disabled**; review it, compare the key's
   SHA-256 fingerprint through a channel you trust, then enable it.
-- The Portal origin you passed as `--parent-origin` is the **trusted development
-  parent origin**: it is compiled into `frontend/src/bootstrap.json`, accepted as
-  canonical HTTPS or exact loopback HTTP with an explicit port, and never taken
-  from a URL, referrer or message. For a development Portal at
-  `http://127.0.0.1:31935` it is that string. A frontend built for one origin
-  does not work in another: regenerate or edit `bootstrap.json` and rebuild.
+- The frontend carries no Portal origin. The bridge client derives it from the origin
+  of its own document URL (the Portal serves app documents with
+  `frame-ancestors 'self'`), so one build works on any Portal. There is no
+  `frontend/src/bootstrap.json`; a leftover one is refused by `scripts/plugin-standard.py`.
 
 **6. Stage and install.** Staging puts verified bytes in the release store; it
 does not install.

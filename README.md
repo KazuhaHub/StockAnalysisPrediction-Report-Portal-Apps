@@ -37,8 +37,7 @@ and `docs/progress.md` for actual evidence and remaining gates.
 
 ## Writing a backend app
 
-Start from `python3 scripts/create-app.py my-app --name "My app" --template v2-backend
---parent-origin http://127.0.0.1:31935` (the `templates/react-app-v2-backend` template: the
+Start from `python3 scripts/create-app.py my-app --name "My app" --template v2-backend` (the `templates/react-app-v2-backend` template: the
 v2 frontend plus a Go service with an example route, an optional enqueue-only background
 task, opt-in `network.proxy` and a non-root Dockerfile). The developer guide,
 [docs/backend-service-v2.md](docs/backend-service-v2.md), covers the `portal.backend/1`

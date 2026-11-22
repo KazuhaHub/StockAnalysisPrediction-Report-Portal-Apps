@@ -94,7 +94,7 @@ function Probe() {
 }
 function mount() {
   return render(
-    <AppRoot parentOrigin="https://portal.example.invalid">
+    <AppRoot>
       <Probe />
     </AppRoot>,
   );
@@ -118,6 +118,11 @@ async function apply(value: BridgePresentation = presentation) {
   return abort;
 }
 
+test("the root hands the bridge client no parent origin: it derives one from its own document", () => {
+  mount();
+  expect(control.options).toBeDefined();
+  expect("parentOrigin" in control.options!).toBe(false);
+});
 test("backend hook becomes ready after acknowledgment and aborts requests when root retires", async () => {
   let observed: ReturnType<typeof useAppBackend> | undefined;
   function BackendProbe() {
@@ -140,7 +145,7 @@ test("backend hook becomes ready after acknowledgment and aborts requests when r
   }
   control.request.mockResolvedValue({ status: 200, body: "{}" });
   const view = render(
-    <AppRoot parentOrigin="https://portal.example.invalid">
+    <AppRoot>
       <BackendProbe />
     </AppRoot>,
   );
@@ -253,7 +258,7 @@ test("live locale, timezone and layout updates preserve mounted app state", asyn
     );
   }
   const view = render(
-    <AppRoot parentOrigin="https://portal.example.invalid">
+    <AppRoot>
       <App />
     </AppRoot>,
   );
@@ -304,7 +309,7 @@ test("render failure refuses the pending acknowledgement and hides private excep
     throw new Error("private detail");
   }
   const view = render(
-    <AppRoot parentOrigin="https://portal.example.invalid">
+    <AppRoot>
       <Broken />
     </AppRoot>,
   );
@@ -333,7 +338,7 @@ test("invalid page metadata fails closed before committed content or host contro
   }
   const view = render(
     <AppRoot
-      parentOrigin="https://portal.example.invalid"
+     
       onFailure={failed}
     >
       <InvalidPage />
@@ -371,7 +376,7 @@ test("Ant locale and tokens follow Portal directly, without a second language se
     );
   }
   render(
-    <AppRoot parentOrigin="https://portal.example.invalid">
+    <AppRoot>
       <AntProbe />
     </AppRoot>,
   );
@@ -402,7 +407,7 @@ test("Ant locale and tokens follow Portal directly, without a second language se
 test("a locally failed root cannot be revived by a later presentation callback", async () => {
   const report = vi.fn();
   render(
-    <AppRoot parentOrigin="https://portal.example.invalid" onFailure={report}>
+    <AppRoot onFailure={report}>
       <Probe />
     </AppRoot>,
   );
