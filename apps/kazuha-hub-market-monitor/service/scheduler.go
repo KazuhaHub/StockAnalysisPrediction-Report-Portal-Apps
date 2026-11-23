@@ -27,16 +27,20 @@ import (
 // A fresh or newly started installation must not sit empty until the next
 // slot, so the first tick also bootstraps: every job whose output module has
 // no installed snapshot, and that has no run queued or running and no
-// occurrence being caught up on that tick, gets one run with the task ID
-// "bootstrap/<job>/<YYYY-MM-DD>" (the day in the schedule's zone). The ID makes
-// it at most one per job per day: a restart the same day does not repeat it
-// and a failed bootstrap is not retried before the next day's start. The
-// marketdata job has no output module; it bootstraps when sentiment or
-// panorama, which read the bars it keeps, has no snapshot. Marketdata is
-// queued first, then the caught-up occurrences, then the other bootstraps in
-// timetable order (sentiment, panorama, etf, margin); the runner works the
-// queue one job at a time in that order. A bootstrap the runner could not
-// accept is retried on later ticks.
+// occurrence that this tick really queues, gets one run with the task ID
+// "bootstrap/<job>/<YYYY-MM-DD>" (the day in the schedule's zone). An
+// occurrence whose run already failed queues nothing, so it does not hold a
+// bootstrap back. The ID makes it at most one per job per day: a restart the
+// same day does not repeat it and a failed bootstrap is not resubmitted that
+// day; it is tried again only on the first tick after a process start on a
+// later day. The marketdata job has no output module; it bootstraps when
+// sentiment or panorama, which read the bars it keeps, has no snapshot.
+// Marketdata is queued first, then the caught-up occurrences, then the other
+// bootstraps in timetable order (sentiment, panorama, etf, margin); the runner
+// works the queue one job at a time in that order. A bootstrap the runner
+// could not accept is retried on later ticks under the day it was decided on,
+// after checking again that the snapshot is still missing and no run of the
+// job is queued or running.
 
 const catchUpWindow = 20 * time.Hour
 
@@ -81,6 +85,8 @@ var bootstrapJobs = []struct{ job, module string }{
 // barConsumers are the modules whose jobs read what marketdata produces.
 var barConsumers = []string{"sentiment", "panorama"}
 
+type pendingBoot struct{ job, day string }
+
 type Scheduler struct {
 	runner   *Runner
 	slots    []Slot
@@ -88,8 +94,9 @@ type Scheduler struct {
 	now      func() time.Time
 	lastTick time.Time
 	pending  []due
-	// pendingBootstrap holds bootstrap jobs the runner could not accept yet.
-	pendingBootstrap []string
+	// pendingBootstrap holds bootstraps the runner could not accept yet, each
+	// with the day it was decided on.
+	pendingBootstrap []pendingBoot
 }
 
 func NewScheduler(r *Runner, slots []Slot, loc *time.Location) *Scheduler {
@@ -183,28 +190,40 @@ func (s *Scheduler) Tick() []Run {
 	}
 	sort.SliceStable(dues, func(i, j int) bool { return dues[i].at.Before(dues[j].at) })
 	var created []Run
-	var first, last []string
+	day := now.In(s.loc).Format("2006-01-02")
+	var first, last []pendingBoot
+	retry := s.pendingBootstrap
+	s.pendingBootstrap = nil
 	if catchUp {
-		// Jobs whose occurrence this tick catches up (a fallback counts only
-		// if it would run) are not bootstrapped as well.
+		// Jobs whose occurrence this tick really queues a run are not
+		// bootstrapped as well: an occurrence with no run yet, or whose run
+		// succeeded or is pending. A failed existing run queues nothing, so
+		// it does not count, and a fallback counts only if it would run.
 		scheduled := map[string]bool{}
 		for _, d := range dues {
-			if !d.slot.Fallback || !s.skipFallback(d.slot.Job, d.at, true) {
-				scheduled[d.slot.Job] = true
+			if d.slot.Fallback && s.skipFallback(d.slot.Job, d.at, true) {
+				continue
 			}
+			if run, ok := s.runner.byTaskID(taskID(d.slot.Job, d.at)); ok {
+				switch run.Status {
+				case "succeeded", "queued", "running":
+				default:
+					continue
+				}
+			}
+			scheduled[d.slot.Job] = true
 		}
 		for _, job := range s.bootstrapDue(scheduled) {
 			if job == "marketdata" {
-				first = append(first, job)
+				first = append(first, pendingBoot{job, day})
 			} else {
-				last = append(last, job)
+				last = append(last, pendingBoot{job, day})
 			}
 		}
 	} else {
-		last = s.pendingBootstrap
+		last = retry
 	}
-	s.pendingBootstrap = nil
-	s.bootstrap(first, now, &created)
+	s.bootstrap(first, &created)
 	for _, d := range dues {
 		if d.slot.Fallback && s.skipFallback(d.slot.Job, d.at, catchUp) {
 			continue
@@ -220,7 +239,7 @@ func (s *Scheduler) Tick() []Run {
 			created = append(created, run)
 		}
 	}
-	s.bootstrap(last, now, &created)
+	s.bootstrap(last, &created)
 	s.lastTick = now
 	return created
 }
@@ -229,6 +248,21 @@ func (s *Scheduler) Tick() []Run {
 // run: no snapshot of their module, no run queued or running, and not among
 // the jobs already being caught up on this tick.
 func (s *Scheduler) bootstrapDue(scheduled map[string]bool) []string {
+	var jobs []string
+	for _, b := range bootstrapJobs {
+		if !scheduled[b.job] && s.bootstrapNeeded(b.job) {
+			jobs = append(jobs, b.job)
+		}
+	}
+	return jobs
+}
+
+// bootstrapNeeded reports whether the job's output is missing from the store
+// and no run of the job is queued or running.
+func (s *Scheduler) bootstrapNeeded(job string) bool {
+	if s.active(job) {
+		return false
+	}
 	missing := func(module string) bool {
 		dates, err := s.runner.store.Dates(module)
 		if err != nil {
@@ -237,21 +271,20 @@ func (s *Scheduler) bootstrapDue(scheduled map[string]bool) []string {
 		}
 		return len(dates) == 0
 	}
-	needsBars := false
-	for _, m := range barConsumers {
-		needsBars = needsBars || missing(m)
+	if job == "marketdata" {
+		for _, m := range barConsumers {
+			if missing(m) {
+				return true
+			}
+		}
+		return false
 	}
-	var jobs []string
 	for _, b := range bootstrapJobs {
-		if scheduled[b.job] || s.active(b.job) {
-			continue
+		if b.job == job {
+			return missing(b.module)
 		}
-		if b.module == "" && !needsBars || b.module != "" && !missing(b.module) {
-			continue
-		}
-		jobs = append(jobs, b.job)
 	}
-	return jobs
+	return false
 }
 
 // active reports whether a run of the job is queued or running.
@@ -264,17 +297,21 @@ func (s *Scheduler) active(job string) bool {
 	return false
 }
 
-// bootstrap submits one run per job under the day's bootstrap task ID,
-// keeping the ones the runner could not accept for the next tick.
-func (s *Scheduler) bootstrap(jobs []string, now time.Time, created *[]Run) {
-	day := now.In(s.loc).Format("2006-01-02")
-	for _, job := range jobs {
-		run, duplicate, err := s.runner.Submit(job, "bootstrap/"+job+"/"+day, "bootstrap:"+day)
+// bootstrap submits one run per job under the task ID of the day it was
+// decided on. A job the runner could not accept is kept for the next tick,
+// which checks again that it is still needed.
+func (s *Scheduler) bootstrap(jobs []pendingBoot, created *[]Run) {
+	for i, b := range jobs {
+		if !s.bootstrapNeeded(b.job) {
+			continue
+		}
+		run, duplicate, err := s.runner.Submit(b.job, "bootstrap/"+b.job+"/"+b.day, "bootstrap:"+b.day)
 		switch {
 		case errors.Is(err, errConflict), errors.Is(err, errUnknownJob):
-			log.Printf("bootstrap %s on %s: %v", job, day, err)
+			log.Printf("bootstrap %s on %s: %v", b.job, b.day, err)
 		case err != nil:
-			s.pendingBootstrap = append(s.pendingBootstrap, job)
+			s.pendingBootstrap = append(s.pendingBootstrap, jobs[i:]...)
+			return
 		case !duplicate:
 			*created = append(*created, run)
 		}

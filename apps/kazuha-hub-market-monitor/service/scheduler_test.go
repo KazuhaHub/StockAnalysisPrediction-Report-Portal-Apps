@@ -417,3 +417,107 @@ func TestBootstrapRetriesWhenTheQueueIsFull(t *testing.T) {
 		t.Fatalf("after drain: %q", got)
 	}
 }
+
+// failedOccurrence puts a failed run for a scheduled occurrence into the index.
+func failedOccurrence(t *testing.T, r *Runner, job string, occurrence time.Time) {
+	t.Helper()
+	run, _, err := r.Submit(job, taskID(job, occurrence), "run:"+occurrence.Format("2006-01-02T15:04"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.update(run.ID, func(run *Run) { run.Status = "failed" })
+	for len(r.queue) > 0 {
+		<-r.queue
+	}
+}
+
+func TestBootstrapNotSuppressedByAFailedScheduledOccurrence(t *testing.T) {
+	// Empty store; today's 09:00 margin run failed. A start after the 09:50
+	// fallback must still queue every job, margin included.
+	for _, start := range []time.Time{at(time.Monday, 9, 55), at(time.Monday, 10, 30), at(time.Monday, 23, 0)} {
+		now := start
+		s, r := emptyStoreSchedulerFor(t, &now)
+		failedOccurrence(t, r, "margin", at(time.Monday, 9, 0))
+		got := s.Tick()
+		for _, job := range strings.Split(bootstrapOrder, ",") {
+			n := 0
+			for _, run := range got {
+				if run.Job == job {
+					n++
+				}
+			}
+			if n != 1 {
+				t.Errorf("start %s: %s queued %d times in %q", start.Format("15:04"), job, n, submitted(got))
+			}
+		}
+		for _, run := range got {
+			if run.Job == "margin" && run.TaskID != "bootstrap/margin/2026-11-16" {
+				t.Errorf("start %s: margin task %q", start.Format("15:04"), run.TaskID)
+			}
+		}
+	}
+}
+
+func TestBootstrapKeepsAnOccurrenceThatIsSucceededQueuedOrRunning(t *testing.T) {
+	for _, status := range []string{"succeeded", "queued", "running"} {
+		now := at(time.Monday, 10, 30)
+		s, r := emptyStoreSchedulerFor(t, &now)
+		run, _, err := r.Submit("margin", taskID("margin", at(time.Monday, 9, 0)), "run:2026-11-16T09:00")
+		if err != nil {
+			t.Fatal(err)
+		}
+		r.update(run.ID, func(run *Run) { run.Status = status })
+		for _, queued := range s.Tick() {
+			if queued.Job == "margin" {
+				t.Errorf("%s: margin queued again as %q", status, queued.TaskID)
+			}
+		}
+	}
+}
+
+func TestBootstrapRerunsMarketdataAfterAFailedPrimaryAndALostFallback(t *testing.T) {
+	// 21:00 marketdata failed and the service was down past 23:30: marketdata
+	// bootstraps ahead of the jobs that read its bars.
+	now := at(time.Monday, 23, 45)
+	s, r := emptyStoreSchedulerFor(t, &now)
+	failedOccurrence(t, r, "marketdata", at(time.Monday, 21, 0))
+	got := s.Tick()
+	if submitted(got) != "marketdata,margin,sentiment,panorama,etf" {
+		t.Fatalf("order: %q", submitted(got))
+	}
+	if got[0].TaskID != "bootstrap/marketdata/2026-11-16" {
+		t.Fatalf("marketdata task %q", got[0].TaskID)
+	}
+}
+
+func TestRefusedBootstrapKeepsItsDayAndIsRecheckedBeforeRetry(t *testing.T) {
+	now := at(time.Sunday, 10, 0)
+	s, r := emptyStoreSchedulerFor(t, &now)
+	for i := 0; i < cap(r.queue); i++ {
+		if _, _, err := r.Submit("etf", fmt.Sprintf("fill/%d", i), fmt.Sprintf("run:%d", i)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	s.Tick() // everything refused
+	for len(r.queue) > 0 {
+		<-r.queue
+	}
+	for _, run := range r.Runs() {
+		r.update(run.ID, func(run *Run) { run.Status = "succeeded" })
+	}
+	// Sentiment got its snapshot meanwhile, and a manual margin run started.
+	installTest(t, r.store, "sentiment", "2026-11-13")
+	if _, _, err := r.Submit("margin", "task-manual", "occ"); err != nil {
+		t.Fatal(err)
+	}
+	now = at(time.Sunday, 23, 59).Add(2 * time.Minute) // past midnight
+	got := s.Tick()
+	if submitted(got) != "marketdata,panorama" {
+		t.Fatalf("retry: %q", submitted(got))
+	}
+	for _, run := range got {
+		if run.TaskID != "bootstrap/"+run.Job+"/2026-11-22" {
+			t.Errorf("retry took another day: %q", run.TaskID)
+		}
+	}
+}
