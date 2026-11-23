@@ -81,7 +81,21 @@ fallback. A fallback runs only when no run of the job queued earlier that day
 (scheduled or manual) succeeded or is pending. Each occurrence is one run with task ID
 `schedule/<job>/<YYYY-MM-DDTHH:MM>`, so ticks and restarts never repeat it; on
 start, each slot's latest occurrence in the past 20 hours runs once if it never
-did. `POST /v1/tasks/run` stays available to start a job by hand.
+did.
+
+**Bootstrap.** A fresh installation must not stay empty until the next slot. On
+the first tick after start, each job whose output module (`sentiment`,
+`panorama`, `etf`, `margin`) has no installed snapshot, and that has no run
+queued or running and no scheduled occurrence that tick really queues (one whose
+run already failed does not count), gets one run with task ID `bootstrap/<job>/<YYYY-MM-DD>` (the day in Beijing time).
+The ID keeps it to one run per job per day: a restart the same day does not
+repeat it, and a failed bootstrap is not resubmitted that day; it is tried again
+only on the first tick after a process start on a later day. `marketdata` has
+no module of its own; it bootstraps when `sentiment` or `panorama`, which read
+the bars it updates, has no snapshot. Runs are queued as `marketdata`, then any
+caught-up occurrences, then `sentiment`, `panorama`, `etf`, `margin`, and the
+runner executes the queue one job at a time in that order (its queue holds 16).
+`POST /v1/tasks/run` stays available to start a job by hand.
 
 Viewer routes verify the `X-Portal-Assertion` against the current
 registration, boot and request URI, and refuse cookies and authorization

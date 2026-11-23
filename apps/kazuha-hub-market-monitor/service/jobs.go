@@ -238,6 +238,18 @@ func (r *Runner) runsOf(job string) []Run {
 	return out
 }
 
+// byTaskID returns the indexed run of a platform or scheduler task ID.
+func (r *Runner) byTaskID(taskID string) (Run, bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, run := range r.runs {
+		if run.TaskID == taskID {
+			return run, true
+		}
+	}
+	return Run{}, false
+}
+
 func (r *Runner) get(id string) (Run, bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
