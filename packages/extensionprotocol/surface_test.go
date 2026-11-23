@@ -95,31 +95,47 @@ func TestUnknownSurfaceRefused(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	claims := decodeClaims(t, token)
-	claims["surface"] = "owner"
-	raw, _ := json.Marshal(claims)
-	encoded := base64.RawURLEncoding.EncodeToString(raw)
-	mac := hmac.New(sha256.New, s.Key)
-	mac.Write([]byte("rp-extension-v1\n"))
-	mac.Write([]byte(encoded))
-	forged := encoded + "." + base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
-	if _, err := v.Verify(forged, "GET", "/v1/components", nil, now); err == nil {
-		t.Fatal("an unknown surface value was accepted")
+	for _, value := range []string{"owner", "Admin", "admin ", "ADMIN"} {
+		claims := decodeClaims(t, token)
+		claims["surface"] = value
+		raw, _ := json.Marshal(claims)
+		encoded := base64.RawURLEncoding.EncodeToString(raw)
+		mac := hmac.New(sha256.New, s.Key)
+		mac.Write([]byte("rp-extension-v1\n"))
+		mac.Write([]byte(encoded))
+		forged := encoded + "." + base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
+		if _, err := v.Verify(forged, "GET", "/v1/components", nil, now); err == nil {
+			t.Fatalf("surface %q was accepted", value)
+		}
 	}
 }
 
-func TestSurfaceCannotBeStrippedWithoutKey(t *testing.T) {
+func TestSurfaceCannotBeAddedWithoutKey(t *testing.T) {
 	s, v, now := fixture()
 	token, err := s.Sign("GET", "/v1/components", nil, Viewer{Subject: "a", Role: "user"}, now)
 	if err != nil {
 		t.Fatal(err)
 	}
-	encoded, sig, _ := strings.Cut(token, ".")
+	_, sig, _ := strings.Cut(token, ".")
 	claims := decodeClaims(t, token)
 	claims["surface"] = SurfaceAdmin
 	raw, _ := json.Marshal(claims)
-	_ = encoded
 	if _, err := v.Verify(base64.RawURLEncoding.EncodeToString(raw)+"."+sig, "GET", "/v1/components", nil, now); err == nil {
 		t.Fatal("a reader assertion was promoted to admin without the key")
+	}
+}
+
+func TestSurfaceCannotBeStrippedWithoutKey(t *testing.T) {
+	s, v, now := fixture()
+	token, err := s.SignAdmin("GET", "/v1/admin/jobs", nil, Viewer{Subject: "a", Role: "user"}, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, sig, _ := strings.Cut(token, ".")
+	claims := decodeClaims(t, token)
+	delete(claims, "surface")
+	raw, _ := json.Marshal(claims)
+	if _, err := v.Verify(base64.RawURLEncoding.EncodeToString(raw)+"."+sig, "GET", "/v1/admin/jobs", nil, now); err == nil {
+		t.Fatal("an admin assertion was turned into a reader one without the key")
 	}
 }

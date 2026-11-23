@@ -10,16 +10,17 @@ The Portal must load current account/session/OU facts for every private request.
 key ID, backend boot ID, viewer identity/current OU facts, normalized method/path/query and body
 SHA-256 are authenticated together. GET requests sign an empty body.
 
-A request from an app's admin view (a route the app declares in
+A request made from an app's admin view (a frontend route the app declares in
 `presentation.admin_routes`) also carries `"surface": "admin"`, signed with
-`SignAdmin`. The host signs it only after checking, for that request, that the viewer
-currently administers the app (a Portal administrator or a user the Portal
-administrator delegated the app to); the viewer need not be in the app's audience.
-A reader request omits the field, so its claims keep their earlier shape. A backend
-checks `claims.Admin()` on every admin-only route and refuses the request otherwise.
-Verifiers built before this field refuse an admin assertion as an unknown field, so an
-older backend never mistakes it for a reader request. Any other `surface` value is
-refused.
+`SignAdmin`. The claim marks the viewer, not the backend path: the host signs it only
+after checking, for that request, that the viewer currently administers the app (a
+Portal administrator or a user a Portal administrator delegated the app to), and the
+viewer need not be in the app's audience. A backend checks `claims.Admin()` on every
+admin-only route. A reader route that serves only the app's audience must refuse an
+assertion where `claims.Admin()` is true, since the host did not check audience for it.
+A reader request omits the field, so its claims keep their earlier shape. Verifiers
+built before this field refuse an admin assertion as an unknown field, so an older
+backend never mistakes it for a reader request. Any other `surface` value is refused.
 
 Keys must contain at least 32 random bytes. They are stored sealed at the host and
 provisioned into the intended backend via an operator-only secret mechanism.
