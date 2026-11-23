@@ -150,6 +150,28 @@ const SAMPLE_JOBS = {
   sentiment: [slot(DAY_AFTER, 0, 40)],
 };
 
+const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
+/** Next main-slot occurrence in Asia/Shanghai (UTC+8, no DST); fallback slots are skipped like the service. */
+const nextRun = (slots, now = Date.now()) => {
+  const offset = 8 * 3_600_000;
+  let best = null;
+  for (const s of slots) {
+    if (s.fallback) continue;
+    for (let day = 0; day < 8; day++) {
+      const local = new Date(now + offset);
+      local.setUTCHours(s.hour, s.minute, 0, 0);
+      local.setUTCDate(local.getUTCDate() + day);
+      const at = local.getTime() - offset;
+      if (at > now && s.days.includes(DAY_NAMES[local.getUTCDay()])) {
+        if (best === null || at < best) best = at;
+        break;
+      }
+    }
+  }
+  return best === null ? null : new Date(best).toISOString();
+};
+
 export function createMockBackend(dir) {
   const cache = new Map();
   // Manual runs started through POST, newest first; one per request_id.
@@ -214,7 +236,7 @@ export function createMockBackend(dir) {
         jobs: Object.entries(SAMPLE_JOBS).map(([name, schedule]) => ({
           name,
           schedule,
-          next_run: new Date(Date.now() + 6 * 3_600_000).toISOString(),
+          next_run: nextRun(schedule),
           last_run: runs.find((run) => run.job === name) ?? null,
         })),
       });
