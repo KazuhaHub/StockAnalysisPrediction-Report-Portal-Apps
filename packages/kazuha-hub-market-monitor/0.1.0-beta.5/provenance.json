@@ -1,0 +1,12 @@
+{
+  "app_id": "kazuha-hub-market-monitor",
+  "version": "0.1.0-beta.5",
+  "commit": "4c1ce337974d0b5925c168a4b8f0c49714db755a",
+  "run_url": "https://github.com/KazuhaHub/StockAnalysisPrediction-Report-Portal-Apps/actions/runs/45284605480",
+  "package_oci": {
+    "repository": "ghcr.io/kazuhahub/portal-apps/kazuha-hub-market-monitor",
+    "digest": "sha256:493d1ceb374fe5880c4b1bcb62ad57b8c211d8d733fe8bf6d91d0ff46aef7fb4"
+  },
+  "package_sha256": "8c58d4f7e1408a90410fb8f4acb8e46a7faf18b808713a4bb0f8d8c302b7164c",
+  "notes": "Admin page for app administrators: job schedule, next run, run history with log tails, and Run now. Margin crowding histogram, passive-selling mechanism filter, fragility bars, and a market-cap-ordered Panorama heatmap. The daily market-data update no longer aborts on Beijing exchange codes. Two eastmoney push2delay hosts added to the suggested proxy hosts. Requires a Portal with app admin pages."
+}
