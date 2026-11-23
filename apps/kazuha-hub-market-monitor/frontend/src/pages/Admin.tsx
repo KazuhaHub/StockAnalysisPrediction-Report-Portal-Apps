@@ -25,6 +25,7 @@ import {
 } from "../lib/api";
 import { useCopy, type Copy } from "../lib/copy";
 import { DASH, fill } from "../lib/format";
+import { useMediaQuery } from "../lib/hooks";
 
 // The admin view of the app: scheduled jobs, a manual "Run now" and the run
 // history with each run's log. The backend serves these routes only to an
@@ -185,19 +186,7 @@ function sourceLabel(copy: Copy, source: string) {
 }
 
 function usePrefersReducedMotion() {
-  const query = "(prefers-reduced-motion: reduce)";
-  const [reduce, setReduce] = useState(
-    () => window.matchMedia?.(query).matches ?? false,
-  );
-  useEffect(() => {
-    const media = window.matchMedia?.(query);
-    if (!media) return;
-    const update = () => setReduce(media.matches);
-    update();
-    media.addEventListener?.("change", update);
-    return () => media.removeEventListener?.("change", update);
-  }, []);
-  return reduce;
+  return useMediaQuery("(prefers-reduced-motion: reduce)");
 }
 
 function LoadState<T>({

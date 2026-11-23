@@ -11,7 +11,7 @@ import {
   parseRatioHist,
   ratioHistBars,
 } from "../src/lib/margin";
-import { heatOrder } from "../src/pages/Panorama";
+import { heatOrder, heatStrategyLabel } from "../src/pages/Panorama";
 import { parseRowQuery, queryRows } from "../dev/mock-backend.mjs";
 
 // Canvas is unavailable in jsdom: charts become a stub that exposes the option
@@ -240,4 +240,9 @@ test("the dev mock mirrors the service: mechanism predicates, closed names, marg
   for (const bad of ["nope", "", "cb%7C", "cb%7Ccb", "res_cnt%3E%3D2"])
     expect(parseRowQuery(new URLSearchParams(`mechanism=${bad}`))).toBeNull();
   expect(parseRowQuery(new URLSearchParams("mechanism=cb"), "etf")).toBeNull();
+});
+
+test("heatmap strategy labels stay level on a wide screen and turn on a narrow one so they never overlap", () => {
+  expect(heatStrategyLabel(false)).toMatchObject({ interval: 0, rotate: 0 });
+  expect(heatStrategyLabel(true)).toMatchObject({ interval: 0, rotate: 45 });
 });

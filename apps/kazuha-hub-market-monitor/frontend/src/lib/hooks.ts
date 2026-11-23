@@ -325,3 +325,19 @@ export function useRowValues(
   }, [get, ready, module, date, field]);
   return values;
 }
+
+/** Whether a CSS media query currently matches; follows changes. */
+export function useMediaQuery(query: string): boolean {
+  const [matches, setMatches] = useState(
+    () => window.matchMedia?.(query).matches ?? false,
+  );
+  useEffect(() => {
+    const media = window.matchMedia?.(query);
+    if (!media) return;
+    const update = () => setMatches(media.matches);
+    update();
+    media.addEventListener?.("change", update);
+    return () => media.removeEventListener?.("change", update);
+  }, [query]);
+  return matches;
+}

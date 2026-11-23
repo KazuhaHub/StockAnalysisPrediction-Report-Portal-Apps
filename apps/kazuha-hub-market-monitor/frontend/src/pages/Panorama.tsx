@@ -34,7 +34,7 @@ import {
   DASH,
   type Num,
 } from "../lib/format";
-import { useRowDetail } from "../lib/hooks";
+import { useMediaQuery, useRowDetail } from "../lib/hooks";
 import { valueLabel, valueOptions } from "../lib/labels";
 import { escapeHtml } from "../lib/html";
 
@@ -55,6 +55,14 @@ type Industry = {
  * Heatmap row order: market cap descending, industries without one after the
  * rest, ties (and snapshots without market caps) by stock count descending.
  */
+/**
+ * The strategy axis labels of the heatmap: every name is shown, level on a wide
+ * screen and turned 45 degrees on a narrow one, where six level names overlap.
+ */
+export function heatStrategyLabel(narrow: boolean) {
+  return { interval: 0, fontSize: 10, rotate: narrow ? 45 : 0 };
+}
+
 export function heatOrder(industries: Industry[]): Industry[] {
   const cap = (i: Industry) => (isNum(i.mktcap) ? i.mktcap : -Infinity);
   const count = (i: Industry) => (isNum(i.n) ? i.n : 0);
@@ -261,6 +269,7 @@ function PanoramaBody({
   );
   // Industries by market cap, largest first; an industry with no score is
   // kept as a blank row.
+  const narrow = useMediaQuery("(max-width: 575px)");
   const heatIndustries = useMemo(
     () => heatOrder(arr(summary.industries)),
     [summary.industries],
@@ -284,13 +293,14 @@ function PanoramaBody({
             score: fmt(p.value[2], 1),
           }),
       },
-      grid: { left: 84, right: 10, top: 28, bottom: 10 },
+      // Turned labels need more room above the grid.
+      grid: { left: 84, right: 10, top: narrow ? 56 : 28, bottom: 10 },
       xAxis: {
         type: "category",
         data: names,
         position: "top",
         // Show every strategy name; the default skips labels that would touch.
-        axisLabel: { interval: 0, fontSize: 10 },
+        axisLabel: heatStrategyLabel(narrow),
         splitArea: { show: false },
       },
       yAxis: {
@@ -319,7 +329,7 @@ function PanoramaBody({
         },
       ],
     };
-  }, [heatIndustries, stratName, copy, v]);
+  }, [heatIndustries, stratName, copy, v, narrow]);
   const shift = useMemo(
     () =>
       summary.diff && !summary.diff.first
