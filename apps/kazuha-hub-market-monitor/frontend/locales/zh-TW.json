@@ -271,6 +271,8 @@
   "admin_runQueued": "已將 {job} 排入執行佇列。",
   "admin_runFailed": "未能啟動執行，請重試。",
   "admin_runQueueFull": "任務佇列已滿，請稍後再試。",
+  "admin_runAlreadyActive": "該任務已有執行在排隊或進行中，請等它結束後再試。",
+  "admin_runConflict": "該請求已用於其他任務。請關閉此對話框後重新發起。",
   "admin_runUnknownJob": "該任務已不存在。",
   "admin_noRuns": "暫無執行紀錄。",
   "admin_loadFailed": "無法載入。",

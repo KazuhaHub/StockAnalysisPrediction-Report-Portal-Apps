@@ -44,7 +44,7 @@ type JobSpec struct {
 }
 
 // Run is the stored record. Error is a short code; the full reason goes to
-// the run's log, which only operators read.
+// the run's log, which app administrators read on the admin page.
 type Run struct {
 	ID           string   `json:"id"`
 	Job          string   `json:"job"`
@@ -82,6 +82,8 @@ var (
 	errUnknownJob = errors.New("unknown job")
 	errQueueFull  = errors.New("job queue full")
 	errConflict   = errors.New("task identity changed")
+	// errAlreadyActive: a run of the job is already queued or running.
+	errAlreadyActive = errors.New("job already active")
 )
 
 type Runner struct {
@@ -169,6 +171,17 @@ func (r *Runner) persistLocked() error {
 // a redelivery with the same job and occurrence returns that run, while a
 // different job or occurrence under the same task ID is refused.
 func (r *Runner) Submit(job, taskID, occurrenceID string) (Run, bool, error) {
+	return r.submit(job, taskID, occurrenceID, false)
+}
+
+// SubmitIfIdle is Submit for a run started by hand: it refuses with
+// errAlreadyActive while a run of the job is queued or running. Repeating a
+// task ID still returns the existing run.
+func (r *Runner) SubmitIfIdle(job, taskID, occurrenceID string) (Run, bool, error) {
+	return r.submit(job, taskID, occurrenceID, true)
+}
+
+func (r *Runner) submit(job, taskID, occurrenceID string, ifIdle bool) (Run, bool, error) {
 	if _, ok := r.specs[job]; !ok {
 		return Run{}, false, errUnknownJob
 	}
@@ -180,6 +193,13 @@ func (r *Runner) Submit(job, taskID, occurrenceID string) (Run, bool, error) {
 				return Run{}, false, errConflict
 			}
 			return run, true, nil
+		}
+	}
+	if ifIdle {
+		for _, run := range r.runs {
+			if run.Job == job && (run.Status == "queued" || run.Status == "running") {
+				return Run{}, false, errAlreadyActive
+			}
 		}
 	}
 	if len(r.queue) == cap(r.queue) {

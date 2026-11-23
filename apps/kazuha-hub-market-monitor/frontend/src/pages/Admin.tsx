@@ -387,6 +387,8 @@ function RunNow({
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // A refusal that repeating the request cannot change: no confirm button.
+  const [final, setFinal] = useState(false);
   // One identifier per opened dialog: retries reuse it, so the backend can
   // tell a repeat of this click from a new one and never queues twice.
   const requestId = useRef<string | null>(null);
@@ -396,6 +398,7 @@ function RunNow({
   const show = () => {
     requestId.current = newRequestId();
     setError(null);
+    setFinal(false);
     setOpen(true);
   };
   const close = () => {
@@ -418,12 +421,18 @@ function RunNow({
       onQueued(job);
       return;
     }
+    const code = result.status === "error" ? result.code : "";
+    setFinal(code === "already_active" || code === "conflict");
     setError(
-      result.status === "error" && result.code === "queue_full"
+      code === "queue_full"
         ? copy.admin_runQueueFull
-        : result.status === "error" && result.code === "not_found"
+        : code === "not_found"
           ? copy.admin_runUnknownJob
-          : copy.admin_runFailed,
+          : code === "already_active"
+            ? copy.admin_runAlreadyActive
+            : code === "conflict"
+              ? copy.admin_runConflict
+              : copy.admin_runFailed,
     );
   };
   return (
@@ -447,9 +456,11 @@ function RunNow({
             <Button ref={cancel} onClick={close} disabled={busy} autoFocus>
               {copy.admin_cancel}
             </Button>
-            <Button type="primary" onClick={confirm} loading={busy}>
-              {fill(copy.admin_runNowConfirm, names)}
-            </Button>
+            {!final && (
+              <Button type="primary" onClick={confirm} loading={busy}>
+                {fill(copy.admin_runNowConfirm, names)}
+              </Button>
+            )}
           </Space>
         }
       >
@@ -552,10 +563,17 @@ function RunDetail({ run }: { run: AdminRun }) {
   const { get, ready } = useApi();
   const [log, setLog] = useState<Phase<AdminLog>>({ phase: "loading" });
   const [attempt, setAttempt] = useState(0);
+  // A run still queued or running keeps writing its log, so every refresh of
+  // the page (which replaces the run object) fetches the tail again.
+  const live = run.status === "queued" || run.status === "running";
+  const refresh = live ? run : null;
   useEffect(() => {
     if (!ready) return;
     const abort = new AbortController();
-    setLog({ phase: "loading" });
+    // Keep the shown log while a newer one loads.
+    setLog((current) =>
+      current.phase === "ok" ? current : { phase: "loading" },
+    );
     get<AdminLog>(
       `/v1/admin/runs/${encodeURIComponent(run.id)}/log`,
       {},
@@ -569,7 +587,7 @@ function RunDetail({ run }: { run: AdminRun }) {
       );
     });
     return () => abort.abort();
-  }, [get, ready, run.id, attempt]);
+  }, [get, ready, run.id, run.status, refresh, attempt]);
   return (
     <div
       className="mm-admin-detail"

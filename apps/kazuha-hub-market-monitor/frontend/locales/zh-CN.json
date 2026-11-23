@@ -271,6 +271,8 @@
   "admin_runQueued": "已将 {job} 排入运行队列。",
   "admin_runFailed": "未能启动运行，请重试。",
   "admin_runQueueFull": "任务队列已满，请稍后再试。",
+  "admin_runAlreadyActive": "该任务已有运行在排队或执行中，请等它结束后再试。",
+  "admin_runConflict": "该请求已用于其他任务。请关闭此对话框后重新发起。",
   "admin_runUnknownJob": "该任务已不存在。",
   "admin_noRuns": "暂无运行记录。",
   "admin_loadFailed": "无法加载。",

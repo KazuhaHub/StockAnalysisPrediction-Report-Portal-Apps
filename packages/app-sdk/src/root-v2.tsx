@@ -272,7 +272,7 @@ export function useAppPresentation(): AppPresentation {
 // "admin" inside the app's admin view, "reader" everywhere else (also with a host
 // that does not say). It only picks what to render: the backend decides authority.
 export function useAppSurface(): BridgeSurface {
-  return useAppPresentation().context.surface;
+  return useAppPresentation().context.surface ?? "reader";
 }
 export interface AppNavigation {
   readonly ready: boolean;

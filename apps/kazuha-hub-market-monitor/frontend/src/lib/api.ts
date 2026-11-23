@@ -99,7 +99,7 @@ export type RunStatus =
   | "succeeded"
   | "failed"
   | "interrupted";
-export type RunSource = "schedule" | "manual" | "platform";
+export type RunSource = "schedule" | "manual" | "bootstrap" | "platform";
 export type AdminRun = {
   id: string;
   job: string;

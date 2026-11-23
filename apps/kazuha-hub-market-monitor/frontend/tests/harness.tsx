@@ -137,10 +137,7 @@ export async function mount(
   });
   close.push(() => host.close());
   render(
-    <AppRoot
-      localWindow={child}
-      parentWindow={parent}
-    >
+    <AppRoot localWindow={child} parentWindow={parent}>
       <Application />
     </AppRoot>,
   );

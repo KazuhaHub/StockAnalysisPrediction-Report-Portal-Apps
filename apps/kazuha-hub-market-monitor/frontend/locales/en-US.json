@@ -271,6 +271,8 @@
   "admin_runQueued": "Run of {job} queued.",
   "admin_runFailed": "The run could not be started. Try again.",
   "admin_runQueueFull": "The job queue is full. Try again in a moment.",
+  "admin_runAlreadyActive": "A run of this job is already queued or running. Wait for it to finish.",
+  "admin_runConflict": "This request was already used for another job. Close this dialog and start again.",
   "admin_runUnknownJob": "This job no longer exists.",
   "admin_noRuns": "No runs yet.",
   "admin_loadFailed": "This could not be loaded.",

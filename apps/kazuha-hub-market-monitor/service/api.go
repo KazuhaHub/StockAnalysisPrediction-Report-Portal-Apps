@@ -53,12 +53,12 @@ type server struct {
 	now    func() time.Time
 }
 
-func newServer(store *Store, runner *Runner, auth *authority) *server {
+func newServer(store *Store, runner *Runner, auth *authority, slots []Slot) *server {
 	loc, err := time.LoadLocation(scheduleZone)
 	if err != nil {
 		loc = time.UTC
 	}
-	return &server{store: store, runner: runner, auth: auth, slots: DefaultSlots(), loc: loc, now: time.Now}
+	return &server{store: store, runner: runner, auth: auth, slots: slots, loc: loc, now: time.Now}
 }
 
 func (s *server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -87,10 +87,11 @@ func (s *server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		s.adminRead(w, r)
 	case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/v1/"):
-		// Reader data routes accept admin assertions too: an app admin may
-		// read the dashboards inside the admin page, and this app holds no
-		// audience-sensitive data beyond those dashboards.
-		if _, err := s.auth.verifyViewer(r.Header.Get("X-Portal-Assertion"), r.Method, r.URL.RequestURI(), nil); err != nil {
+		// Reader data routes refuse admin assertions: the platform signs them
+		// for app administrators outside the audience, so accepting them
+		// would widen reader access.
+		claims, err := s.auth.verifyViewer(r.Header.Get("X-Portal-Assertion"), r.Method, r.URL.RequestURI(), nil)
+		if err != nil || claims.Admin() {
 			writeError(w, http.StatusForbidden, "forbidden")
 			return
 		}

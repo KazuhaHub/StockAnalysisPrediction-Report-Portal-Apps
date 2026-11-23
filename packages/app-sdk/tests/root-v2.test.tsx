@@ -101,13 +101,16 @@ function mount() {
     </AppRoot>,
   );
 }
-async function apply(value: BridgePresentation = presentation) {
+async function apply(
+  value: BridgePresentation = presentation,
+  hostContext: typeof context = context,
+) {
   const abort = new AbortController();
   let settled = false;
   let promise: Promise<void>;
   act(() => {
     promise = Promise.resolve(
-      control.options!.onPresentation(value, context, abort.signal),
+      control.options!.onPresentation(value, hostContext, abort.signal),
     );
     promise.then(() => {
       settled = true;
@@ -446,7 +449,7 @@ test("abort before React commits rejects pending work and never mounts old conte
   expect(view.container.textContent).toBe("");
 });
 
-test("useAppSurface follows the host context and defaults to reader", async () => {
+test("useAppSurface follows the host context", async () => {
   function Surface() {
     return <span>surface:{useAppSurface()}</span>;
   }
@@ -455,6 +458,20 @@ test("useAppSurface follows the host context and defaults to reader", async () =
       <Surface />
     </AppRoot>,
   );
-  await apply();
+  await apply(presentation, { ...context, surface: "admin" as const });
+  expect(screen.getByText("surface:admin")).toBeTruthy();
+});
+
+test("useAppSurface defaults to reader when the host context carries no surface", async () => {
+  function Surface() {
+    return <span>surface:{useAppSurface()}</span>;
+  }
+  render(
+    <AppRoot>
+      <Surface />
+    </AppRoot>,
+  );
+  const { surface: _omitted, ...withoutSurface } = context;
+  await apply(presentation, withoutSurface as unknown as typeof context);
   expect(screen.getByText("surface:reader")).toBeTruthy();
 });

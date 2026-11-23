@@ -1,4 +1,10 @@
-import { fireEvent, screen, waitFor, within } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { expect, test, vi } from "vitest";
 import { mount, ok, type Handler, type Request } from "./harness";
 import { backend } from "./fixtures";
@@ -6,6 +12,7 @@ import { formatSlot } from "../src/pages/Admin";
 import { createMockBackend } from "../dev/mock-backend.mjs";
 import enUS from "../locales/en-US.json";
 import zhCN from "../locales/zh-CN.json";
+import zhTW from "../locales/zh-TW.json";
 
 vi.mock("../src/components/EChart", () => ({
   EChart: () => <div data-testid="chart" />,
@@ -276,9 +283,109 @@ test("loading failures show an error with a retry, and an empty history says so"
 });
 
 test("the admin copy exists in every language", async () => {
-  expect(zhCN.admin_runNow).not.toBe("");
-  await mount(adminBackend(), { ...admin, locale: "zh-CN" });
-  expect(await screen.findByText(zhCN.admin_jobs)).toBeTruthy();
+  const adminKeys = Object.keys(enUS).filter((k) => k.startsWith("admin_"));
+  expect(adminKeys.length).toBeGreaterThan(0);
+  for (const [name, copy] of [
+    ["zh-CN", zhCN],
+    ["zh-TW", zhTW],
+  ] as const) {
+    for (const key of adminKeys) {
+      const value = (copy as Record<string, string>)[key];
+      expect(value, `${name} ${key}`).toBeTruthy();
+    }
+  }
+  for (const [locale, copy] of [
+    ["zh-CN", zhCN],
+    ["zh-TW", zhTW],
+  ] as const) {
+    await mount(adminBackend(), { ...admin, locale });
+    expect(await screen.findByText(copy.admin_jobs)).toBeTruthy();
+    expect(screen.getAllByText(copy.admin_runNow).length).toBeGreaterThan(0);
+    cleanup();
+  }
+});
+
+test("a job that is already active says so, with no way to retry", async () => {
+  const app = await mount(
+    adminBackend({
+      runNow: () => ({ status: 409, body: { error: "already_active" } }),
+    }),
+    admin,
+  );
+  fireEvent.click(
+    await screen.findByRole("button", { name: "Run now: margin" }),
+  );
+  const dialog = await screen.findByRole("dialog");
+  fireEvent.click(
+    within(dialog).getByRole("button", { name: /Run margin now/, busy: false }),
+  );
+  expect(
+    await within(dialog).findByText(enUS.admin_runAlreadyActive),
+  ).toBeTruthy();
+  expect(within(dialog).queryByText(enUS.admin_runFailed)).toBeNull();
+  const confirm = within(dialog).queryByRole("button", {
+    name: /Run margin now/,
+  });
+  expect(confirm === null || (confirm as HTMLButtonElement).disabled).toBe(
+    true,
+  );
+  expect(app.requests.filter((r) => r.method === "POST")).toHaveLength(1);
+});
+
+test("a request id conflict does not offer to try again", async () => {
+  await mount(
+    adminBackend({
+      runNow: () => ({ status: 409, body: { error: "conflict" } }),
+    }),
+    admin,
+  );
+  fireEvent.click(
+    await screen.findByRole("button", { name: "Run now: margin" }),
+  );
+  const dialog = await screen.findByRole("dialog");
+  fireEvent.click(
+    within(dialog).getByRole("button", { name: /Run margin now/, busy: false }),
+  );
+  expect(await within(dialog).findByText(enUS.admin_runConflict)).toBeTruthy();
+  expect(within(dialog).queryByText(enUS.admin_runFailed)).toBeNull();
+  const confirm = within(dialog).queryByRole("button", {
+    name: /Run margin now/,
+  });
+  expect(confirm === null || (confirm as HTMLButtonElement).disabled).toBe(
+    true,
+  );
+});
+
+test("the log of a queued or running run is fetched again when the page refreshes", async () => {
+  const log = vi.fn((id: string) =>
+    ok({ run_id: id, log: `log ${log.mock.calls.length}`, truncated: false }),
+  );
+  const app = await mount(
+    adminBackend({
+      runs: [
+        run({ id: "run-live", status: "running" }),
+        run({ id: "run-done" }),
+      ],
+      log,
+    }),
+    admin,
+  );
+  const history = await waitFor(() => {
+    const el = document.querySelector(".mm-admin-runs") as HTMLElement;
+    expect(el).not.toBeNull();
+    return el;
+  });
+  const headers = within(history).getAllByRole("button");
+  fireEvent.click(headers[0]);
+  fireEvent.click(headers[1]);
+  await waitFor(() => expect(log).toHaveBeenCalledTimes(2));
+  await app.invoke("refresh");
+  await waitFor(() => expect(log).toHaveBeenCalledTimes(3));
+  expect(log.mock.calls.map((c) => c[0])).toEqual([
+    "run-live",
+    "run-done",
+    "run-live",
+  ]);
 });
 
 test("slots read as day ranges or lists in the viewer's language", () => {
@@ -333,6 +440,20 @@ test("with reduced motion requested the history still opens and loads the log", 
   });
   fireEvent.click(within(history).getAllByRole("button")[0]);
   expect(await screen.findByText("line one", { exact: false })).toBeTruthy();
+  // Motion is off: antd adds no motion classes to the opening panel.
+  expect(document.querySelector("[class*='ant-motion']")).toBeNull();
+});
+
+test("without reduced motion the history panel opens through antd motion", async () => {
+  await mount(adminBackend(), admin);
+  const history = await waitFor(() => {
+    const el = document.querySelector(".mm-admin-runs") as HTMLElement;
+    expect(el).not.toBeNull();
+    return el;
+  });
+  fireEvent.click(within(history).getAllByRole("button")[0]);
+  await screen.findByText("line one", { exact: false });
+  expect(document.querySelector("[class*='ant-motion']")).not.toBeNull();
 });
 
 test("the dev mock serves admin routes only to the admin view and runs once per request id", () => {

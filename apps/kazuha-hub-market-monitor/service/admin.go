@@ -126,6 +126,11 @@ func (s *server) adminJobs(w http.ResponseWriter) {
 				days[i] = d.String()
 			}
 			view.Schedule = append(view.Schedule, slotView{Days: days, Hour: sl.Hour, Minute: sl.Minute, Fallback: sl.Fallback})
+			// A fallback slot runs only if the main slot failed, so it is
+			// not when the job is next due.
+			if sl.Fallback {
+				continue
+			}
 			if t, ok := sl.next(now, s.loc); ok && (next.IsZero() || t.Before(next)) {
 				next = t
 			}
@@ -208,13 +213,16 @@ func (s *server) adminRunNow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := strings.ToLower(req.RequestID)
-	run, duplicate, err := s.runner.Submit(parts[0], manualTaskPrefix+id, manualOccurrence+id)
+	run, duplicate, err := s.runner.SubmitIfIdle(parts[0], manualTaskPrefix+id, manualOccurrence+id)
 	switch {
 	case errors.Is(err, errUnknownJob):
 		writeError(w, http.StatusNotFound, "not_found")
 		return
 	case errors.Is(err, errQueueFull):
 		writeError(w, http.StatusConflict, "queue_full")
+		return
+	case errors.Is(err, errAlreadyActive):
+		writeError(w, http.StatusConflict, "already_active")
 		return
 	case errors.Is(err, errConflict):
 		// The same request ID was used for another job.

@@ -79,10 +79,11 @@ func TestAdminRoutesRefuseEveryoneButAdminViews(t *testing.T) {
 	}
 }
 
-func TestAdminAssertionMayReadReaderRoutes(t *testing.T) {
+func TestReaderRoutesRefuseAdminAssertions(t *testing.T) {
 	e := newTestEnv(t)
-	if rec := e.call(t, http.MethodGet, "/v1/margin/summary", "", "admin"); rec.Code != http.StatusOK {
-		t.Fatalf("%d %s", rec.Code, rec.Body.String())
+	rec := e.call(t, http.MethodGet, "/v1/margin/summary", "", "admin")
+	if rec.Code != http.StatusForbidden || !strings.Contains(rec.Body.String(), "forbidden") {
+		t.Fatalf("admin on reader route: %d %s", rec.Code, rec.Body.String())
 	}
 	if rec := e.call(t, http.MethodGet, "/v1/margin/summary", "", "reader"); rec.Code != http.StatusOK {
 		t.Fatalf("reader %d", rec.Code)
@@ -91,10 +92,11 @@ func TestAdminAssertionMayReadReaderRoutes(t *testing.T) {
 
 func TestReaderRunsRouteIsGone(t *testing.T) {
 	e := newTestEnv(t)
-	for _, as := range []string{"reader", "admin"} {
-		if rec := e.call(t, http.MethodGet, "/v1/runs", "", as); rec.Code != http.StatusNotFound {
-			t.Errorf("%s: %d %s", as, rec.Code, rec.Body.String())
-		}
+	if rec := e.call(t, http.MethodGet, "/v1/runs", "", "reader"); rec.Code != http.StatusNotFound {
+		t.Errorf("reader: %d %s", rec.Code, rec.Body.String())
+	}
+	if rec := e.call(t, http.MethodGet, "/v1/runs", "", "admin"); rec.Code != http.StatusForbidden {
+		t.Errorf("admin: %d %s", rec.Code, rec.Body.String())
 	}
 }
 
@@ -124,12 +126,43 @@ func TestAdminJobsListScheduleNextAndLastRun(t *testing.T) {
 	if slots[1].(map[string]any)["fallback"] != true {
 		t.Fatalf("fallback slot %v", slots[1])
 	}
-	if want := at(time.Monday, 9, 50).Format(time.RFC3339); job["next_run"] != want {
+	if want := at(time.Tuesday, 9, 0).Format(time.RFC3339); job["next_run"] != want {
 		t.Fatalf("next %v want %s", job["next_run"], want)
 	}
 	last := job["last_run"].(map[string]any)
 	if last["status"] != "failed" || last["error"] != "exit_status" || last["source"] != "manual" {
 		t.Fatalf("last %v", last)
+	}
+}
+
+func TestAdminNextRunIgnoresFallbackSlots(t *testing.T) {
+	e := newTestEnv(t)
+	e.srv.runner.specs["marketdata"] = JobSpec{Name: "marketdata", Command: []string{"/bin/true"}, Timeout: time.Second}
+	now := at(time.Monday, 21, 30)
+	e.srv.now = func() time.Time { return now }
+	out := decode(t, e.call(t, http.MethodGet, "/v1/admin/jobs", "", "admin"))
+	for _, j := range out["jobs"].([]any) {
+		job := j.(map[string]any)
+		if job["name"] != "marketdata" {
+			continue
+		}
+		if want := at(time.Tuesday, 21, 0).Format(time.RFC3339); job["next_run"] != want {
+			t.Fatalf("next %v want %s (not the 23:30 fallback)", job["next_run"], want)
+		}
+		return
+	}
+	t.Fatal("marketdata job missing")
+}
+
+func TestAdminViewUsesTheSlotsTheServerWasGiven(t *testing.T) {
+	e := newTestEnv(t)
+	e.srv.slots = []Slot{{Job: "margin", Days: weekdays, Hour: 7, Minute: 15}}
+	now := at(time.Monday, 6, 0)
+	e.srv.now = func() time.Time { return now }
+	out := decode(t, e.call(t, http.MethodGet, "/v1/admin/jobs", "", "admin"))
+	job := out["jobs"].([]any)[0].(map[string]any)
+	if want := at(time.Monday, 7, 15).Format(time.RFC3339); job["next_run"] != want || len(job["schedule"].([]any)) != 1 {
+		t.Fatalf("job %v", job)
 	}
 }
 
@@ -145,6 +178,9 @@ func TestAdminRunsCarryTheSource(t *testing.T) {
 	e := newTestEnv(t)
 	e.srv.runner.Submit("margin", "schedule/margin/2026-11-16T09:00", "run:2026-11-16T09:00")
 	e.srv.runner.Submit("margin", "platform-task", "run:abc")
+	for _, run := range e.srv.runner.allRuns() {
+		e.srv.runner.update(run.ID, func(r *Run) { r.Status = "succeeded" })
+	}
 	e.call(t, http.MethodPost, "/v1/admin/jobs/margin/run", runNowBody(manualRequest), "admin")
 	out := decode(t, e.call(t, http.MethodGet, "/v1/admin/runs", "", "admin"))
 	var sources []string
@@ -210,6 +246,7 @@ func TestRunNowIsIdempotentPerRequestID(t *testing.T) {
 	if n := len(e.srv.runner.Runs()); n != 1 {
 		t.Fatalf("%d runs", n)
 	}
+	e.srv.runner.update(a["run"].(map[string]any)["id"].(string), func(r *Run) { r.Status = "succeeded" })
 	c := decode(t, e.call(t, http.MethodPost, "/v1/admin/jobs/margin/run", runNowBody("20000000-0000-4000-8000-000000000002"), "admin"))
 	if c["duplicate"] != false || len(e.srv.runner.Runs()) != 2 {
 		t.Fatalf("new request id: %v", c)
@@ -241,14 +278,73 @@ func TestRunNowRefusesBadRequests(t *testing.T) {
 	}
 }
 
+func TestRunNowRefusesWhileTheJobIsActive(t *testing.T) {
+	e := newTestEnv(t)
+	other := "20000000-0000-4000-8000-000000000002"
+	first := decode(t, e.call(t, http.MethodPost, "/v1/admin/jobs/margin/run", runNowBody(manualRequest), "admin"))
+	id := first["run"].(map[string]any)["id"].(string)
+	for _, status := range []string{"queued", "running"} {
+		e.srv.runner.update(id, func(r *Run) { r.Status = status })
+		rec := e.call(t, http.MethodPost, "/v1/admin/jobs/margin/run", runNowBody(other), "admin")
+		if rec.Code != http.StatusConflict || !strings.Contains(rec.Body.String(), "already_active") {
+			t.Fatalf("%s: %d %s", status, rec.Code, rec.Body.String())
+		}
+		// The same request ID still returns the existing run.
+		dup := decode(t, e.call(t, http.MethodPost, "/v1/admin/jobs/margin/run", runNowBody(manualRequest), "admin"))
+		if dup["duplicate"] != true || dup["run"].(map[string]any)["id"] != id {
+			t.Fatalf("%s duplicate: %v", status, dup)
+		}
+	}
+	if n := len(e.srv.runner.Runs()); n != 1 {
+		t.Fatalf("%d runs", n)
+	}
+	e.srv.runner.update(id, func(r *Run) { r.Status = "failed" })
+	if rec := e.call(t, http.MethodPost, "/v1/admin/jobs/margin/run", runNowBody(other), "admin"); rec.Code != http.StatusAccepted {
+		t.Fatalf("after finish: %d %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestRunNowRequestIDForAnotherJobConflicts(t *testing.T) {
+	e := newTestEnv(t)
+	e.srv.runner.specs["etf"] = JobSpec{Name: "etf", Command: []string{"/bin/true"}, Timeout: time.Second}
+	if rec := e.call(t, http.MethodPost, "/v1/admin/jobs/margin/run", runNowBody(manualRequest), "admin"); rec.Code != http.StatusAccepted {
+		t.Fatalf("%d %s", rec.Code, rec.Body.String())
+	}
+	rec := e.call(t, http.MethodPost, "/v1/admin/jobs/etf/run", runNowBody(manualRequest), "admin")
+	if rec.Code != http.StatusConflict || !strings.Contains(rec.Body.String(), `"conflict"`) {
+		t.Fatalf("%d %s", rec.Code, rec.Body.String())
+	}
+	if n := len(e.srv.runner.Runs()); n != 1 {
+		t.Fatalf("%d runs", n)
+	}
+}
+
+// A request ID is case-insensitive: the run is keyed by the lowercase form, so
+// the same ID in another case returns the same run.
+func TestRunNowRequestIDIsCaseInsensitive(t *testing.T) {
+	e := newTestEnv(t)
+	upper := "ABCDEF00-0000-4000-8000-00000000000A"
+	a := decode(t, e.call(t, http.MethodPost, "/v1/admin/jobs/margin/run", runNowBody(upper), "admin"))
+	b := decode(t, e.call(t, http.MethodPost, "/v1/admin/jobs/margin/run", runNowBody(strings.ToLower(upper)), "admin"))
+	if a["duplicate"] != false || b["duplicate"] != true ||
+		a["run"].(map[string]any)["id"] != b["run"].(map[string]any)["id"] {
+		t.Fatalf("a=%v b=%v", a, b)
+	}
+	run, _ := e.srv.runner.get(a["run"].(map[string]any)["id"].(string))
+	if run.TaskID != manualTaskPrefix+strings.ToLower(upper) {
+		t.Fatalf("task id %q", run.TaskID)
+	}
+}
+
 func TestRunNowRefusesAFullQueue(t *testing.T) {
 	e := newTestEnv(t)
+	e.srv.runner.specs["etf"] = JobSpec{Name: "etf", Command: []string{"/bin/true"}, Timeout: time.Second}
 	for i := 0; i < maxQueue; i++ {
 		if _, _, err := e.srv.runner.Submit("margin", "t"+strings.Repeat("x", i), "o"); err != nil {
 			t.Fatal(err)
 		}
 	}
-	rec := e.call(t, http.MethodPost, "/v1/admin/jobs/margin/run", runNowBody(manualRequest), "admin")
+	rec := e.call(t, http.MethodPost, "/v1/admin/jobs/etf/run", runNowBody(manualRequest), "admin")
 	if rec.Code != http.StatusConflict || !strings.Contains(rec.Body.String(), "queue_full") {
 		t.Fatalf("%d %s", rec.Code, rec.Body.String())
 	}

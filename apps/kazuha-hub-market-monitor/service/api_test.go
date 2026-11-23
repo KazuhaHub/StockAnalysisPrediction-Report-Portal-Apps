@@ -81,7 +81,7 @@ func newBareEnv(t *testing.T) testEnv {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return testEnv{srv: newServer(store, runner, newAuthority(regPath, testBoot)), signer: signer, data: data}
+	return testEnv{srv: newServer(store, runner, newAuthority(regPath, testBoot), DefaultSlots()), signer: signer, data: data}
 }
 
 func (e testEnv) get(t *testing.T, path string, signed bool) *httptest.ResponseRecorder {

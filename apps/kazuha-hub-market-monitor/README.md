@@ -118,14 +118,18 @@ runner executes the queue one job at a time in that order (its queue holds 16).
 app's admin view, after checking that the viewer administers the app (a Portal
 admin or a user delegated the app); such a viewer need not be in the app's
 audience. The `/v1/admin/*` routes answer 403 `forbidden` to anything else,
-reader assertions included. Reader data routes also accept admin assertions: the
-dashboards are the app's only data and are not audience-sensitive. Job runs are
-no longer served to readers (`GET /v1/runs` is gone).
+reader assertions included. Reader data routes refuse admin assertions (403
+`forbidden`): the platform signs those for app administrators outside the
+audience, so accepting them would widen reader access. Job runs are no longer
+served to readers (`GET /v1/runs` is gone). Run logs are shown to app
+administrators on the admin page, so jobs must not print secrets.
 
 *Run now* queues the job as `manual/<request_id>` with the occurrence
 `manual:<request_id>`. The request ID names one click: the same ID again returns
 the same run with `duplicate: true` and never queues twice (404 for an unknown
-job, 409 `queue_full` when the queue is full). A manual run counts for the
+job; 409 `already_active` while a run of the job is queued or running, 409
+`queue_full` when the queue is full, 409 `conflict` when the ID was used for another
+job). The shown next run ignores fallback slots. A manual run counts for the
 scheduler's fallback rule like any other run of the job that day.
 
 Viewer routes verify the `X-Portal-Assertion` against the current
