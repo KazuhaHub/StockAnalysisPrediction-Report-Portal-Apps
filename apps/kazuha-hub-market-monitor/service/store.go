@@ -487,6 +487,8 @@ type rowQuery struct {
 // filters of the margin module, selected by name through the `mechanism`
 // query parameter. There are no expressions: a name either exists here or
 // the request is refused. A missing value never satisfies a predicate.
+// The names and thresholds follow the owner's reference preview
+// (market-monitor-demo.html, MECH), not the older pipeline/margin_scan app.
 var mechanismPredicates = map[string]func(row map[string]any) bool{
 	// Two kinds of forced-liquidation cost lines coincide.
 	"res2": func(r map[string]any) bool { return numAt(r, "res_cnt", func(x float64) bool { return x >= 2 }) },

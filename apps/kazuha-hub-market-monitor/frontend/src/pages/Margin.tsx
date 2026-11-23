@@ -391,6 +391,11 @@ function MarginBody({
           <Progress
             percent={Math.round(x)}
             size="small"
+            // A 0-100 score, not a percentage; 100 is the most fragile value,
+            // not a success, so keep the number and never the check mark.
+            status="normal"
+            format={(p) => `${p}`}
+            aria-label={copy.col_frag}
             strokeColor={fragTone(x) ? v[fragTone(x)!] : undefined}
           />
         ) : (

@@ -197,6 +197,13 @@ class Convert(unittest.TestCase):
         self.assertEqual(sum(h["counts"]), 8)
         self.assertEqual(h["median"], 7.995)
 
+    def test_margin_ratio_hist_drops_negative_ratios_and_survives_huge_ones(self):
+        h = mm_job.convert_margin(self.margin_with_ratio([-1.0, 1.0, 1e308]))["summary"]["overview"]["ratio_hist"]
+        self.assertEqual(sum(h["counts"]), 2)
+        self.assertEqual(h["counts"][0], 0)
+        self.assertEqual(h["counts"][2], 1)
+        self.assertEqual(h["counts"][29], 1)
+
     def test_margin_ratio_hist_keeps_the_builders_median_and_existing_hist(self):
         payload = self.margin_with_ratio([1.0, 2.0, 3.0])
         payload["overview"]["ratio_med"] = 2.5

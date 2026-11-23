@@ -27,8 +27,10 @@ export const HIST_DANGER_FROM = 8;
 export function ratioHistBars(h: RatioHist) {
   return h.counts.map((value, i) => {
     const start = i * h.width;
+    // The last bin is open-ended: it holds everything from its start up.
+    const open = i === h.counts.length - 1;
     return {
-      label: start.toFixed(1),
+      label: open ? `≥${start.toFixed(1)}` : start.toFixed(1),
       start,
       value,
       danger: start >= HIST_DANGER_FROM,
@@ -42,7 +44,7 @@ export function histBinLabel(h: RatioHist, ratio: number): string {
     h.counts.length - 1,
     Math.max(0, Math.floor(ratio / h.width)),
   );
-  return (i * h.width).toFixed(1);
+  return ratioHistBars(h)[i].label;
 }
 
 /**

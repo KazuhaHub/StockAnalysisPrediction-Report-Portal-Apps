@@ -4,6 +4,7 @@ import { mount } from "./harness";
 import { backend, summaries, marginRows } from "./fixtures";
 import enUS from "../locales/en-US.json";
 import zhCN from "../locales/zh-CN.json";
+import zhTW from "../locales/zh-TW.json";
 import {
   MECHANISMS,
   fragTone,
@@ -69,6 +70,8 @@ test("histogram bars: bins from 8% up are danger, the last bin is labelled open-
   expect(bars[15]).toMatchObject({ label: "7.5", danger: false });
   expect(bars[16]).toMatchObject({ label: "8.0", danger: true });
   expect(bars[3].value).toBe(7);
+  expect(bars[29].label).toBe("≥14.5");
+  expect(bars[28].label).toBe("14.0");
 });
 
 test("margin shows the crowding histogram with a median mark when the snapshot carries ratio_hist", async () => {
@@ -124,7 +127,7 @@ test("the mechanism filter offers the closed set, sends mechanism=<name> and cle
 });
 
 test("mechanism copy exists in every locale", () => {
-  for (const copy of [enUS, zhCN])
+  for (const copy of [enUS, zhCN, zhTW])
     for (const name of MECHANISMS)
       expect((copy as Record<string, string>)[`mech_${name}`]).toBeTruthy();
 });
@@ -139,7 +142,7 @@ test("fragility tone: above 90 is danger, above 70 warning, else default", () =>
 });
 
 test("the fragility column is a progress bar coloured by tone", async () => {
-  const rows = [95, 80, 50].map((frag, i) => ({
+  const rows = [95, 80, 50, 100].map((frag, i) => ({
     ...marginRows[i],
     code: `60000${i}`,
     name: `Frag${frag}`,
@@ -161,6 +164,21 @@ test("the fragility column is a progress bar coloured by tone", async () => {
   expect(color("Frag95")).toBe("#ff4d4f");
   expect(color("Frag80")).toBe("#faad14");
   expect(["#ff4d4f", "#faad14"]).not.toContain(color("Frag50"));
+  // A full bar is the worst value, not a success: it keeps its number and gets no success styling.
+  // A score out of 100, not a percentage.
+  expect(bar("Frag100").textContent).toBe("100");
+  expect(bar("Frag95").textContent).toBe("95");
+  expect(bar("Frag95").getAttribute("aria-label")).toBe(enUS.col_frag);
+  expect(bar("Frag100").className).not.toContain("ant-progress-status-success");
+});
+
+test("heatmap leaves out industries without a name", () => {
+  const names = heatOrder([
+    { name: "", n: 9, mktcap: 900 },
+    { name: "kept", n: 1, mktcap: 1 },
+    { n: 5, mktcap: 500 },
+  ] as never).map((i) => i.name);
+  expect(names).toEqual(["kept"]);
 });
 
 test("heatmap industries are ordered by market cap, then stock count; without mktcap by count", () => {

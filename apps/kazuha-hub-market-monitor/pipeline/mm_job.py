@@ -237,17 +237,19 @@ def ratio_hist(rows, median=None):
     """Distribution of the margin crowding ratio (percent), for the overview
     chart: rows are paged by the service, so the bins must come from here.
     Bin i covers [i*width, (i+1)*width); the last bin is open-ended. Rows
-    without a ratio are skipped. None when no row has one."""
+    without a ratio, or with a negative one (bad data), are skipped. None when
+    no row has one."""
     values = []
     for r in rows:
         x = r.get("ratio")
-        if isinstance(x, (int, float)) and not isinstance(x, bool) and math.isfinite(x):
+        if isinstance(x, (int, float)) and not isinstance(x, bool) and math.isfinite(x) and x >= 0:
             values.append(x)
     if not values:
         return None
     counts = [0] * RATIO_HIST_BINS
     for x in values:
-        counts[min(RATIO_HIST_BINS - 1, max(0, int(x // RATIO_HIST_WIDTH)))] += 1
+        # Clamp before int(): a huge finite ratio divides to inf.
+        counts[RATIO_HIST_BINS - 1 if x >= RATIO_HIST_BINS * RATIO_HIST_WIDTH else int(x // RATIO_HIST_WIDTH)] += 1
     values.sort()
     mid = len(values) // 2
     computed = values[mid] if len(values) % 2 else (values[mid - 1] + values[mid]) / 2

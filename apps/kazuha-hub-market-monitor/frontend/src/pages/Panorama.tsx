@@ -58,7 +58,10 @@ type Industry = {
 export function heatOrder(industries: Industry[]): Industry[] {
   const cap = (i: Industry) => (isNum(i.mktcap) ? i.mktcap : -Infinity);
   const count = (i: Industry) => (isNum(i.n) ? i.n : 0);
-  return [...industries].sort((a, b) => cap(b) - cap(a) || count(b) - count(a));
+  // An industry without a name would be a blank, unlabelled row.
+  return industries
+    .filter((i) => typeof i.name === "string" && i.name !== "")
+    .sort((a, b) => cap(b) - cap(a) || count(b) - count(a));
 }
 type ShiftRow = {
   s: string;
