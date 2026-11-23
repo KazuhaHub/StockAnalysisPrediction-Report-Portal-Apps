@@ -90,6 +90,8 @@
     "hosts": [
       "*.eastmoney.com",
       "*.push2.eastmoney.com",
+      "1.push2delay.eastmoney.com",
+      "82.push2delay.eastmoney.com",
       "api.fund.eastmoney.com",
       "finance.sina.com.cn",
       "qt.gtimg.cn",
