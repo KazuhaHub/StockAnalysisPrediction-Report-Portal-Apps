@@ -17,6 +17,8 @@ type Props<R> = {
   defaultSort: string;
   q: string;
   filters: Record<string, string | undefined>;
+  /** Margin only: a passive-selling mechanism name sent as `mechanism`. */
+  mechanism?: string;
   scrollX: number;
   /** When set, rows are interactive: click, Enter and Space select them. */
   onSelect?(row: R): void;
@@ -45,11 +47,12 @@ export function RowTable<R extends { code: string }>({
   defaultSort,
   q,
   filters,
+  mechanism,
   scrollX,
   onSelect,
 }: Props<R>) {
   const { copy } = useCopy();
-  const resetKey = JSON.stringify([date, q, filters, defaultSort]);
+  const resetKey = JSON.stringify([date, q, filters, mechanism, defaultSort]);
   const [view, setView] = useState<View>({
     key: resetKey,
     page: 1,
@@ -82,8 +85,9 @@ export function RowTable<R extends { code: string }>({
       order: sort.order,
       q: q || undefined,
       filters,
+      mechanism,
     }),
-    [page, sort.field, sort.order, q, filters],
+    [page, sort.field, sort.order, q, filters, mechanism],
   );
   const { items, total, loading, error } = usePagedRows<R>(
     module,

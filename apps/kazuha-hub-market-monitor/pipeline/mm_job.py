@@ -229,10 +229,42 @@ def load_json(path):
         return json.load(f)
 
 
+RATIO_HIST_WIDTH = 0.5
+RATIO_HIST_BINS = 30
+
+
+def ratio_hist(rows, median=None):
+    """Distribution of the margin crowding ratio (percent), for the overview
+    chart: rows are paged by the service, so the bins must come from here.
+    Bin i covers [i*width, (i+1)*width); the last bin is open-ended. Rows
+    without a ratio are skipped. None when no row has one."""
+    values = []
+    for r in rows:
+        x = r.get("ratio")
+        if isinstance(x, (int, float)) and not isinstance(x, bool) and math.isfinite(x):
+            values.append(x)
+    if not values:
+        return None
+    counts = [0] * RATIO_HIST_BINS
+    for x in values:
+        counts[min(RATIO_HIST_BINS - 1, max(0, int(x // RATIO_HIST_WIDTH)))] += 1
+    values.sort()
+    mid = len(values) // 2
+    computed = values[mid] if len(values) % 2 else (values[mid - 1] + values[mid]) / 2
+    if not isinstance(median, (int, float)) or isinstance(median, bool) or not math.isfinite(median):
+        median = computed
+    return {"width": RATIO_HIST_WIDTH, "counts": counts, "median": median}
+
+
 def convert_margin(p):
     fields, cols = p["fields"], p["rows"]
     rows = [{f: cols[f][i] for f in fields} for i in range(len(cols[fields[0]]))]
-    summary = {"meta": p["meta"], "overview": p["overview"], "hist_dates": p["hist_dates"]}
+    overview = dict(p["overview"])
+    if "ratio_hist" not in overview:
+        hist = ratio_hist(rows, overview.get("ratio_med"))
+        if hist:
+            overview["ratio_hist"] = hist
+    summary = {"meta": p["meta"], "overview": overview, "hist_dates": p["hist_dates"]}
     codes = {r["code"] for r in rows}
     details = {code: series for code, series in p.get("hist", {}).items() if code in codes}
     return snapshot("margin", p["meta"]["as_of"], summary, rows, details)

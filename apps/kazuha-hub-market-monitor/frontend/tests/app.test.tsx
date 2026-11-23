@@ -237,7 +237,7 @@ test("panorama shows the heatmap, KPI readings and the shift table when the snap
   expect(screen.getByText("2.18×")).toBeTruthy();
   expect(screen.getByText("9.5%")).toBeTruthy();
   const heat = screen.getByLabelText(enUS.pano_heat);
-  // Two industries have scores; the all-null one is skipped.
+  // Only scored cells are drawn: two industries have scores, the all-null one stays a blank row.
   expect(heat.getAttribute("data-points")).toBe("8");
   expect(screen.getByText("ShiftCo 603887")).toBeTruthy();
   expect(screen.getByText("-7.5%")).toBeTruthy();

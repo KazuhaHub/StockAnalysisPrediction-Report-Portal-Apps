@@ -172,6 +172,8 @@ export type RowQuery = {
   order?: "asc" | "desc";
   q?: string;
   filters: Record<string, string | undefined>;
+  /** Margin only: a name from MECHANISMS (lib/margin). */
+  mechanism?: string;
 };
 
 export function rowParams(date: string, query: RowQuery): Params {
@@ -181,6 +183,7 @@ export function rowParams(date: string, query: RowQuery): Params {
     params.order = query.order ?? "desc";
   }
   if (query.q) params.q = query.q;
+  if (query.mechanism) params.mechanism = query.mechanism;
   for (const [field, value] of Object.entries(query.filters))
     if (value) params[`f.${field}`] = value;
   return params;

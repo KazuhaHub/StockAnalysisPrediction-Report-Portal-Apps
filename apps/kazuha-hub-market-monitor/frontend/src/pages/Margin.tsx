@@ -6,6 +6,7 @@ import {
   Descriptions,
   Drawer,
   Empty,
+  Progress,
   Row,
   Segmented,
   Select,
@@ -35,6 +36,13 @@ import {
 } from "../lib/format";
 import { useRowDetail } from "../lib/hooks";
 import { valueLabel, valueOptions } from "../lib/labels";
+import {
+  MECHANISMS,
+  fragTone,
+  histBinLabel,
+  parseRatioHist,
+  ratioHistBars,
+} from "../lib/margin";
 
 type MarginSummary = {
   meta?: { assumptions?: { k_call?: Num; k_liq?: Num } };
@@ -56,6 +64,8 @@ type MarginSummary = {
     n_pledge?: Num;
     n_pledge_breach?: Num;
     res_hist?: { k: number | string; n: Num }[];
+    // Newer snapshots only; validated by parseRatioHist.
+    ratio_hist?: unknown;
   };
 };
 
@@ -152,6 +162,7 @@ function MarginBody({
   const [state, setState] = useState<string>();
   const [level, setLevel] = useState<string>();
   const [tag, setTag] = useState<string>();
+  const [mechanism, setMechanism] = useState<string>();
   const [selected, setSelected] = useState<MarginRow | null>(null);
   const filters = useMemo(
     () => ({ state, level, tags: tag }),
@@ -183,6 +194,42 @@ function MarginBody({
     },
   ];
 
+  const ratioHist = useMemo(() => parseRatioHist(o.ratio_hist), [o.ratio_hist]);
+  const histogram = useMemo(() => {
+    if (!ratioHist) return null;
+    const median = ratioHist.median ?? o.ratio_med;
+    return {
+      tooltip: {},
+      grid: { left: 40, right: 10, top: 20, bottom: 30 },
+      xAxis: {
+        type: "category",
+        data: ratioHistBars(ratioHist).map((b) => b.label),
+        name: "%",
+      },
+      yAxis: { type: "value" },
+      series: [
+        {
+          type: "bar",
+          data: ratioHistBars(ratioHist).map((b) => ({
+            value: b.value,
+            itemStyle: { color: b.danger ? v.danger : v.primary },
+          })),
+          markLine: isNum(median)
+            ? {
+                silent: true,
+                symbol: "none",
+                data: [
+                  {
+                    xAxis: histBinLabel(ratioHist, median),
+                    label: { formatter: copy.margin_histMedian },
+                  },
+                ],
+              }
+            : undefined,
+        },
+      ],
+    };
+  }, [ratioHist, o.ratio_med, v, copy]);
   const quantiles = useMemo(
     () => ({
       tooltip: {},
@@ -336,7 +383,21 @@ function MarginBody({
       100,
     ),
     num(copy.col_score, "score", (x) => fmt(x, 0), 100),
-    num(copy.col_frag, "frag", (x) => fmt(x, 0), 104),
+    num(
+      copy.col_frag,
+      "frag",
+      (x) =>
+        isNum(x) ? (
+          <Progress
+            percent={Math.round(x)}
+            size="small"
+            strokeColor={fragTone(x) ? v[fragTone(x)!] : undefined}
+          />
+        ) : (
+          DASH
+        ),
+      124,
+    ),
   ];
   const struct: TableColumnsType<MarginRow> = [
     num(
@@ -409,19 +470,21 @@ function MarginBody({
         <Col xs={24} lg={10}>
           <Card
             size="small"
-            title={copy.margin_quantiles}
+            title={histogram ? copy.margin_hist : copy.margin_quantiles}
             extra={
               <span className="mm-muted">
-                {fill(copy.margin_over, {
-                  a: o.n_over8 ?? DASH,
-                  b: o.n_over10 ?? DASH,
-                })}
+                {histogram
+                  ? copy.margin_histNote
+                  : fill(copy.margin_over, {
+                      a: o.n_over8 ?? DASH,
+                      b: o.n_over10 ?? DASH,
+                    })}
               </span>
             }
           >
             <EChart
-              label={copy.margin_quantiles}
-              option={quantiles}
+              label={histogram ? copy.margin_hist : copy.margin_quantiles}
+              option={histogram ?? quantiles}
               height={240}
             />
           </Card>
@@ -482,6 +545,17 @@ function MarginBody({
           />
           <Select
             allowClear
+            placeholder={copy.margin_mechanism}
+            value={mechanism}
+            onChange={setMechanism}
+            style={{ width: 170 }}
+            options={MECHANISMS.map((name) => ({
+              value: name,
+              label: copy[`mech_${name}`],
+            }))}
+          />
+          <Select
+            allowClear
             placeholder={copy.col_tags}
             value={tag}
             onChange={setTag}
@@ -497,6 +571,7 @@ function MarginBody({
           defaultSort="frag"
           q={search}
           filters={filters}
+          mechanism={mechanism}
           scrollX={view === "lever" ? 1320 : 1480}
           onSelect={setSelected}
         />

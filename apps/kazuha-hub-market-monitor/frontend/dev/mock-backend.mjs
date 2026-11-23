@@ -26,6 +26,18 @@ function compareValues(a, b) {
   return x < y ? -1 : x > y ? 1 : 0;
 }
 
+/**
+ * Mirror of mechanismPredicates: the closed set of passive-selling mechanism
+ * filters of the margin module. A missing value never satisfies one.
+ */
+const MECHANISMS = {
+  res2: (r) => typeof r.res_cnt === "number" && r.res_cnt >= 2,
+  pledge: (r) => typeof r.pld_room === "number" && r.pld_room < 15,
+  unlock: (r) => typeof r.ulk60 === "number" && r.ulk60 > 0,
+  cb: (r) => typeof r.cb_prem === "number" && r.cb_prem < 0,
+  block: (r) => typeof r.blk_disc === "number" && r.blk_disc < -3,
+};
+
 /** Mirror of queryRows: filter, search, sort (missing values last), page. */
 export function queryRows(rows, q) {
   let out = rows.filter((row) => {
@@ -34,6 +46,11 @@ export function queryRows(rows, q) {
       const name = typeof row.name === "string" ? row.name : "";
       if (!code.startsWith(q.search) && !name.includes(q.search)) return false;
     }
+    if (
+      q.mechanisms?.length &&
+      !q.mechanisms.some((name) => MECHANISMS[name](row))
+    )
+      return false;
     return Object.entries(q.filters).every(([field, want]) =>
       matchesFilter(row[field], want),
     );
@@ -59,7 +76,7 @@ export function queryRows(rows, q) {
 }
 
 /** Mirror of parseRowQuery. Returns null for a request the service refuses. */
-export function parseRowQuery(params) {
+export function parseRowQuery(params, module = "margin") {
   const out = {
     page: 1,
     size: 50,
@@ -67,6 +84,7 @@ export function parseRowQuery(params) {
     desc: false,
     search: "",
     filters: {},
+    mechanisms: [],
   };
   for (const key of new Set(params.keys())) {
     const values = params.getAll(key);
@@ -92,6 +110,13 @@ export function parseRowQuery(params) {
     } else if (key === "q") {
       if (new TextEncoder().encode(v).length > 64) return null;
       out.search = v;
+    } else if (key === "mechanism") {
+      if (module !== "margin") return null;
+      for (const name of v.split("|")) {
+        if (!Object.hasOwn(MECHANISMS, name) || out.mechanisms.includes(name))
+          return null;
+        out.mechanisms.push(name);
+      }
     } else if (key.startsWith("f.")) {
       const field = key.slice(2);
       if (
@@ -150,7 +175,15 @@ const SAMPLE_JOBS = {
   sentiment: [slot(DAY_AFTER, 0, 40)],
 };
 
-const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+const DAY_NAMES = [
+  "Sunday",
+  "Monday",
+  "Tuesday",
+  "Wednesday",
+  "Thursday",
+  "Friday",
+  "Saturday",
+];
 
 /** Next main-slot occurrence in Asia/Shanghai (UTC+8, no DST); fallback slots are skipped like the service. */
 const nextRun = (slots, now = Date.now()) => {
@@ -266,7 +299,8 @@ export function createMockBackend(dir) {
       let id;
       try {
         const parsed = JSON.parse(body);
-        id = Object.keys(parsed).join() === "request_id" ? parsed.request_id : "";
+        id =
+          Object.keys(parsed).join() === "request_id" ? parsed.request_id : "";
       } catch {
         id = "";
       }
@@ -316,7 +350,7 @@ export function createMockBackend(dir) {
         : fail(404, "no_data");
     }
     if (parts.length === 2 && parts[1] === "rows") {
-      const q = parseRowQuery(url.searchParams);
+      const q = parseRowQuery(url.searchParams, module);
       if (!q) return fail(400, "bad_request");
       const snap = load(module, date);
       if (!snap) return fail(404, "no_data");

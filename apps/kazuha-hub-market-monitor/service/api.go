@@ -216,7 +216,7 @@ func (s *server) read(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusOK, map[string]any{"module": module, "as_of": snap.AsOf, "summary": snap.Summary})
 		}
 	case len(parts) == 2 && parts[1] == "rows":
-		q, ok := parseRowQuery(query)
+		q, ok := parseRowQuery(module, query)
 		if !ok {
 			writeError(w, http.StatusBadRequest, "bad_request")
 			return
@@ -273,7 +273,10 @@ func onlyKeys(q url.Values, allowed ...string) bool {
 	return true
 }
 
-func parseRowQuery(q url.Values) (rowQuery, bool) {
+// parseRowQuery reads the /rows parameters of one module. The only
+// module-specific one is `mechanism=<name>[|<name>]` (margin only): names must
+// come from mechanismPredicates, each at most once.
+func parseRowQuery(module string, q url.Values) (rowQuery, bool) {
 	out := rowQuery{Page: 1, Size: 50, Filters: map[string]string{}}
 	for key, values := range q {
 		if len(values) != 1 {
@@ -307,6 +310,18 @@ func parseRowQuery(q url.Values) (rowQuery, bool) {
 				return out, false
 			}
 			out.Search = v
+		case key == "mechanism":
+			if module != "margin" {
+				return out, false
+			}
+			seen := map[string]bool{}
+			for _, name := range strings.Split(v, "|") {
+				if mechanismPredicates[name] == nil || seen[name] {
+					return out, false
+				}
+				seen[name] = true
+				out.Mechanisms = append(out.Mechanisms, name)
+			}
 		case strings.HasPrefix(key, "f."):
 			field := strings.TrimPrefix(key, "f.")
 			if !validField(field) || v == "" || len(v) > 64 || len(out.Filters) >= 8 {

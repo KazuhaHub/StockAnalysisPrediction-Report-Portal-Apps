@@ -353,3 +353,52 @@ func TestTaskRefusesBadAuthorityAndPayloads(t *testing.T) {
 		}
 	}
 }
+
+func TestRowsMechanismFilterAndSummaryPassthrough(t *testing.T) {
+	e := newBareEnv(t)
+	rows := []map[string]any{
+		{"code": "600000", "name": "A", "frag": 90.0, "res_cnt": 2.0},
+		{"code": "000001", "name": "B", "frag": 30.0, "res_cnt": 0.0, "cb_prem": -1.0},
+		{"code": "300001", "name": "C", "frag": 10.0},
+	}
+	hist := map[string]any{"width": 0.5, "counts": []int{1, 2}, "median": 1.5}
+	var doc map[string]any
+	if err := json.Unmarshal(testSnapshot("margin", "2026-11-18", rows...), &doc); err != nil {
+		t.Fatal(err)
+	}
+	doc["summary"] = map[string]any{"overview": map[string]any{"ratio_hist": hist, "ratio_med": 1.5}}
+	raw, _ := json.Marshal(doc)
+	if _, err := e.srv.store.Install("margin", raw, testHistory(t, "margin", "2026-11-18", rows...)); err != nil {
+		t.Fatal(err)
+	}
+	out := decode(t, e.get(t, "/v1/margin/summary", true))
+	got := out["summary"].(map[string]any)["overview"].(map[string]any)["ratio_hist"].(map[string]any)
+	if got["width"] != 0.5 || got["median"] != 1.5 || len(got["counts"].([]any)) != 2 {
+		t.Fatalf("ratio_hist must pass through unchanged: %v", got)
+	}
+	out = decode(t, e.get(t, "/v1/margin/rows?mechanism=res2", true))
+	if out["total"] != 1.0 || out["items"].([]any)[0].(map[string]any)["code"] != "600000" {
+		t.Fatalf("mechanism res2: %v", out)
+	}
+	out = decode(t, e.get(t, "/v1/margin/rows?mechanism=res2%7Ccb&f.name=C", true))
+	if out["total"] != 0.0 {
+		t.Fatalf("mechanism with another filter: %v", out)
+	}
+	out = decode(t, e.get(t, "/v1/margin/rows?mechanism=res2%7Ccb", true))
+	if out["total"] != 2.0 {
+		t.Fatalf("mechanism any-of: %v", out)
+	}
+	for _, bad := range []string{"?mechanism=nope", "?mechanism=", "?mechanism=res_cnt%3E%3D2", "?mechanism=res2&mechanism=cb"} {
+		rec := e.get(t, "/v1/margin/rows"+bad, true)
+		if rec.Code != http.StatusBadRequest || decode(t, rec)["error"] != "bad_request" {
+			t.Errorf("%s: %d", bad, rec.Code)
+		}
+	}
+	// The detail and summary routes still allow only "date".
+	if rec := e.get(t, "/v1/margin/summary?mechanism=res2", true); rec.Code != http.StatusBadRequest {
+		t.Errorf("summary with mechanism: %d", rec.Code)
+	}
+	if rec := e.get(t, "/v1/margin/rows/600000?mechanism=res2", true); rec.Code != http.StatusBadRequest {
+		t.Errorf("detail with mechanism: %d", rec.Code)
+	}
+}

@@ -83,6 +83,7 @@ socket:
 | `GET /v1/{module}/dates` | viewer | snapshot dates, newest first |
 | `GET /v1/{module}/summary?date=` | viewer | module summary |
 | `GET /v1/{module}/rows?date=&page=&size=&sort=&order=&q=&f.<field>=` | viewer | one page of rows (size ≤ 200) |
+| `GET /v1/margin/rows?mechanism=<name>[\|<name>]` | viewer | margin only: keep rows matching any named passive-selling mechanism (`res2`, `pledge`, `unlock`, `cb`, `block`); an unknown or repeated name is a 400 |
 | `GET /v1/{module}/rows/{code}?date=` | viewer | one row and its detail |
 | `GET /v1/{module}/history/dates`, `history`, `compare`, `streak`, `counts` | viewer | cross-day queries over the history files (margin, panorama, etf; 404 for risk and sentiment); one at a time, 4 s limit, bounds in [docs/store-v2.md](docs/store-v2.md) |
 | `GET /v1/admin/jobs` | admin view | each job: schedule slots, next run, last run |

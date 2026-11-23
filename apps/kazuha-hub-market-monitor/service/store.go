@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math"
 	"os"
 	"path/filepath"
 	"sort"
@@ -477,6 +478,40 @@ type rowQuery struct {
 	Desc       bool
 	Search     string
 	Filters    map[string]string
+	// Mechanisms are names from mechanismPredicates; a row is kept when it
+	// satisfies any of them.
+	Mechanisms []string
+}
+
+// mechanismPredicates is the closed set of "passive-selling mechanism"
+// filters of the margin module, selected by name through the `mechanism`
+// query parameter. There are no expressions: a name either exists here or
+// the request is refused. A missing value never satisfies a predicate.
+var mechanismPredicates = map[string]func(row map[string]any) bool{
+	// Two kinds of forced-liquidation cost lines coincide.
+	"res2": func(r map[string]any) bool { return numAt(r, "res_cnt", func(x float64) bool { return x >= 2 }) },
+	// Share pledge within 15 points of its liquidation line.
+	"pledge": func(r map[string]any) bool { return numAt(r, "pld_room", func(x float64) bool { return x < 15 }) },
+	// Restricted shares unlock within 60 days.
+	"unlock": func(r map[string]any) bool { return numAt(r, "ulk60", func(x float64) bool { return x > 0 }) },
+	// Convertible bond trades below its conversion value.
+	"cb": func(r map[string]any) bool { return numAt(r, "cb_prem", func(x float64) bool { return x < 0 }) },
+	// Block trades at a discount worse than 3%.
+	"block": func(r map[string]any) bool { return numAt(r, "blk_disc", func(x float64) bool { return x < -3 }) },
+}
+
+func numAt(row map[string]any, field string, test func(float64) bool) bool {
+	x, ok := row[field].(float64)
+	return ok && !math.IsNaN(x) && test(x)
+}
+
+func matchesMechanism(row map[string]any, names []string) bool {
+	for _, name := range names {
+		if mechanismPredicates[name](row) {
+			return true
+		}
+	}
+	return false
 }
 
 func matchesFilter(value any, want string) bool {
@@ -514,6 +549,9 @@ func queryRows(rows []map[string]any, q rowQuery) ([]map[string]any, int) {
 				keep = false
 				break
 			}
+		}
+		if keep && len(q.Mechanisms) > 0 && !matchesMechanism(row, q.Mechanisms) {
+			keep = false
 		}
 		if keep {
 			out = append(out, row)

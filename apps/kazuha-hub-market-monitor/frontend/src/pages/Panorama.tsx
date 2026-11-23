@@ -51,6 +51,15 @@ type Industry = {
   mktcap?: Num;
   [key: string]: unknown;
 };
+/**
+ * Heatmap row order: market cap descending, industries without one after the
+ * rest, ties (and snapshots without market caps) by stock count descending.
+ */
+export function heatOrder(industries: Industry[]): Industry[] {
+  const cap = (i: Industry) => (isNum(i.mktcap) ? i.mktcap : -Infinity);
+  const count = (i: Industry) => (isNum(i.n) ? i.n : 0);
+  return [...industries].sort((a, b) => cap(b) - cap(a) || count(b) - count(a));
+}
 type ShiftRow = {
   s: string;
   n?: string;
@@ -247,13 +256,10 @@ function PanoramaBody({
         .filter((n): n is string => typeof n === "string" && n !== ""),
     [summary.industries],
   );
-  // Industries ordered by stock count; one with no score at all has nothing
-  // to draw.
+  // Industries by market cap, largest first; an industry with no score is
+  // kept as a blank row.
   const heatIndustries = useMemo(
-    () =>
-      arr(summary.industries)
-        .filter((i) => STRATS.some((k) => isNum(i[`s_${k}`])))
-        .sort((a, b) => (isNum(b.n) ? b.n : 0) - (isNum(a.n) ? a.n : 0)),
+    () => heatOrder(arr(summary.industries)),
     [summary.industries],
   );
   const heatOption = useMemo(() => {
