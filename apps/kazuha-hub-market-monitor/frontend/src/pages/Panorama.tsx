@@ -52,10 +52,6 @@ type Industry = {
   [key: string]: unknown;
 };
 /**
- * Heatmap row order: market cap descending, industries without one after the
- * rest, ties (and snapshots without market caps) by stock count descending.
- */
-/**
  * The strategy axis labels of the heatmap: every name is shown, level on a wide
  * screen and turned 45 degrees on a narrow one, where six level names overlap.
  */
@@ -63,6 +59,10 @@ export function heatStrategyLabel(narrow: boolean) {
   return { interval: 0, fontSize: 10, rotate: narrow ? 45 : 0 };
 }
 
+/**
+ * Heatmap row order: market cap descending, industries without one after the
+ * rest, ties (and snapshots without market caps) by stock count descending.
+ */
 export function heatOrder(industries: Industry[]): Industry[] {
   const cap = (i: Industry) => (isNum(i.mktcap) ? i.mktcap : -Infinity);
   const count = (i: Industry) => (isNum(i.n) ? i.n : 0);
