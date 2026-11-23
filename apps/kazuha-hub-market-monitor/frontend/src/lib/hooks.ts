@@ -172,6 +172,8 @@ export type RowQuery = {
   order?: "asc" | "desc";
   q?: string;
   filters: Record<string, string | undefined>;
+  /** Margin only: a name from MECHANISMS (lib/margin). */
+  mechanism?: string;
 };
 
 export function rowParams(date: string, query: RowQuery): Params {
@@ -181,6 +183,7 @@ export function rowParams(date: string, query: RowQuery): Params {
     params.order = query.order ?? "desc";
   }
   if (query.q) params.q = query.q;
+  if (query.mechanism) params.mechanism = query.mechanism;
   for (const [field, value] of Object.entries(query.filters))
     if (value) params[`f.${field}`] = value;
   return params;
@@ -321,4 +324,20 @@ export function useRowValues(
     return () => abort.abort();
   }, [get, ready, module, date, field]);
   return values;
+}
+
+/** Whether a CSS media query currently matches; follows changes. */
+export function useMediaQuery(query: string): boolean {
+  const [matches, setMatches] = useState(
+    () => window.matchMedia?.(query).matches ?? false,
+  );
+  useEffect(() => {
+    const media = window.matchMedia?.(query);
+    if (!media) return;
+    const update = () => setMatches(media.matches);
+    update();
+    media.addEventListener?.("change", update);
+    return () => media.removeEventListener?.("change", update);
+  }, [query]);
+  return matches;
 }

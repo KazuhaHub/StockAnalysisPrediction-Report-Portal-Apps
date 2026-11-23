@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // readinessDataFormat is the on-disk format of docs/store-v2.md. It must equal app.v2.json data.schema:
@@ -18,13 +19,21 @@ const readinessDataFormat = "2"
 
 // Viewer routes (all GET, all require a verified X-Portal-Assertion):
 //
-//	/v1/runs                         job history
 //	/v1/{module}/dates               snapshot dates, newest first
 //	/v1/{module}/summary?date=       module summary without the row table
 //	/v1/{module}/rows?date=&page=&size=&sort=&order=&q=&f.<field>=
 //	/v1/{module}/rows/{code}?date=   one row and its detail
 //	/v1/{module}/history/dates, history, compare, streak, counts
 //	                                 cross-day queries (history_api.go)
+//
+// Admin routes (the platform signs "surface":"admin" assertions only for an
+// app's admin view, after checking that the viewer administers the app; the
+// routes below refuse every other assertion with 403 "forbidden"):
+//
+//	GET  /v1/admin/jobs              jobs, their schedule, next and last run
+//	GET  /v1/admin/runs              full run history
+//	GET  /v1/admin/runs/{id}/log     bounded tail of one run's log
+//	POST /v1/admin/jobs/{job}/run    start a job by hand (admin.go)
 //
 // The platform relay accepts response bodies up to 1 MiB, so the row table is
 // only ever returned a page at a time.
@@ -39,10 +48,17 @@ type server struct {
 	store  *Store
 	runner *Runner
 	auth   *authority
+	slots  []Slot
+	loc    *time.Location
+	now    func() time.Time
 }
 
-func newServer(store *Store, runner *Runner, auth *authority) *server {
-	return &server{store: store, runner: runner, auth: auth}
+func newServer(store *Store, runner *Runner, auth *authority, slots []Slot) *server {
+	loc, err := time.LoadLocation(scheduleZone)
+	if err != nil {
+		loc = time.UTC
+	}
+	return &server{store: store, runner: runner, auth: auth, slots: slots, loc: loc, now: time.Now}
 }
 
 func (s *server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -61,8 +77,21 @@ func (s *server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.handshake(w, r)
 	case r.Method == http.MethodPost && r.URL.Path == "/v1/tasks/run":
 		s.task(w, r)
+	case r.Method == http.MethodPost && strings.HasPrefix(r.URL.Path, "/v1/admin/jobs/"):
+		s.adminRunNow(w, r)
+	case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/v1/admin/"):
+		claims, err := s.auth.verifyViewer(r.Header.Get("X-Portal-Assertion"), r.Method, r.URL.RequestURI(), nil)
+		if err != nil || !claims.Admin() {
+			writeError(w, http.StatusForbidden, "forbidden")
+			return
+		}
+		s.adminRead(w, r)
 	case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/v1/"):
-		if s.auth.verifyViewer(r.Header.Get("X-Portal-Assertion"), r.Method, r.URL.RequestURI(), nil) != nil {
+		// Reader data routes refuse admin assertions: the platform signs them
+		// for app administrators outside the audience, so accepting them
+		// would widen reader access.
+		claims, err := s.auth.verifyViewer(r.Header.Get("X-Portal-Assertion"), r.Method, r.URL.RequestURI(), nil)
+		if err != nil || claims.Admin() {
 			writeError(w, http.StatusForbidden, "forbidden")
 			return
 		}
@@ -158,10 +187,6 @@ func validField(name string) bool {
 
 func (s *server) read(w http.ResponseWriter, r *http.Request) {
 	parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/v1/"), "/")
-	if len(parts) == 1 && parts[0] == "runs" && r.URL.RawQuery == "" {
-		writeJSON(w, http.StatusOK, map[string]any{"runs": s.runner.Runs()})
-		return
-	}
 	if len(parts) < 2 || !modules[parts[0]] {
 		writeError(w, http.StatusNotFound, "not_found")
 		return
@@ -191,7 +216,7 @@ func (s *server) read(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusOK, map[string]any{"module": module, "as_of": snap.AsOf, "summary": snap.Summary})
 		}
 	case len(parts) == 2 && parts[1] == "rows":
-		q, ok := parseRowQuery(query)
+		q, ok := parseRowQuery(module, query)
 		if !ok {
 			writeError(w, http.StatusBadRequest, "bad_request")
 			return
@@ -248,7 +273,10 @@ func onlyKeys(q url.Values, allowed ...string) bool {
 	return true
 }
 
-func parseRowQuery(q url.Values) (rowQuery, bool) {
+// parseRowQuery reads the /rows parameters of one module. The only
+// module-specific one is `mechanism=<name>[|<name>]` (margin only): names must
+// come from mechanismPredicates, each at most once.
+func parseRowQuery(module string, q url.Values) (rowQuery, bool) {
 	out := rowQuery{Page: 1, Size: 50, Filters: map[string]string{}}
 	for key, values := range q {
 		if len(values) != 1 {
@@ -282,6 +310,18 @@ func parseRowQuery(q url.Values) (rowQuery, bool) {
 				return out, false
 			}
 			out.Search = v
+		case key == "mechanism":
+			if module != "margin" {
+				return out, false
+			}
+			seen := map[string]bool{}
+			for _, name := range strings.Split(v, "|") {
+				if mechanismPredicates[name] == nil || seen[name] {
+					return out, false
+				}
+				seen[name] = true
+				out.Mechanisms = append(out.Mechanisms, name)
+			}
 		case strings.HasPrefix(key, "f."):
 			field := strings.TrimPrefix(key, "f.")
 			if !validField(field) || v == "" || len(v) > 64 || len(out.Filters) >= 8 {

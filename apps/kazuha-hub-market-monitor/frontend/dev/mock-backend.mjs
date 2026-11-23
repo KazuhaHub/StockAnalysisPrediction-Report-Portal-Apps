@@ -26,6 +26,18 @@ function compareValues(a, b) {
   return x < y ? -1 : x > y ? 1 : 0;
 }
 
+/**
+ * Mirror of mechanismPredicates: the closed set of passive-selling mechanism
+ * filters of the margin module. A missing value never satisfies one.
+ */
+const MECHANISMS = {
+  res2: (r) => typeof r.res_cnt === "number" && r.res_cnt >= 2,
+  pledge: (r) => typeof r.pld_room === "number" && r.pld_room < 15,
+  unlock: (r) => typeof r.ulk60 === "number" && r.ulk60 > 0,
+  cb: (r) => typeof r.cb_prem === "number" && r.cb_prem < 0,
+  block: (r) => typeof r.blk_disc === "number" && r.blk_disc < -3,
+};
+
 /** Mirror of queryRows: filter, search, sort (missing values last), page. */
 export function queryRows(rows, q) {
   let out = rows.filter((row) => {
@@ -34,6 +46,11 @@ export function queryRows(rows, q) {
       const name = typeof row.name === "string" ? row.name : "";
       if (!code.startsWith(q.search) && !name.includes(q.search)) return false;
     }
+    if (
+      q.mechanisms?.length &&
+      !q.mechanisms.some((name) => MECHANISMS[name](row))
+    )
+      return false;
     return Object.entries(q.filters).every(([field, want]) =>
       matchesFilter(row[field], want),
     );
@@ -59,7 +76,7 @@ export function queryRows(rows, q) {
 }
 
 /** Mirror of parseRowQuery. Returns null for a request the service refuses. */
-export function parseRowQuery(params) {
+export function parseRowQuery(params, module = "margin") {
   const out = {
     page: 1,
     size: 50,
@@ -67,6 +84,7 @@ export function parseRowQuery(params) {
     desc: false,
     search: "",
     filters: {},
+    mechanisms: [],
   };
   for (const key of new Set(params.keys())) {
     const values = params.getAll(key);
@@ -92,6 +110,13 @@ export function parseRowQuery(params) {
     } else if (key === "q") {
       if (new TextEncoder().encode(v).length > 64) return null;
       out.search = v;
+    } else if (key === "mechanism") {
+      if (module !== "margin") return null;
+      for (const name of v.split("|")) {
+        if (!Object.hasOwn(MECHANISMS, name) || out.mechanisms.includes(name))
+          return null;
+        out.mechanisms.push(name);
+      }
     } else if (key.startsWith("f.")) {
       const field = key.slice(2);
       if (
@@ -108,26 +133,82 @@ export function parseRowQuery(params) {
 }
 
 const SAMPLE_RUNS = [
-  ["margin", "succeeded"],
-  ["etf", "succeeded"],
-  ["panorama", "failed"],
-  ["sentiment", "running"],
-  ["marketdata", "queued"],
-].map(([job, status], i) => ({
+  ["margin", "succeeded", "schedule"],
+  ["etf", "succeeded", "schedule"],
+  ["panorama", "failed", "manual"],
+  ["sentiment", "running", "schedule"],
+  ["marketdata", "queued", "platform"],
+].map(([job, status, source], i) => ({
   id: `sample-${i}`,
   job,
+  source,
   status,
   attempt: 1,
   queued_at: new Date(Date.now() - (i + 1) * 3_600_000).toISOString(),
+  started_at:
+    status === "queued"
+      ? undefined
+      : new Date(Date.now() - (i + 1) * 3_500_000).toISOString(),
   finished_at:
     status === "succeeded" || status === "failed"
       ? new Date(Date.now() - i * 3_000_000).toISOString()
       : undefined,
+  exit_code: status === "failed" ? 1 : 0,
   error: status === "failed" ? "exit_status" : undefined,
+  installed: status === "succeeded" ? [`${job}/2026-11-20`] : undefined,
 }));
+
+const WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
+const DAY_AFTER = ["Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+const slot = (days, hour, minute = 0, fallback = false) => ({
+  days,
+  hour,
+  minute,
+  fallback,
+});
+// The job timetable of service/scheduler.go DefaultSlots, in Beijing time.
+const SAMPLE_JOBS = {
+  etf: [slot(DAY_AFTER, 8)],
+  margin: [slot(WEEKDAYS, 9), slot(WEEKDAYS, 9, 50, true)],
+  marketdata: [slot(WEEKDAYS, 21), slot(WEEKDAYS, 23, 30, true)],
+  panorama: [slot(DAY_AFTER, 0, 50)],
+  sentiment: [slot(DAY_AFTER, 0, 40)],
+};
+
+const DAY_NAMES = [
+  "Sunday",
+  "Monday",
+  "Tuesday",
+  "Wednesday",
+  "Thursday",
+  "Friday",
+  "Saturday",
+];
+
+/** Next main-slot occurrence in Asia/Shanghai (UTC+8, no DST); fallback slots are skipped like the service. */
+const nextRun = (slots, now = Date.now()) => {
+  const offset = 8 * 3_600_000;
+  let best = null;
+  for (const s of slots) {
+    if (s.fallback) continue;
+    for (let day = 0; day < 8; day++) {
+      const local = new Date(now + offset);
+      local.setUTCHours(s.hour, s.minute, 0, 0);
+      local.setUTCDate(local.getUTCDate() + day);
+      const at = local.getTime() - offset;
+      if (at > now && s.days.includes(DAY_NAMES[local.getUTCDay()])) {
+        if (best === null || at < best) best = at;
+        break;
+      }
+    }
+  }
+  return best === null ? null : new Date(best).toISOString();
+};
 
 export function createMockBackend(dir) {
   const cache = new Map();
+  // Manual runs started through POST, newest first; one per request_id.
+  const manual = new Map();
   const dates = (module) => {
     const folder = join(dir, module);
     if (!existsSync(folder)) return [];
@@ -166,17 +247,87 @@ export function createMockBackend(dir) {
   };
   const fail = (status, error) => reply(status, { error });
 
-  return function handle(target) {
+  const allRuns = () => {
+    const file = join(dir, "..", "runs", "index.json");
+    const indexed = existsSync(file)
+      ? JSON.parse(readFileSync(file, "utf8")).runs.map((run) => ({
+          source: "platform",
+          exit_code: 0,
+          ...run,
+        }))
+      : SAMPLE_RUNS;
+    return [...manual.values()].reverse().concat(indexed);
+  };
+
+  /** Admin routes: like the Go service, refused unless the view is the admin one. */
+  const admin = (parts, method, body, isAdmin) => {
+    if (!isAdmin) return fail(403, "forbidden");
+    if (method === "GET" && parts[1] === "jobs" && parts.length === 2) {
+      const runs = allRuns();
+      return reply(200, {
+        time_zone: "Asia/Shanghai",
+        jobs: Object.entries(SAMPLE_JOBS).map(([name, schedule]) => ({
+          name,
+          schedule,
+          next_run: nextRun(schedule),
+          last_run: runs.find((run) => run.job === name) ?? null,
+        })),
+      });
+    }
+    if (method === "GET" && parts[1] === "runs" && parts.length === 2)
+      return reply(200, { runs: allRuns() });
+    if (
+      method === "GET" &&
+      parts[1] === "runs" &&
+      parts.length === 4 &&
+      parts[3] === "log"
+    ) {
+      const run = allRuns().find((r) => r.id === parts[2]);
+      if (!run) return fail(404, "not_found");
+      return reply(200, {
+        run_id: run.id,
+        log: `[market-monitor] attempt ${run.attempt} of ${run.job} started\n(sample log)\n`,
+        truncated: false,
+      });
+    }
+    if (
+      method === "POST" &&
+      parts[1] === "jobs" &&
+      parts.length === 4 &&
+      parts[3] === "run"
+    ) {
+      let id;
+      try {
+        const parsed = JSON.parse(body);
+        id =
+          Object.keys(parsed).join() === "request_id" ? parsed.request_id : "";
+      } catch {
+        id = "";
+      }
+      if (!/^[0-9a-f-]{36}$/i.test(id)) return fail(400, "bad_request");
+      if (!SAMPLE_JOBS[parts[2]]) return fail(404, "not_found");
+      const duplicate = manual.has(id);
+      if (!duplicate)
+        manual.set(id, {
+          id: `manual-${manual.size}`,
+          job: parts[2],
+          source: "manual",
+          status: "queued",
+          attempt: 1,
+          queued_at: new Date().toISOString(),
+          exit_code: 0,
+        });
+      return reply(202, { run: manual.get(id), duplicate });
+    }
+    return fail(404, "not_found");
+  };
+
+  return function handle(target, method = "GET", body = "", isAdmin = false) {
     const url = new URL(target, "http://mock.invalid");
     const parts = url.pathname.replace(/^\/v1\//, "").split("/");
     if (!url.pathname.startsWith("/v1/")) return fail(404, "not_found");
-    if (parts.length === 1 && parts[0] === "runs" && url.search === "") {
-      const file = join(dir, "..", "runs", "index.json");
-      const runs = existsSync(file)
-        ? JSON.parse(readFileSync(file, "utf8")).runs
-        : SAMPLE_RUNS;
-      return reply(200, { runs });
-    }
+    if (parts[0] === "admin") return admin(parts, method, body, isAdmin);
+    if (method !== "GET") return fail(404, "not_found");
     if (parts.length < 2 || !MODULES.includes(parts[0]))
       return fail(404, "not_found");
     const module = parts[0];
@@ -199,7 +350,7 @@ export function createMockBackend(dir) {
         : fail(404, "no_data");
     }
     if (parts.length === 2 && parts[1] === "rows") {
-      const q = parseRowQuery(url.searchParams);
+      const q = parseRowQuery(url.searchParams, module);
       if (!q) return fail(400, "bad_request");
       const snap = load(module, date);
       if (!snap) return fail(404, "no_data");
@@ -260,10 +411,19 @@ export function mockBackendPlugin(dir) {
           res.end();
           return;
         }
-        const result = handle(req.url.slice("/__mock".length));
-        res.statusCode = result.status;
-        res.setHeader("Content-Type", "application/json");
-        res.end(result.body);
+        const chunks = [];
+        req.on("data", (chunk) => chunks.push(chunk));
+        req.on("end", () => {
+          const result = handle(
+            req.url.slice("/__mock".length),
+            req.method,
+            Buffer.concat(chunks).toString("utf8"),
+            req.headers["x-mock-surface"] === "admin",
+          );
+          res.statusCode = result.status;
+          res.setHeader("Content-Type", "application/json");
+          res.end(result.body);
+        });
       });
     },
   };

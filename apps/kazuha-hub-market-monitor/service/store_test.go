@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"errors"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -292,5 +293,58 @@ func TestSnapshotsFromARealRun(t *testing.T) {
 		if largest > maxResponse {
 			t.Errorf("%s: a row detail response would exceed the relay limit (%d B)", module, largest)
 		}
+	}
+}
+
+func TestQueryRowsMechanismFilter(t *testing.T) {
+	rows := []map[string]any{
+		{"code": "000001", "res_cnt": 2.0},                    // res2 (boundary)
+		{"code": "000002", "res_cnt": 1.0, "pld_room": 14.9},  // pledge
+		{"code": "000003", "pld_room": 15.0, "ulk60": 0.0},    // none: boundaries
+		{"code": "000004", "ulk60": 0.1, "cb_prem": 0.0},      // unlock
+		{"code": "000005", "cb_prem": -0.1, "blk_disc": -3.0}, // cb
+		{"code": "000006", "blk_disc": -3.1, "pld_room": nil}, // block
+		{"code": "000007", "res_cnt": nil, "ulk60": nil},      // none: missing values
+		{"code": "000008", "res_cnt": 3.0, "cb_prem": -2.0},   // res2 + cb
+	}
+	codes := func(q rowQuery) string {
+		out, _ := queryRows(rows, q)
+		s := ""
+		for _, r := range out {
+			s += r["code"].(string)[5:]
+		}
+		return s
+	}
+	for name, want := range map[string]string{"res2": "18", "pledge": "2", "unlock": "4", "cb": "58", "block": "6"} {
+		if got := codes(rowQuery{Page: 1, Size: 50, Mechanisms: []string{name}}); got != want {
+			t.Errorf("%s: got %q want %q", name, got, want)
+		}
+	}
+	// Several names match a row that satisfies any of them.
+	if got := codes(rowQuery{Page: 1, Size: 50, Mechanisms: []string{"pledge", "block"}}); got != "26" {
+		t.Errorf("any-of: %q", got)
+	}
+	// It combines with the other filters.
+	if got := codes(rowQuery{Page: 1, Size: 50, Mechanisms: []string{"cb"}, Search: "000008"}); got != "8" {
+		t.Errorf("combined: %q", got)
+	}
+}
+
+func TestParseRowQueryMechanism(t *testing.T) {
+	q, ok := parseRowQuery("margin", url.Values{"mechanism": {"res2|cb"}})
+	if !ok || len(q.Mechanisms) != 2 || q.Mechanisms[0] != "res2" || q.Mechanisms[1] != "cb" {
+		t.Fatalf("parsed %+v %v", q, ok)
+	}
+	for _, bad := range []string{"", "nope", "res2|nope", "res2|", "|res2", "res2|res2", "res_cnt>=2", "RES2",
+		"res2|cb|block|pledge|unlock|res2"} {
+		if _, ok := parseRowQuery("margin", url.Values{"mechanism": {bad}}); ok {
+			t.Errorf("%q must be refused", bad)
+		}
+	}
+	if _, ok := parseRowQuery("margin", url.Values{"mechanism": {"res2", "cb"}}); ok {
+		t.Error("repeated parameter must be refused")
+	}
+	if _, ok := parseRowQuery("etf", url.Values{"mechanism": {"res2"}}); ok {
+		t.Error("mechanisms only exist for margin")
 	}
 }

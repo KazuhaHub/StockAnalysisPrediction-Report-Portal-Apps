@@ -15,3 +15,8 @@ html, body { overflow: hidden; }
   height: 100dvh;
   overflow: hidden;
 }
+/* Card headers wrap like the Portal's: when a title and its extra do not fit on one line, the extra
+   moves to its own line instead of squeezing the title to a word per line. */
+.ant-card .ant-card-head > .ant-card-head-wrapper { flex-wrap: wrap; column-gap: 12px; row-gap: 8px; padding-block: 8px; }
+.ant-card-head .ant-card-head-title { flex: 1 0 auto; max-width: 100%; }
+.ant-card-head .ant-card-extra { margin-inline-start: auto; max-width: 100%; }

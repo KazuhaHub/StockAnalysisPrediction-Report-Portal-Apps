@@ -5,7 +5,8 @@ broad-ETF fund flows and the Panorama multi-strategy screener, plus the
 market-level series intended for a systemic-risk monitor.
 
 **Status: beta.** `app.v2.json` declares five document routes
-(overview, margin, sentiment, ETF, Panorama) and the backend image; the image
+(overview, margin, sentiment, ETF, Panorama), one admin route (`/admin`) and
+the backend image; the image
 digest is a placeholder in the source, replaced when the
 `release-market-monitor` workflow builds, signs and publishes a package
 (docs/publisher-v2.md, "Release signing in CI").
@@ -30,9 +31,22 @@ The preview reads plain JSON. Snapshots in `/data/snapshots/<module>/` are
 gzip files (`<date>.json.gz`, docs/store-v2.md), so copy them out and
 `gunzip` them first.
 
+Readers never see job runs. When a module has no snapshot yet, its page says the
+data is being prepared (no error, no job wording) and fills in on its own once
+the first run has installed data.
+
+The **admin page** (`src/pages/Admin.tsx`, route `/admin`) is the same bundle
+launched on the admin surface (`useAppSurface()`): a *Jobs* card with each job's
+schedule in Beijing time, next run and last run (status as icon, word and
+colour), a *Run now* button behind a confirmation dialog (focus starts on
+Cancel; one `request_id` per opened dialog, reused for retries), and a *Run
+history* list whose rows expand, animated unless reduced motion is requested,
+to the run's log tail. Preview it with `?surface=admin` (below); the mock serves
+the admin routes only for that view, like the service.
+
 Open `http://127.0.0.1:5173/`. `dev/host.html` is a stand-in host using the
 SDK's `createBridgeHost` in a sandboxed frame; `?path=/margin&dark=1&locale=en-US`
-picks the start state. `dev/mock-backend.mjs` answers the `/v1` routes like the
+picks the start state, and `?surface=admin` opens the admin page. `dev/mock-backend.mjs` answers the `/v1` routes like the
 Go service (same paging, sort and filter rules) and keeps loaded files in
 memory, so restart it after changing the fixtures.
 
@@ -66,12 +80,16 @@ socket:
 | `GET /health/ready` | platform | readiness |
 | `POST /v1/handshake` | platform | boot handshake |
 | `POST /v1/tasks/run` | platform task, `tasks.schedule` | queue one job: `{"job": "margin"}` |
-| `GET /v1/runs` | viewer | job history |
 | `GET /v1/{module}/dates` | viewer | snapshot dates, newest first |
 | `GET /v1/{module}/summary?date=` | viewer | module summary |
 | `GET /v1/{module}/rows?date=&page=&size=&sort=&order=&q=&f.<field>=` | viewer | one page of rows (size ≤ 200) |
+| `GET /v1/margin/rows?mechanism=<name>[\|<name>]` | viewer | margin only: keep rows matching any named passive-selling mechanism (`res2`, `pledge`, `unlock`, `cb`, `block`); an unknown or repeated name is a 400 |
 | `GET /v1/{module}/rows/{code}?date=` | viewer | one row and its detail |
 | `GET /v1/{module}/history/dates`, `history`, `compare`, `streak`, `counts` | viewer | cross-day queries over the history files (margin, panorama, etf; 404 for risk and sentiment); one at a time, 4 s limit, bounds in [docs/store-v2.md](docs/store-v2.md) |
+| `GET /v1/admin/jobs` | admin view | each job: schedule slots, next run, last run |
+| `GET /v1/admin/runs` | admin view | full run history with source (`schedule`, `bootstrap`, `manual`, `platform`), attempt, error code and installed outputs |
+| `GET /v1/admin/runs/{id}/log` | admin view | last 64 KiB of the run's log, with a `truncated` flag |
+| `POST /v1/admin/jobs/{job}/run` | admin view | Run now: body `{"request_id": "<uuid>"}`; 202 `{run, duplicate}` |
 
 **Schedule.** The platform cannot yet originate tasks for a managed backend
 (its `tasks/background` route is not reachable from a networkless container),
@@ -96,6 +114,24 @@ the bars it updates, has no snapshot. Runs are queued as `marketdata`, then any
 caught-up occurrences, then `sentiment`, `panorama`, `etf`, `margin`, and the
 runner executes the queue one job at a time in that order (its queue holds 16).
 `POST /v1/tasks/run` stays available to start a job by hand.
+
+**Admin page.** The platform signs `"surface":"admin"` assertions only for the
+app's admin view, after checking that the viewer administers the app (a Portal
+admin or a user delegated the app); such a viewer need not be in the app's
+audience. The `/v1/admin/*` routes answer 403 `forbidden` to anything else,
+reader assertions included. Reader data routes refuse admin assertions (403
+`forbidden`): the platform signs those for app administrators outside the
+audience, so accepting them would widen reader access. Job runs are no longer
+served to readers (`GET /v1/runs` is gone). Run logs are shown to app
+administrators on the admin page, so jobs must not print secrets.
+
+*Run now* queues the job as `manual/<request_id>` with the occurrence
+`manual:<request_id>`. The request ID names one click: the same ID again returns
+the same run with `duplicate: true` and never queues twice (404 for an unknown
+job; 409 `already_active` while a run of the job is queued or running, 409
+`queue_full` when the queue is full, 409 `conflict` when the ID was used for another
+job). The shown next run ignores fallback slots. A manual run counts for the
+scheduler's fallback rule like any other run of the job that day.
 
 Viewer routes verify the `X-Portal-Assertion` against the current
 registration, boot and request URI, and refuse cookies and authorization

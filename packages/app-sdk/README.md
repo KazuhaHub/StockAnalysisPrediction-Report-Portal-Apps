@@ -53,6 +53,21 @@ Read
 [current-viewer reports client](../../docs/reports-v2.md) and
 [application object client](../../docs/objects-v2.md) for boundaries and tests.
 
+### Reader and admin surfaces
+
+An app can declare `presentation.admin_routes` for an admin page that ships in
+the same bundle. The host launches it on the admin surface and the bridge
+context carries `surface: 'reader' | 'admin'`. `useAppSurface()` (and
+`context.surface` from `useAppPresentation()`) returns it; a host that sends no
+`surface` means `'reader'`, and any other value fails the handshake. In an
+admin frame `useAppNavigation().routes` lists only the admin routes, which need
+no home route `/` (the reader frame still must list `/`).
+
+The surface only chooses what the app renders. It grants nothing: the backend
+authorises each request from the signed assertion (`Claims.Admin()` in
+`packages/extensionprotocol`), never from what the page claims. `BridgeHostOptions.surface`
+is the host's side of the same field.
+
 ## Publisher name and icon
 
 `parseDescriptor` accepts the optional `publisher_name` and `presentation.display.icon_png`

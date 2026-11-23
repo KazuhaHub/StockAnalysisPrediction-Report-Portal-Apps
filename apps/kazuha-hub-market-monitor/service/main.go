@@ -88,20 +88,21 @@ func main() {
 	// does not spend a requeued run's attempts.
 	stopRunner := runner.Start()
 	// The slots are exchange times; they are not configurable.
-	loc, err := time.LoadLocation("Asia/Shanghai")
+	loc, err := time.LoadLocation(scheduleZone)
 	if err != nil {
 		stopRunner()
 		stopProxy()
 		os.Exit(7)
 	}
-	stopScheduler := NewScheduler(runner, DefaultSlots(), loc).Start()
+	slots := DefaultSlots()
+	stopScheduler := NewScheduler(runner, slots, loc).Start()
 	srv := &http.Server{
 		ReadHeaderTimeout: time.Second,
 		ReadTimeout:       2 * time.Second,
 		WriteTimeout:      5 * time.Second,
 		IdleTimeout:       time.Second,
 		MaxHeaderBytes:    65536,
-		Handler:           newServer(store, runner, auth),
+		Handler:           newServer(store, runner, auth, slots),
 	}
 	// On SIGTERM stop serving, then stop the worker, which kills a running
 	// job's process group; the next start queues that run again.

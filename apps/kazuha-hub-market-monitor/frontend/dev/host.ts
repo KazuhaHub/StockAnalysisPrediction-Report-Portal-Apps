@@ -14,16 +14,23 @@ const actions = document.getElementById("actions")!;
 const locale = document.getElementById("locale") as HTMLSelectElement;
 const dark = document.getElementById("dark") as HTMLInputElement;
 
-const routes = manifest.presentation.routes.map((route) => ({
+// ?surface=admin previews the app's admin view: only the admin routes, and the
+// mock accepts the admin routes only for requests marked as that view.
+const start = new URLSearchParams(window.location.search);
+const surface = start.get("surface") === "admin" ? "admin" : "reader";
+const routes = (
+  surface === "admin"
+    ? manifest.presentation.admin_routes
+    : manifest.presentation.routes
+).map((route) => ({
   id: route.id,
   path: route.path,
   layout: "document" as const,
 }));
 // Dev-only start state from the query string: ?path=/margin&dark=1&locale=en-US
-const start = new URLSearchParams(window.location.search);
 let path = routes.some((r) => r.path === start.get("path"))
   ? start.get("path")!
-  : "/";
+  : routes[0].path;
 if (start.get("dark") === "1") dark.checked = true;
 if (start.get("locale")) locale.value = start.get("locale")!;
 let snapshot: PageActionSnapshot | null = null;
@@ -72,6 +79,7 @@ const host = createBridgeHost({
     releaseSha256: "0".repeat(64),
   },
   capabilities: ["background.run"],
+  surface,
   presentation: presentation(),
   onPageChange: (value) => {
     snapshot = value;
@@ -85,7 +93,12 @@ const host = createBridgeHost({
     frame.style.height = `${Math.max(height, 400)}px`;
   },
   onBackendRequest: async (request, signal) => {
-    const response = await fetch(`/__mock${request.path}`, { signal });
+    const response = await fetch(`/__mock${request.path}`, {
+      method: request.method,
+      body: request.method === "GET" ? undefined : request.body,
+      headers: surface === "admin" ? { "X-Mock-Surface": "admin" } : {},
+      signal,
+    });
     return { status: response.status, body: await response.text() };
   },
 });

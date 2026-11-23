@@ -54,7 +54,11 @@ func TestDescriptorDeclaresTheForwardProxy(t *testing.T) {
 			t.Errorf("host entry %q breaks the entry rules", h)
 		}
 	}
-	for _, want := range []string{"*.eastmoney.com", "*.push2.eastmoney.com", "qt.gtimg.cn"} {
+	// A wildcard matches exactly one label, so *.eastmoney.com does not cover
+	// N.push2delay.eastmoney.com: the push2 quote nodes redirect there from
+	// production, and the proxy refuses an undeclared redirect target.
+	for _, want := range []string{"*.eastmoney.com", "*.push2.eastmoney.com", "1.push2delay.eastmoney.com",
+		"82.push2delay.eastmoney.com", "qt.gtimg.cn"} {
 		if !slices.Contains(hosts, want) {
 			t.Errorf("missing %s", want)
 		}

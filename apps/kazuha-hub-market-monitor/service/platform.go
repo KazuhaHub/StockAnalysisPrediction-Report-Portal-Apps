@@ -153,19 +153,21 @@ func newAuthority(path, bootID string) *authority {
 	return &authority{path: path, bootID: bootID, now: time.Now, verifiers: map[string]*protocol.Verifier{}}
 }
 
-func (a *authority) verifyViewer(token, method, requestURI string, body []byte) error {
+// verifyViewer returns the verified claims; routes that need the admin
+// surface check Claims.Admin().
+func (a *authority) verifyViewer(token, method, requestURI string, body []byte) (protocol.Claims, error) {
 	if token == "" {
-		return errors.New("assertion missing")
+		return protocol.Claims{}, errors.New("assertion missing")
 	}
 	reg, err := loadRegistration(a.path)
 	defer clear(reg.Key)
 	if err != nil {
-		return err
+		return protocol.Claims{}, err
 	}
 	signer, err := reg.signer(a.bootID)
 	defer clear(signer.Key)
 	if err != nil {
-		return err
+		return protocol.Claims{}, err
 	}
 	identity := signer.KeyID + "\x00" + signer.InstanceID + "\x00" + signer.Audience + "\x00" + signer.Issuer
 	a.mu.Lock()
@@ -184,8 +186,7 @@ func (a *authority) verifyViewer(token, method, requestURI string, body []byte) 
 		}
 	}
 	a.mu.Unlock()
-	_, err = verifier.Verify(token, method, requestURI, body, a.now())
-	return err
+	return verifier.Verify(token, method, requestURI, body, a.now())
 }
 
 func (a *authority) answerChallenge(challenge string) (string, error) {

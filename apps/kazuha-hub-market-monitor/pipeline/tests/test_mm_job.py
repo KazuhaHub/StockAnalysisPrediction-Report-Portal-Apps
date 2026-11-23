@@ -175,6 +175,46 @@ class Convert(unittest.TestCase):
         codes = [r["code"] for r in snap["rows"]]
         self.assertEqual(len(codes), len(set(codes)))
 
+    def margin_with_ratio(self, ratios):
+        payload = margin_payload()
+        payload["fields"] = ["code", "ratio"]
+        payload["rows"] = {"code": [f"{i:06d}" for i in range(len(ratios))], "ratio": ratios}
+        payload["hist"] = {}
+        return payload
+
+    def test_margin_ratio_hist(self):
+        ratios = [0.0, 0.49, 0.5, 7.99, 8.0, 14.4, 14.5, 40.0, None, float("nan")]
+        h = mm_job.convert_margin(self.margin_with_ratio(ratios))["summary"]["overview"]["ratio_hist"]
+        self.assertEqual(h["width"], 0.5)
+        self.assertEqual(len(h["counts"]), 30)
+        # Bin i covers [i*0.5, (i+1)*0.5); the last bin is open-ended; missing ratios are skipped.
+        self.assertEqual(h["counts"][0], 2)
+        self.assertEqual(h["counts"][1], 1)
+        self.assertEqual(h["counts"][15], 1)
+        self.assertEqual(h["counts"][16], 1)
+        self.assertEqual(h["counts"][28], 1)
+        self.assertEqual(h["counts"][29], 2)
+        self.assertEqual(sum(h["counts"]), 8)
+        self.assertEqual(h["median"], 7.995)
+
+    def test_margin_ratio_hist_drops_negative_ratios_and_survives_huge_ones(self):
+        h = mm_job.convert_margin(self.margin_with_ratio([-1.0, 1.0, 1e308]))["summary"]["overview"]["ratio_hist"]
+        self.assertEqual(sum(h["counts"]), 2)
+        self.assertEqual(h["counts"][0], 0)
+        self.assertEqual(h["counts"][2], 1)
+        self.assertEqual(h["counts"][29], 1)
+
+    def test_margin_ratio_hist_keeps_the_builders_median_and_existing_hist(self):
+        payload = self.margin_with_ratio([1.0, 2.0, 3.0])
+        payload["overview"]["ratio_med"] = 2.5
+        self.assertEqual(mm_job.convert_margin(payload)["summary"]["overview"]["ratio_hist"]["median"], 2.5)
+        payload["overview"]["ratio_hist"] = {"width": 1, "counts": [1], "median": 0}
+        self.assertEqual(mm_job.convert_margin(payload)["summary"]["overview"]["ratio_hist"]["width"], 1)
+
+    def test_margin_without_ratios_has_no_hist(self):
+        # margin_payload() rows carry no ratio column at all
+        self.assertNotIn("ratio_hist", mm_job.convert_margin(margin_payload())["summary"]["overview"])
+
     def test_margin(self):
         e = Env(self)
         write(os.path.join(e.work, "margin_scan", "out", "payload.json"), margin_payload())
