@@ -51,8 +51,6 @@ type Props<S> = {
   module: ModuleId;
   title: string;
   children: (context: DashboardContext<S>) => ReactNode;
-  /** Shown under the body in every state, e.g. content independent of the summary. */
-  footer?: (context: { revision: number }) => ReactNode;
 };
 
 /**
@@ -60,7 +58,7 @@ type Props<S> = {
  * switcher, the date picker driven by `/dates`, and the loading, empty and
  * error states of the module's summary.
  */
-export function Dashboard<S>({ module, title, children, footer }: Props<S>) {
+export function Dashboard<S>({ module, title, children }: Props<S>) {
   const { copy } = useCopy();
   const backend = useAppBackend();
   const navigation = useAppNavigation();
@@ -123,7 +121,7 @@ export function Dashboard<S>({ module, title, children, footer }: Props<S>) {
     !snap.date ||
     !snap.summaryDate
   )
-    body = <Empty description={copy.noData} />;
+    body = <Empty description={copy.preparing} />;
   else
     body = (
       <Spin spinning={snap.fetching} aria-label={copy.loading}>
@@ -154,7 +152,6 @@ export function Dashboard<S>({ module, title, children, footer }: Props<S>) {
           </Space>
         </div>
         {body}
-        {footer?.({ revision: snap.revision })}
       </Space>
     </div>
   );

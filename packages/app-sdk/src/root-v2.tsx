@@ -14,6 +14,7 @@ import {
 import {
   createBridgeClient,
   type BridgeContext,
+  type BridgeSurface,
   type BridgeFailure,
   type BridgePresentation,
   type BridgeRoute,
@@ -55,6 +56,7 @@ import { parseRouteSearch, type RouteQueryValues } from "./route-query-v2";
 import { PortalAppProvider, type AppClient } from "./index";
 import "./root-v2.css";
 export { BridgeReportError } from "./bridge-v2";
+export type { BridgeSurface } from "./bridge-v2";
 export { BridgeObjectError } from "./bridge-v2";
 export { BridgeNotificationError, BridgePrincipalError } from "./bridge-v2";
 export type { BridgePrincipalItem, BridgePrincipalKind } from "./bridge-v2";
@@ -266,6 +268,11 @@ export function useAppPresentation(): AppPresentation {
   const value = useContext(PresentationContext);
   if (!value) throw new Error("AppRoot presentation unavailable");
   return value;
+}
+// "admin" inside the app's admin view, "reader" everywhere else (also with a host
+// that does not say). It only picks what to render: the backend decides authority.
+export function useAppSurface(): BridgeSurface {
+  return useAppPresentation().context.surface;
 }
 export interface AppNavigation {
   readonly ready: boolean;

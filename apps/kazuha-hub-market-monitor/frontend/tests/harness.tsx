@@ -11,9 +11,11 @@ import { Application } from "../src/App";
 import manifest from "../../app.v2.json";
 
 export type Reply = { status: number; body: unknown };
+export type Request = { method: string; path: string; body: string };
 export type Handler = (
   path: string,
   params: URLSearchParams,
+  request: Request,
 ) => Reply | Promise<Reply>;
 
 const portalOrigin = "https://portal.example.invalid";
@@ -61,16 +63,25 @@ function windows() {
  */
 export async function mount(
   handler: Handler,
-  options: { path?: string; locale?: BridgePresentation["locale"] } = {},
+  options: {
+    path?: string;
+    locale?: BridgePresentation["locale"];
+    /** Launches the app's admin view: only the admin routes are listed. */
+    surface?: "reader" | "admin";
+  } = {},
 ) {
   vi.stubGlobal("MessageChannel", MessageChannel);
   const [parent, child] = windows();
-  const routes = manifest.presentation.routes.map((r) => ({
+  const admin = options.surface === "admin";
+  const routes = (
+    admin ? manifest.presentation.admin_routes : manifest.presentation.routes
+  ).map((r) => ({
     id: r.id,
     path: r.path,
     layout: "document" as const,
   }));
   const calls: string[] = [];
+  const requests: Request[] = [];
   let page: PageActionSnapshot | null = null;
   let presentation: BridgePresentation = {
     locale: options.locale ?? "en-US",
@@ -85,13 +96,18 @@ export async function mount(
       colorBgLayout: "#f5f5f5",
       borderRadius: 8,
     },
-    navigation: { path: options.path ?? "/", search: "", routes },
+    navigation: {
+      path: options.path ?? (admin ? "/admin" : "/"),
+      search: "",
+      routes,
+    },
   };
   const backend = vi.fn(
     async (request: { method: string; path: string; body: string }) => {
       calls.push(request.path);
+      requests.push(request);
       const url = new URL(request.path, "http://backend.invalid");
-      const reply = await handler(url.pathname, url.searchParams);
+      const reply = await handler(url.pathname, url.searchParams, request);
       return { status: reply.status, body: JSON.stringify(reply.body) };
     },
   );
@@ -105,6 +121,7 @@ export async function mount(
       releaseSha256: "b".repeat(64),
     },
     capabilities: ["background.run"],
+    surface: options.surface,
     presentation,
     onPageChange: (value) => {
       page = value;
@@ -130,6 +147,7 @@ export async function mount(
   await waitFor(() => expect(page).not.toBeNull());
   return {
     calls,
+    requests,
     page: () => page!,
     invoke: (id: string) =>
       act(() => {

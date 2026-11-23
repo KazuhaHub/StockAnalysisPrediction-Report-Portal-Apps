@@ -12,6 +12,7 @@ import type { BridgePresentation, BridgeClientOptions } from "../src/bridge-v2";
 import {
   AppRoot,
   useAppPresentation,
+  useAppSurface,
   useAppBackend,
   useAppPage,
 } from "../src/root-v2";
@@ -62,6 +63,7 @@ const context = {
   },
   capabilities: [],
   backendAvailable: true,
+  surface: "reader" as const,
 };
 beforeEach(() => {
   control.close.mockClear();
@@ -442,4 +444,17 @@ test("abort before React commits rejects pending work and never mounts old conte
   });
   await expect(promise!).rejects.toThrow();
   expect(view.container.textContent).toBe("");
+});
+
+test("useAppSurface follows the host context and defaults to reader", async () => {
+  function Surface() {
+    return <span>surface:{useAppSurface()}</span>;
+  }
+  render(
+    <AppRoot>
+      <Surface />
+    </AppRoot>,
+  );
+  await apply();
+  expect(screen.getByText("surface:reader")).toBeTruthy();
 });

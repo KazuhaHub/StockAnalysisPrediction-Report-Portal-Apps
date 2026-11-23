@@ -1,11 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
-import { Alert, Button, Card, Col, Empty, Row, Space, Table, Tag } from "antd";
+import { useMemo } from "react";
+import { Alert, Button, Card, Col, Empty, Row, Space } from "antd";
 import { useAppNavigation } from "@portal-app/sdk/root-v2";
 import { Dashboard, ROUTES } from "../components/Dashboard";
 import { EChart } from "../components/EChart";
 import { KpiRow, type KpiItem } from "../components/Kpi";
 import { useVisual } from "../components/useVisual";
-import { useApi, type RunView } from "../lib/api";
 import { useCopy } from "../lib/copy";
 import {
   arr,
@@ -50,26 +49,10 @@ type RiskSummary = {
   inputs?: Record<string, string>;
 };
 
-const RUN_COLOR: Record<string, string> = {
-  succeeded: "success",
-  failed: "error",
-  running: "processing",
-  queued: "default",
-  interrupted: "warning",
-};
-
-// Job runs do not depend on the risk snapshot, so they are the Dashboard
-// footer and show even while the snapshot is missing.
 export function OverviewPage() {
-  const { copy, locale, timeZone } = useCopy();
+  const { copy } = useCopy();
   return (
-    <Dashboard<RiskSummary>
-      module="risk"
-      title={copy.title}
-      footer={({ revision }) => (
-        <Runs revision={revision} locale={locale} timeZone={timeZone} />
-      )}
-    >
+    <Dashboard<RiskSummary> module="risk" title={copy.title}>
       {({ summary, asOf }) => <OverviewBody r={summary} asOf={asOf} />}
     </Dashboard>
   );
@@ -340,97 +323,5 @@ function OverviewBody({ r, asOf }: { r: RiskSummary; asOf: string }) {
         </Space>
       </Card>
     </Space>
-  );
-}
-
-function Runs({
-  revision,
-  locale,
-  timeZone,
-}: {
-  revision: number;
-  locale: string;
-  timeZone: string;
-}) {
-  const { copy } = useCopy();
-  const { get, ready } = useApi();
-  const [runs, setRuns] = useState<RunView[] | null>(null);
-  const [failed, setFailed] = useState(false);
-  useEffect(() => {
-    if (!ready) return;
-    const abort = new AbortController();
-    get<{ runs: RunView[] }>("/v1/runs", {}, abort.signal).then((result) => {
-      if (abort.signal.aborted) return;
-      setFailed(result.status === "error");
-      setRuns(result.status === "ok" ? arr(result.data.runs) : []);
-    });
-    return () => abort.abort();
-  }, [get, ready, revision]);
-  const time = (value?: string) => {
-    if (!value) return DASH;
-    const date = new Date(value);
-    return Number.isNaN(date.getTime())
-      ? value
-      : new Intl.DateTimeFormat(locale, {
-          dateStyle: "medium",
-          timeStyle: "short",
-          timeZone,
-        }).format(date);
-  };
-  const latest = runs?.[0];
-  return (
-    <Card
-      size="small"
-      title={copy.ov_runs}
-      extra={
-        latest && (
-          <Tag color={RUN_COLOR[latest.status] ?? "default"}>
-            {copy[`run_${latest.status}` as "run_queued"] ?? latest.status}
-          </Tag>
-        )
-      }
-    >
-      {failed && (
-        <Alert
-          type="error"
-          showIcon
-          title={copy.unavailable}
-          style={{ marginBottom: 8 }}
-        />
-      )}
-      <Table<RunView>
-        size="small"
-        rowKey="id"
-        loading={runs === null}
-        pagination={false}
-        locale={{ emptyText: <Empty description={copy.ov_noRuns} /> }}
-        dataSource={(runs ?? []).slice(0, 8)}
-        scroll={{ x: 560 }}
-        columns={[
-          { title: copy.run_job, dataIndex: "job" },
-          {
-            title: copy.run_status,
-            dataIndex: "status",
-            render: (x: string) => (
-              <Tag color={RUN_COLOR[x] ?? "default"}>
-                {copy[`run_${x}` as "run_queued"] ?? x}
-              </Tag>
-            ),
-          },
-          {
-            title: copy.run_finished,
-            dataIndex: "finished_at",
-            render: (_: unknown, row) =>
-              time(row.finished_at ?? row.started_at ?? row.queued_at),
-          },
-          { title: copy.run_attempt, dataIndex: "attempt", align: "right" },
-          {
-            title: copy.run_error,
-            dataIndex: "error",
-            render: (x?: string) => x ?? DASH,
-          },
-        ]}
-      />
-    </Card>
   );
 }

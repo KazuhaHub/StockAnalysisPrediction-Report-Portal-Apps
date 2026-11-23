@@ -39,18 +39,13 @@ const lastRows = (calls: string[]) => tableRows(calls).at(-1)!;
 const param = (path: string, key: string) =>
   new URL(path, "http://x.invalid").searchParams.get(key);
 
-test("overview shows market-level readings, run status and navigates to a dashboard", async () => {
+test("overview shows market-level readings and navigates to a dashboard", async () => {
   const app = await mount(backend());
   expect(
     await screen.findByText("Systemic-risk readings · 2026-11-16"),
   ).toBeTruthy();
   expect(screen.getByText("4.10%")).toBeTruthy();
   expect(screen.getByText("85 stocks")).toBeTruthy();
-  expect(
-    await screen.findByText("Succeeded", {
-      selector: ".ant-table-tbody .ant-tag",
-    }),
-  ).toBeTruthy();
   expect(app.page().page.title).toBe("Market Monitor");
   fireEvent.click(screen.getByRole("button", { name: "Margin" }));
   await waitFor(() => expect(app.page().page.title).toBe("Margin financing"));
@@ -141,9 +136,11 @@ test("switching the date reloads the summary and rows for that date", async () =
   );
 });
 
-test("a module without snapshots shows the empty state", async () => {
+test("a module without snapshots says the data is being prepared", async () => {
   await mount(backend({ dates: { margin: [] } }), { path: "/margin" });
-  expect(await screen.findByText(enUS.noData)).toBeTruthy();
+  expect(await screen.findByText(enUS.preparing)).toBeTruthy();
+  expect(screen.queryByText(enUS.unavailable)).toBeNull();
+  expect(screen.queryByRole("alert")).toBeNull();
 });
 
 test("sentiment dashboard renders readings and alerts without markup injection", async () => {
@@ -441,18 +438,18 @@ test("a date change keeps the filters and resets the page", async () => {
   expect(param(path, "f.state")).toBe("临界");
 });
 
-test("the run history shows even when the risk snapshot has no data", async () => {
-  await mount(
-    (path, params) =>
-      path.startsWith("/v1/risk/") ? noData : backend()(path, params),
+test("the overview without a risk snapshot is prepared, not an error, and never mentions jobs", async () => {
+  const app = await mount(
+    (path, params, request) =>
+      path.startsWith("/v1/risk/") ? noData : backend()(path, params, request),
     { path: "/" },
   );
-  expect(await screen.findByText(enUS.noData)).toBeTruthy();
-  expect(
-    await screen.findByText("Succeeded", {
-      selector: ".ant-table-tbody .ant-tag",
-    }),
-  ).toBeTruthy();
+  expect(await screen.findByText(enUS.preparing)).toBeTruthy();
+  expect(screen.queryByText(enUS.unavailable)).toBeNull();
+  expect(document.querySelector(".ant-table")).toBeNull();
+  expect(app.calls.some((c) => c.includes("runs") || c.includes("admin"))).toBe(
+    false,
+  );
 });
 
 test("selectable rows are keyboard operable and non-selectable rows are inert", async () => {

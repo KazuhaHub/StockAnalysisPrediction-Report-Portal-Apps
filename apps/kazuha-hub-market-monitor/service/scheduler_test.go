@@ -521,3 +521,19 @@ func TestRefusedBootstrapKeepsItsDayAndIsRecheckedBeforeRetry(t *testing.T) {
 		}
 	}
 }
+
+func TestFallbackCountsAManualRunWithTheManualTaskPrefix(t *testing.T) {
+	now := at(time.Monday, 22, 0)
+	s, r := schedulerFor(t, &now)
+	s.lastTick = at(time.Monday, 21, 59)
+	manual, _, err := r.Submit("marketdata", manualTaskPrefix+"20000000-0000-4000-8000-000000000001", manualOccurrence+"20000000-0000-4000-8000-000000000001")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Still pending when the fallback comes due: the fallback must not queue a second run.
+	now = at(time.Monday, 23, 30).Add(10 * time.Second)
+	if got := s.Tick(); strings.Contains(submitted(got), "marketdata") {
+		t.Fatalf("fallback ran beside a pending manual run: %s", submitted(got))
+	}
+	_ = manual
+}

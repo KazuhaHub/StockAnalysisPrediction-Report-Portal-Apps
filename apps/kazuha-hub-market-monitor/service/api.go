@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // readinessDataFormat is the on-disk format of docs/store-v2.md. It must equal app.v2.json data.schema:
@@ -18,13 +19,21 @@ const readinessDataFormat = "2"
 
 // Viewer routes (all GET, all require a verified X-Portal-Assertion):
 //
-//	/v1/runs                         job history
 //	/v1/{module}/dates               snapshot dates, newest first
 //	/v1/{module}/summary?date=       module summary without the row table
 //	/v1/{module}/rows?date=&page=&size=&sort=&order=&q=&f.<field>=
 //	/v1/{module}/rows/{code}?date=   one row and its detail
 //	/v1/{module}/history/dates, history, compare, streak, counts
 //	                                 cross-day queries (history_api.go)
+//
+// Admin routes (the platform signs "surface":"admin" assertions only for an
+// app's admin view, after checking that the viewer administers the app; the
+// routes below refuse every other assertion with 403 "forbidden"):
+//
+//	GET  /v1/admin/jobs              jobs, their schedule, next and last run
+//	GET  /v1/admin/runs              full run history
+//	GET  /v1/admin/runs/{id}/log     bounded tail of one run's log
+//	POST /v1/admin/jobs/{job}/run    start a job by hand (admin.go)
 //
 // The platform relay accepts response bodies up to 1 MiB, so the row table is
 // only ever returned a page at a time.
@@ -39,10 +48,17 @@ type server struct {
 	store  *Store
 	runner *Runner
 	auth   *authority
+	slots  []Slot
+	loc    *time.Location
+	now    func() time.Time
 }
 
 func newServer(store *Store, runner *Runner, auth *authority) *server {
-	return &server{store: store, runner: runner, auth: auth}
+	loc, err := time.LoadLocation(scheduleZone)
+	if err != nil {
+		loc = time.UTC
+	}
+	return &server{store: store, runner: runner, auth: auth, slots: DefaultSlots(), loc: loc, now: time.Now}
 }
 
 func (s *server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -61,8 +77,20 @@ func (s *server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.handshake(w, r)
 	case r.Method == http.MethodPost && r.URL.Path == "/v1/tasks/run":
 		s.task(w, r)
+	case r.Method == http.MethodPost && strings.HasPrefix(r.URL.Path, "/v1/admin/jobs/"):
+		s.adminRunNow(w, r)
+	case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/v1/admin/"):
+		claims, err := s.auth.verifyViewer(r.Header.Get("X-Portal-Assertion"), r.Method, r.URL.RequestURI(), nil)
+		if err != nil || !claims.Admin() {
+			writeError(w, http.StatusForbidden, "forbidden")
+			return
+		}
+		s.adminRead(w, r)
 	case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/v1/"):
-		if s.auth.verifyViewer(r.Header.Get("X-Portal-Assertion"), r.Method, r.URL.RequestURI(), nil) != nil {
+		// Reader data routes accept admin assertions too: an app admin may
+		// read the dashboards inside the admin page, and this app holds no
+		// audience-sensitive data beyond those dashboards.
+		if _, err := s.auth.verifyViewer(r.Header.Get("X-Portal-Assertion"), r.Method, r.URL.RequestURI(), nil); err != nil {
 			writeError(w, http.StatusForbidden, "forbidden")
 			return
 		}
@@ -158,10 +186,6 @@ func validField(name string) bool {
 
 func (s *server) read(w http.ResponseWriter, r *http.Request) {
 	parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/v1/"), "/")
-	if len(parts) == 1 && parts[0] == "runs" && r.URL.RawQuery == "" {
-		writeJSON(w, http.StatusOK, map[string]any{"runs": s.runner.Runs()})
-		return
-	}
 	if len(parts) < 2 || !modules[parts[0]] {
 		writeError(w, http.StatusNotFound, "not_found")
 		return

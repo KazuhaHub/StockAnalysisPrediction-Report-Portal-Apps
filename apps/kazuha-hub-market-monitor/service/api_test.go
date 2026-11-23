@@ -320,13 +320,8 @@ func TestTaskStartsARunAndIsIdempotent(t *testing.T) {
 	if r2 := second["result"].(map[string]any); r2["run_id"] != result["run_id"] || r2["duplicate"] != true {
 		t.Fatalf("duplicate %v", second)
 	}
-	rec := e.get(t, "/v1/runs", true)
-	out := decode(t, rec)
-	if runs := out["runs"].([]any); len(runs) != 1 {
-		t.Fatalf("runs %v", out)
-	}
-	if strings.Contains(rec.Body.String(), testTaskID) {
-		t.Fatalf("runs view leaks the platform task id: %s", rec.Body.String())
+	if runs := e.srv.runner.Runs(); len(runs) != 1 {
+		t.Fatalf("runs %v", runs)
 	}
 }
 

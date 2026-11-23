@@ -88,7 +88,7 @@ func main() {
 	// does not spend a requeued run's attempts.
 	stopRunner := runner.Start()
 	// The slots are exchange times; they are not configurable.
-	loc, err := time.LoadLocation("Asia/Shanghai")
+	loc, err := time.LoadLocation(scheduleZone)
 	if err != nil {
 		stopRunner()
 		stopProxy()

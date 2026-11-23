@@ -217,7 +217,6 @@ export type Options = {
   dates?: Record<string, string[]>;
   /** Replaces a module's scripted rows. */
   rows?: Record<string, Record<string, unknown>[]>;
-  failRuns?: boolean;
   /** Replaces a module's scripted summary. */
   summary?: Record<string, unknown>;
 };
@@ -226,21 +225,6 @@ export type Options = {
 export function backend(options: Options = {}): Handler {
   return (path, params) => {
     const parts = path.replace("/v1/", "").split("/");
-    if (parts[0] === "runs")
-      return options.failRuns
-        ? { status: 409, body: { error: "unavailable" } }
-        : ok({
-            runs: [
-              {
-                id: "r1",
-                job: "margin",
-                status: "succeeded",
-                attempt: 1,
-                queued_at: "2026-11-17T01:00:00Z",
-                finished_at: "2026-11-17T01:05:00Z",
-              },
-            ],
-          });
     const module = parts[0];
     const dates = options.dates?.[module] ?? ["2026-11-16", "2026-11-13"];
     if (parts[1] === "dates") return ok({ module, dates });

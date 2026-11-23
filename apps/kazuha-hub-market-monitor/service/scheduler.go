@@ -42,7 +42,11 @@ import (
 // after checking again that the snapshot is still missing and no run of the
 // job is queued or running.
 
-const catchUpWindow = 20 * time.Hour
+const (
+	catchUpWindow = 20 * time.Hour
+	// scheduleZone is the time zone of every slot: exchange time.
+	scheduleZone = "Asia/Shanghai"
+)
 
 type Slot struct {
 	Job          string
@@ -125,6 +129,19 @@ func (sl Slot) latest(after, until time.Time, loc *time.Location) (time.Time, bo
 			return t, true
 		}
 		return time.Time{}, false
+	}
+	return time.Time{}, false
+}
+
+// next returns the slot's first occurrence strictly after t.
+func (sl Slot) next(t time.Time, loc *time.Location) (time.Time, bool) {
+	u := t.In(loc)
+	for ahead := 0; ahead <= 8; ahead++ {
+		day := u.AddDate(0, 0, ahead)
+		c := time.Date(day.Year(), day.Month(), day.Day(), sl.Hour, sl.Minute, 0, 0, loc)
+		if c.After(t) && sl.on(c.Weekday()) {
+			return c, true
+		}
 	}
 	return time.Time{}, false
 }
