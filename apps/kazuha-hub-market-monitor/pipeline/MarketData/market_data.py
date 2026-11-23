@@ -785,6 +785,47 @@ def _fetch_range(code: str, start: str, end: str, retries: int = _THROTTLE_RETRI
     raise RuntimeError(f"{code} 连续 {retries} 次被限流（最后：{str(last)[:80]}）")
 
 
+# 北交所：920xxx（2024 年换号后）、8xxxxx / 4xxxxx（换号前）。MCP 通道认不出它们的交易所，
+# 一律报「无法识别股票代码 … 的交易所」（README §4.1：只有 HTTP 通道能取北交所）。
+_BSE_PREFIXES = ("920", "8", "4")
+
+# 探针优先用这几只：流动性最好、几乎不会停牌，取不到就只能是源端的问题。
+_PROBE_ANCHORS = ("600519", "000001", "601318", "600036", "000333", "600000")
+
+
+def _is_bse(code: str) -> bool:
+    return str(code).startswith(_BSE_PREFIXES)
+
+
+def _channel_unsupported(code: str, err) -> bool:
+    """通道不支持这只票（不是源端故障）：只认北交所代码的「无法识别交易所」。
+
+    主板票报同样的错是真故障，照常计入失败和熔断。
+    """
+    s = str(err)
+    return _is_bse(code) and "无法识别" in s and "交易所" in s
+
+
+def _pick_probe(plan: list) -> int | None:
+    """探针在 plan 里的下标：通道取得到的流动性好的票，永远不选北交所。
+
+    2026-11-23 生产事故：上轮没补上的北交所代码排在最前，探针取 plan[0]
+    → MCP 报「无法识别交易所」→ 整轮 5,589 只被当成"数据源不可用"中止。
+    全是北交所时返回 None：没有能代表整源状态的票，交给逐只处理。
+    """
+    idx = {c: i for i, (c, _, _) in enumerate(plan)}
+    for a in _PROBE_ANCHORS:
+        if a in idx:
+            return idx[a]
+    for i, (c, _, _) in enumerate(plan):
+        if c.startswith(("60", "00")):                       # 沪深主板
+            return i
+    for i, (c, _, _) in enumerate(plan):
+        if not _is_bse(c) and not c.startswith(("200", "900")):   # B 股通道也未必支持
+            return i
+    return None
+
+
 def _collect(code: str, r: dict, st: dict, got: dict, warn: list) -> None:
     """把一次抓取结果并进待写批次，并检查新旧衔接是否异常。"""
     bars = [b for b in r.get("bars") or [] if b["d"] > (st.get(code) or {}).get("last", "")]
@@ -861,10 +902,10 @@ def update(codes=None, workers: int = 6, end: str | None = None,
         print(head + (f" · 其中 {len(pend & set(targets))} 只是上轮没补上的" if pend else ""))
     if dry_run or not plan:
         return {"n_targets": len(plan), "n_ok": 0, "n_fail": 0, "new_bars": 0,
-                "fail": [], "aborted": None}
+                "fail": [], "unsupported": [], "aborted": None}
 
     _ping()
-    got, fail, warn = {}, [], []
+    got, fail, warn, unsupported = {}, [], [], []
     ok_codes = set()                 # 这次明确抓取成功的票（含停牌返回空的）
     n_fetch_ok = 0
     t_begin = dt.datetime.now()
@@ -872,25 +913,28 @@ def update(codes=None, workers: int = 6, end: str | None = None,
 
     # 探针：整源不可用时（源端报错、被限流），别把 1500 只票逐个试一遍。
     # 实测一次全量"逐个失败"能烧掉几小时，而库里数据其实一根都没变。
-    c0, s0, e0 = plan[0]
-    try:
-        r0 = _fetch_range(c0, s0, e0)
-    except Exception as e:                                   # noqa: BLE001
-        thr = _is_throttle(e)
-        _log({"kind": "update_abort", "probe": c0, "reason": repr(e)[:160],
-              "throttled": thr, "n_targets": len(plan)})
-        if thr:
-            raise SystemExit(
-                f"服务端持续限流（{c0} 重试 {_THROTTLE_RETRIES} 次仍被拒），本次更新已中止；"
-                f"库里数据未改动。\n当前请求间隔已放到 {_PACE['gap']:.1f} 秒。"
-                "稍后重试，或降并发：python3 market_data.py update --workers 2") from None
-        raise SystemExit(f"数据源不可用（{str(e)[:120]}），本次更新已中止；库里数据未改动。"
-                         "\n稍后重试：python3 market_data.py update") from None
-    n_fetch_ok += 1
-    ok_codes.add(c0)
-    _collect(c0, r0, st, got, warn)
+    # 探针必须是通道取得到的票（_pick_probe），否则一只北交所代码就能让整轮中止。
+    rest = list(plan)
+    pi = _pick_probe(plan)
+    if pi is not None:
+        c0, s0, e0 = rest.pop(pi)
+        try:
+            r0 = _fetch_range(c0, s0, e0)
+        except Exception as e:                               # noqa: BLE001
+            thr = _is_throttle(e)
+            _log({"kind": "update_abort", "probe": c0, "reason": repr(e)[:160],
+                  "throttled": thr, "n_targets": len(plan)})
+            if thr:
+                raise SystemExit(
+                    f"服务端持续限流（{c0} 重试 {_THROTTLE_RETRIES} 次仍被拒），本次更新已中止；"
+                    f"库里数据未改动。\n当前请求间隔已放到 {_PACE['gap']:.1f} 秒。"
+                    "稍后重试，或降并发：python3 market_data.py update --workers 2") from None
+            raise SystemExit(f"数据源不可用（{str(e)[:120]}），本次更新已中止；库里数据未改动。"
+                             "\n稍后重试：python3 market_data.py update") from None
+        n_fetch_ok += 1
+        ok_codes.add(c0)
+        _collect(c0, r0, st, got, warn)
 
-    rest = plan[1:]
     streak, thr_streak, max_streak = 0, 0, max(6, workers * 3)
     aborted = None
     with ThreadPoolExecutor(max_workers=workers) as ex:
@@ -904,6 +948,11 @@ def update(codes=None, workers: int = 6, end: str | None = None,
                 streak = thr_streak = 0
                 _collect(c, r, st, got, warn)
             except Exception as e:                           # noqa: BLE001
+                if _channel_unsupported(c, e):
+                    # 通道不支持这只票：既不是失败也不进待补清单（否则每晚排最前、
+                    # 永远补不上），更不能算进熔断——它说明不了源端状态。
+                    unsupported.append(c)
+                    continue
                 thr = _is_throttle(e)
                 fail.append({"code": c, "err": repr(e)[:120], "throttle": thr})
                 if thr:
@@ -934,14 +983,15 @@ def update(codes=None, workers: int = 6, end: str | None = None,
 
     out = {"n_targets": len(plan), "n_ok": n_fetch_ok, "n_fail": len(fail),
            "new_bars": 0, "fail": fail, "warn": warn, "aborted": aborted,
+           "unsupported": sorted(unsupported),
            "started": t_begin.isoformat(timespec="seconds"),
            "elapsed": round(time.time() - t0, 1),
-           "empty": max(0, len(plan) - len(got) - len(fail))}
+           "empty": max(0, len(plan) - len(got) - len(fail) - len(unsupported))}
     # 失败清单落盘：明天优先补它们，而不是从 000001 重新排、在同一段再撞一次。
     # 必须与旧清单合并——分批跑时后一段的空失败会覆盖前一段的，实测丢过 2 只。
     lag = {f["code"]: (st.get(f["code"]) or {}).get("last") or DEFAULT_START
            for f in fail}
-    for c in set(_read_pending()) - ok_codes:
+    for c in set(_read_pending()) - ok_codes - set(unsupported):
         if c not in lag and c in st:
             lag[c] = (st.get(c) or {}).get("last") or DEFAULT_START
     _write_pending(lag)
@@ -958,11 +1008,16 @@ def update(codes=None, workers: int = 6, end: str | None = None,
         m2["date_range"] = _date_range(m2)
         m2["n_bars"] = _n_bars()
         _write_meta(m2)
-    _log({"kind": "update", **{k: v for k, v in out.items() if k not in ("fail",)},
-          "fail_n": len(fail), "fail": fail[:20]})
+    _log({"kind": "update",
+          **{k: v for k, v in out.items() if k not in ("fail", "unsupported")},
+          "fail_n": len(fail), "fail": fail[:20],
+          "unsupported_n": len(unsupported), "unsupported": sorted(unsupported)[:20]})
     if not quiet:
         print(f"完成：{out['n_ok']} 只抓取成功、{out['n_fail']} 只失败；"
               f"{len(got)} 只有新 bar，新增 {out['new_bars']:,} 行")
+        if unsupported:
+            print(f"跳过 {len(unsupported)} 只北交所票：MCP 通道取不到，需走 HTTP 通道"
+                  "（README §4.1）")
         if warn:
             print(f"⚠ {len(warn)} 只票新旧衔接跳空 >25%，检查复权基准：{[w['code'] for w in warn][:10]}")
     return out

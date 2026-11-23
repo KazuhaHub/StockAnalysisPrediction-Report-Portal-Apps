@@ -451,7 +451,118 @@ class T(unittest.TestCase):
             md.update(end="2024-01-03", workers=1, quiet=True)
         finally:
             md._fetch_range, md._ping = real_fetch, real_ping
-        self.assertEqual(seen[:2], ["600001", "600003"])
+        # 探针（流动性好的锚点票）先跑一只，紧接着就是待补清单
+        self.assertEqual(seen[0], "600000")
+        self.assertEqual(seen[1:3], ["600001", "600003"])
+
+    # ---------------------------------------------------------------- 北交所与探针
+    def _run_update(self, fake, **kw):
+        seen = []
+        real_fetch, real_ping = md._fetch_range, md._ping
+        md._ping = lambda: None
+
+        def rec_fake(c, s, e):
+            seen.append(c)
+            return fake(c, s, e)
+
+        md._fetch_range = rec_fake
+        try:
+            return md.update(end="2024-01-03", quiet=True, **kw), seen
+        finally:
+            md._fetch_range, md._ping = real_fetch, real_ping
+
+    @staticmethod
+    def _mcp_like(c, s, e):
+        """MCP 通道的真实行为：北交所代码直接报"无法识别交易所"。"""
+        if md._is_bse(c):
+            raise RuntimeError(f"数据源报错：无法识别股票代码 {c} 的交易所")
+        return {"code": c, "name": c, "bars": []}
+
+    def test_is_bse(self):
+        for c in ("920001", "830799", "873223", "430047"):
+            self.assertTrue(md._is_bse(c), c)
+        for c in ("600519", "000001", "300750", "688981", "900901", "200002"):
+            self.assertFalse(md._is_bse(c), c)
+
+    def test_probe_is_never_a_bse_code(self):
+        """2026-11-23 生产事故：上轮没补上的北交所代码排在最前，探针取 plan[0]
+        → MCP 报"无法识别交易所" → 整轮 5,589 只中止。探针必须选通道取得到的票。"""
+        codes = ["920001", "920002", "300750", "000001", "600519"]
+        md.ingest([rec(c, [("2024-01-02", 1, 2, 0.5, 1.5)]) for c in codes])
+        md._write_pending({"920001": "2024-01-02", "920002": "2024-01-02",
+                           "300750": "2024-01-02"})
+        out, seen = self._run_update(self._mcp_like, workers=1)
+        self.assertEqual(seen[0], "600519")            # 优先流动性好的主板票
+        self.assertIsNone(out["aborted"])
+        self.assertEqual(out["n_fail"], 0)
+        self.assertEqual(sorted(out["unsupported"]), ["920001", "920002"])
+        # 通道取不到的票不进待补清单：否则每晚排最前、永远补不上
+        self.assertEqual(md._read_pending(), [])
+
+    def test_bse_skips_do_not_trip_breaker(self):
+        codes = [f"9200{i:02d}" for i in range(20)] + ["600000"]
+        md.ingest([rec(c, [("2024-01-02", 1, 2, 0.5, 1.5)]) for c in codes])
+        out, _ = self._run_update(self._mcp_like, workers=1)   # 熔断阈值 6
+        self.assertIsNone(out["aborted"])
+        self.assertEqual(len(out["unsupported"]), 20)
+        self.assertEqual(out["fail"], [])
+
+    def test_only_bse_codes_does_not_abort(self):
+        md.ingest([rec(c, [("2024-01-02", 1, 2, 0.5, 1.5)]) for c in ("920001", "830799")])
+        out, _ = self._run_update(self._mcp_like, workers=1)
+        self.assertIsNone(out["aborted"])
+        self.assertEqual(sorted(out["unsupported"]), ["830799", "920001"])
+
+    def test_probe_source_failure_still_aborts(self):
+        """整源故障（源端报错、限流）仍由探针一次判定并中止，不逐只试一遍。"""
+        md.ingest([rec(c, [("2024-01-02", 1, 2, 0.5, 1.5)]) for c in ("920001", "600000")])
+
+        def down(c, s, e):
+            raise RuntimeError("数据源报错：连接超时")
+
+        seen = []
+
+        def down_seen(c, s, e):
+            seen.append(c)
+            return down(c, s, e)
+
+        real_fetch, real_ping = md._fetch_range, md._ping
+        md._ping, md._fetch_range = (lambda: None), down_seen
+        try:
+            with self.assertRaises(SystemExit):
+                md.update(end="2024-01-03", workers=1, quiet=True)
+        finally:
+            md._fetch_range, md._ping = real_fetch, real_ping
+        self.assertEqual(seen, ["600000"])             # 探针是主板票，且只试了一只
+
+    def test_bse_skips_do_not_mask_an_outage(self):
+        """北交所跳过既不累加也不清零熔断计数：穿插着 920xxx 的真故障照样熔断。"""
+        main = [f"6000{i:02d}" for i in range(1, 9)]
+        bse = [f"9200{i:02d}" for i in range(8)]
+        md.ingest([rec(c, [("2024-01-02", 1, 2, 0.5, 1.5)])
+                   for c in ["600000"] + main + bse])
+
+        def outage(c, s, e):
+            if c == "600000":
+                return {"code": c, "name": c, "bars": []}
+            return self._mcp_like(c, s, e) if md._is_bse(c) else (_ for _ in ()).throw(
+                RuntimeError("数据源报错：连接超时"))
+
+        out, _ = self._run_update(outage, workers=1)   # 熔断阈值 6
+        self.assertEqual(out["aborted"], "source")
+
+    def test_unrecognized_exchange_on_main_board_is_a_failure(self):
+        """只有北交所代码的"无法识别交易所"算通道不支持；主板票报这个是真故障。"""
+        md.ingest([rec(c, [("2024-01-02", 1, 2, 0.5, 1.5)]) for c in ("600000", "600001")])
+
+        def odd(c, s, e):
+            if c == "600001":
+                raise RuntimeError(f"数据源报错：无法识别股票代码 {c} 的交易所")
+            return {"code": c, "name": c, "bars": []}
+
+        out, _ = self._run_update(odd, workers=1)
+        self.assertEqual([f["code"] for f in out["fail"]], ["600001"])
+        self.assertEqual(out["unsupported"], [])
 
     def test_pending_roundtrip(self):
         md._write_pending({"600519": "2026-10-30", "000001": "2026-11-01"})
