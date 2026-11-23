@@ -47,7 +47,20 @@ type Claims struct {
 	Path       string `json:"path"`
 	BodyDigest string `json:"body_sha256"`
 	Viewer     Viewer `json:"viewer"`
+	// Surface is empty for a reader view and SurfaceAdmin for an app's admin
+	// view. The host signs SurfaceAdmin only after checking that the viewer is an
+	// administrator of this app at signing time. It is omitted when empty, so a
+	// reader assertion keeps the shape older verifiers accept, and those
+	// verifiers refuse an admin assertion as an unknown field.
+	Surface string `json:"surface,omitempty"`
 }
+
+// SurfaceAdmin marks an assertion issued for an app's admin view.
+const SurfaceAdmin = "admin"
+
+// Admin reports whether the host issued this assertion for the app's admin
+// view. A backend must require it on every admin-only route.
+func (c Claims) Admin() bool { return c.Surface == SurfaceAdmin }
 
 type Signer struct {
 	Issuer, Audience, AppID, InstanceID, BootID, KeyID string
@@ -121,6 +134,16 @@ func signature(key []byte, encoded string) []byte {
 // Sign uses identity facts already verified by the host for this request. It
 // does not turn client-supplied identities into trusted facts.
 func (s Signer) Sign(method, path string, body []byte, viewer Viewer, now time.Time) (string, error) {
+	return s.sign(method, path, body, viewer, "", now)
+}
+
+// SignAdmin signs a request from the app's admin view. The caller must have
+// checked, for this request, that the viewer currently administers the app.
+func (s Signer) SignAdmin(method, path string, body []byte, viewer Viewer, now time.Time) (string, error) {
+	return s.sign(method, path, body, viewer, SurfaceAdmin, now)
+}
+
+func (s Signer) sign(method, path string, body []byte, viewer Viewer, surface string, now time.Time) (string, error) {
 	if len(s.Key) < 32 || s.KeyID == "" || s.Issuer == "" || s.Audience == "" || s.AppID == "" || s.InstanceID == "" || s.BootID == "" || !validRequest(method, path) || !validViewer(viewer) {
 		return "", ErrInvalid
 	}
@@ -128,7 +151,7 @@ func (s Signer) Sign(method, path string, body []byte, viewer Viewer, now time.T
 	if _, err := rand.Read(nonce); err != nil {
 		return "", err
 	}
-	claims := Claims{Version: 1, KeyID: s.KeyID, Issuer: s.Issuer, Audience: s.Audience, AppID: s.AppID, InstanceID: s.InstanceID, BootID: s.BootID, RequestID: base64.RawURLEncoding.EncodeToString(nonce), IssuedAt: now.Unix(), ExpiresAt: now.Add(Lifetime).Unix(), Method: method, Path: path, BodyDigest: digest(body), Viewer: viewer}
+	claims := Claims{Version: 1, KeyID: s.KeyID, Issuer: s.Issuer, Audience: s.Audience, AppID: s.AppID, InstanceID: s.InstanceID, BootID: s.BootID, RequestID: base64.RawURLEncoding.EncodeToString(nonce), IssuedAt: now.Unix(), ExpiresAt: now.Add(Lifetime).Unix(), Method: method, Path: path, BodyDigest: digest(body), Viewer: viewer, Surface: surface}
 	raw, err := json.Marshal(claims)
 	if err != nil {
 		return "", err
@@ -171,7 +194,7 @@ func (v *Verifier) Verify(token, method, path string, body []byte, now time.Time
 	if err != nil || len(key) < 32 || !hmac.Equal(signature(key, encoded), got) {
 		return empty, ErrInvalid
 	}
-	if c.Version != 1 || c.Issuer != v.config.Issuer || c.Audience != v.config.Audience || c.AppID != v.config.AppID || c.InstanceID != v.config.InstanceID || c.BootID != v.config.BootID || c.BootID == "" || c.RequestID == "" || len(c.RequestID) > 128 || c.Method != method || c.Path != path || c.BodyDigest != digest(body) || !validViewer(c.Viewer) {
+	if c.Version != 1 || c.Issuer != v.config.Issuer || c.Audience != v.config.Audience || c.AppID != v.config.AppID || c.InstanceID != v.config.InstanceID || c.BootID != v.config.BootID || c.BootID == "" || c.RequestID == "" || len(c.RequestID) > 128 || c.Method != method || c.Path != path || c.BodyDigest != digest(body) || !validViewer(c.Viewer) || (c.Surface != "" && c.Surface != SurfaceAdmin) {
 		return empty, ErrInvalid
 	}
 	if c.IssuedAt > now.Add(5*time.Second).Unix() || c.ExpiresAt <= now.Unix() || c.ExpiresAt <= c.IssuedAt || c.ExpiresAt-c.IssuedAt > int64(Lifetime/time.Second) {
