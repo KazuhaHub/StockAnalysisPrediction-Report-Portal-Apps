@@ -1,0 +1,12 @@
+{
+  "app_id": "kazuha-hub-market-monitor",
+  "version": "0.1.0-beta.4",
+  "commit": "9a106082c4f85b14ed2a3d8ea2c7ee3471c51ca1",
+  "run_url": "https://github.com/KazuhaHub/StockAnalysisPrediction-Report-Portal-Apps/actions/runs/45132789269",
+  "package_oci": {
+    "repository": "ghcr.io/kazuhahub/portal-apps/kazuha-hub-market-monitor",
+    "digest": "sha256:e8947826b075fef3d2ed4fd6cfeea08bee146113d3c919f45f3fe4308db998aa"
+  },
+  "package_sha256": "510b59624bcf45c823bc099b2d4c01babff7815209ffd3029ebdc172d3b13547",
+  "notes": "\u9996\u6b21\u542f\u52a8\u6216\u67d0\u4e2a\u770b\u677f\u8fd8\u6ca1\u6709\u4efb\u4f55\u5feb\u7167\u65f6\uff0c\u5e94\u7528\u4f1a\u7acb\u5373\u4e3a\u7f3a\u6570\u636e\u7684\u770b\u677f\u5404\u8fd0\u884c\u4e00\u6b21\u4efb\u52a1\uff08\u5148\u66f4\u65b0\u884c\u60c5\uff0c\u518d\u8ba1\u7b97\u60c5\u7eea\u548c\u4f30\u503c\uff09\uff0c\u4e0d\u518d\u7a7a\u7b49\u5230\u4e0b\u4e00\u4e2a\u5b9a\u65f6\u65f6\u6bb5\u3002A dashboard with no snapshot yet now runs its job once when the app starts (market data first), instead of waiting for its next scheduled slot."
+}
