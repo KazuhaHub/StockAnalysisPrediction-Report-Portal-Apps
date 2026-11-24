@@ -46,12 +46,17 @@ def load_inputs():
 
 
 def trading_calendar(nv):
-    """交易日历：指数日线与净值库的日期并集（都只含交易日，且不受份额缺口影响）。"""
-    days = set(pd.to_datetime(nv["date"]))
+    """交易日历：上证指数日线的日期（只含交易日，不受份额缺口影响）；指数还没
+    到的最新几天用净值日期补上。净值不单独做日历：个别基金会在非交易日
+    （半年末、年末）公布净值，混进来会让跨过它的变化都变成合并值。"""
+    nav_days = pd.DatetimeIndex(sorted(set(pd.to_datetime(nv["date"]))))
     idx = os.path.join(DATA, "index.parquet")
-    if os.path.exists(idx):
-        days |= set(pd.to_datetime(pd.read_parquet(idx, columns=["date"])["date"]))
-    return pd.DatetimeIndex(sorted(days))
+    if not os.path.exists(idx):
+        return nav_days
+    days = pd.DatetimeIndex(sorted(set(pd.to_datetime(pd.read_parquet(idx, columns=["date"])["date"]))))
+    if len(days):
+        days = days.append(nav_days[nav_days > days.max()])
+    return days
 
 
 def compute_flows(sh, nv, cal):

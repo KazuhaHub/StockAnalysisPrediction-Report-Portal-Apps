@@ -141,7 +141,9 @@ function EtfBody({
               p.value && typeof p.value === "object"
                 ? (p.value as { value?: unknown }).value
                 : p.value;
-            const text = isNum(raw as Num) ? fmt(raw as Num, 1) : DASH;
+            const text = isNum(raw as Num)
+              ? fmt(raw as Num, p.seriesIndex === 2 ? 2 : 1)
+              : DASH;
             const n = p.seriesIndex === 0 ? merged(p.dataIndex) : 0;
             return `${p.marker}${escapeHtml(p.seriesName)}: ${text}${
               n ? ` (${escapeHtml(fill(copy.etf_merged, { n }))})` : ""

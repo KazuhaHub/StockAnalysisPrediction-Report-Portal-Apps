@@ -179,10 +179,9 @@ GAP_LOOKBACK_DAYS = 120   # 回补缺口的回看窗口（自然日，约 80 个
 
 
 def known_trade_days():
-    """本地已有的交易日历：指数日线与净值库的日期并集（两者都只有交易日）。
-    取不到时退回新浪交易日历。"""
+    """本地已有的交易日：上证指数日线的日期。"""
     days = set()
-    for name in ("index.parquet", "nav.parquet"):
+    for name in ("index.parquet",):
         path = os.path.join(HERE, "..", "data", name)
         if os.path.exists(path):
             days |= set(pd.to_datetime(pd.read_parquet(path, columns=["date"])["date"]).dt.date)
@@ -199,9 +198,15 @@ def fill_gaps(old, upto, calendar=None, lookback=GAP_LOOKBACK_DAYS, fetch=None):
     if not sh_dates or upto is None:
         return old, []
     start = max(min(sh_dates), upto - dt.timedelta(days=lookback))
-    calendar = known_trade_days() if calendar is None else calendar
-    if not calendar:
-        calendar = trade_days(start, upto)
+    if calendar is None:
+        # 指数与净值在 refresh.sh 里排在份额之后，停机之后它们还没有那几天；
+        # 新浪交易日历补上，取不到就只用本地的。
+        calendar = set(known_trade_days())
+        try:
+            calendar |= set(trade_days(start, upto))
+        except Exception as e:
+            print("[shares] 交易日历（新浪）取不到：%s" % type(e).__name__, file=sys.stderr)
+        calendar = sorted(calendar)
     todo = [d for d in calendar if start <= d <= upto and d not in sh_dates]
     if not todo:
         return old, []

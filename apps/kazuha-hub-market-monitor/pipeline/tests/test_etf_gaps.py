@@ -113,6 +113,18 @@ class Metrics(unittest.TestCase):
         self.assertEqual(top["days"], 7)
         self.assertEqual(top["end"], str(self.cal[-6].date()))
 
+    def test_a_day_without_sse_shares_yet_does_not_become_the_latest_day(self):
+        # Shanghai publishes shares the next day: after the close the index
+        # and turnover already have today.
+        nxt = self.cal[-1] + pd.offsets.BDay(1)
+        for name, extra in (("index.parquet", {"open": 3000.0, "high": 3000.0, "low": 3000.0, "close": 3000.0}),
+                            ("amount.parquet", {"code": "510300", "amount": 100.0})):
+            df = pd.read_parquet(self.data / name)
+            pd.concat([df, pd.DataFrame([{"date": nxt, **extra}])]).to_parquet(self.data / name, index=False)
+        m = self.run_metrics()
+        self.assertEqual(m["current"]["last_date"], str(self.cal[-1].date()))
+        self.assertEqual(m["current"]["last_span"], 5)
+
     def test_series_mark_the_merged_value_and_leave_gap_days_empty(self):
         m = self.run_metrics()
         s = m["series"]
@@ -121,6 +133,20 @@ class Metrics(unittest.TestCase):
         self.assertEqual(s["nf_span"][-1], 5)
         self.assertEqual(s["nf"][-5:-1], [None] * 4)
         self.assertEqual(m["scope"]["merged_days"], 1)
+
+
+@unittest.skipIf(pd is None, "pandas not installed")
+class DailyTotal(unittest.TestCase):
+    def test_one_fund_missing_a_day_does_not_merge_the_whole_day(self):
+        import metrics
+        d = pd.Timestamp("2026-11-20")
+        f = pd.DataFrame({"date": [d] * 4, "code": list("abcd"), "flow": [1.0, 2.0, 3.0, 4.0],
+                          "span": [1, 1, 1, 3]})
+        nf, span = metrics.sse_daily(f)
+        self.assertEqual(nf[d], 10.0)
+        self.assertEqual(span[d], 1)
+        f["span"] = [5, 5, 5, 1]
+        self.assertEqual(metrics.sse_daily(f)[1][d], 5)
 
 
 @unittest.skipIf(pd is None, "pandas not installed")
