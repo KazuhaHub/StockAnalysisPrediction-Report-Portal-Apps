@@ -1,0 +1,12 @@
+{
+  "app_id": "kazuha-hub-market-monitor",
+  "version": "0.1.0-beta.13",
+  "commit": "8197eb8e3c990dba3176e86a4ca5c3a3721d93ca",
+  "run_url": "https://github.com/KazuhaHub/StockAnalysisPrediction-Report-Portal-Apps/actions/runs/45488304243",
+  "package_oci": {
+    "repository": "ghcr.io/kazuhahub/portal-apps/kazuha-hub-market-monitor",
+    "digest": "sha256:82dc616addb05b48734eaf1eacd095685ee256cd653b8d0ac4440de0956094b7"
+  },
+  "package_sha256": "079b442651e6aceaea136f21de87fbb9c0b9476970a065f70c339f6df6c3a567",
+  "notes": "Every chart and signed number follows the A-share terminal colour conventions: red up, green down and nothing else; series, moving averages, thresholds, markers and statuses in a consistent palette."
+}
