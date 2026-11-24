@@ -7,7 +7,7 @@ import {
   Collapse,
   ConfigProvider,
   Empty,
-  Modal,
+  Popover,
   Space,
   Spin,
   Tag,
@@ -424,24 +424,39 @@ function RunNow({
               : copy.admin_runFailed,
     );
   };
+  // Anchored to the button, not a centred modal: the Portal embeds this page
+  // in an iframe as tall as the page, so the iframe's viewport centre can be
+  // far below what the Portal page shows.
+  const title = fill(copy.admin_runNowTitle, names);
   return (
-    <>
-      <Button onClick={show} aria-label={`${copy.admin_runNow}: ${job}`}>
-        {copy.admin_runNow}
-      </Button>
-      <Modal
-        open={open}
-        title={fill(copy.admin_runNowTitle, names)}
-        onCancel={close}
-        mask={{ closable: !busy }}
-        keyboard={!busy}
-        closable={!busy}
-        destroyOnHidden
-        afterOpenChange={(visible) => {
-          if (visible) cancel.current?.focus();
-        }}
-        footer={
-          <Space wrap>
+    <Popover
+      open={open}
+      onOpenChange={(next) => {
+        if (!next) close();
+      }}
+      trigger="click"
+      placement="bottomRight"
+      destroyOnHidden
+      afterOpenChange={(visible) => {
+        if (visible) cancel.current?.focus();
+      }}
+      content={
+        <div
+          role="dialog"
+          aria-modal="false"
+          aria-label={title}
+          className="mm-confirm"
+          onKeyDown={(event) => {
+            if (event.key === "Escape") {
+              event.stopPropagation();
+              close();
+            }
+          }}
+        >
+          <div className="mm-confirm-title">{title}</div>
+          <p>{fill(copy.admin_runNowBody, names)}</p>
+          {error && <Alert type="error" showIcon title={error} role="alert" />}
+          <Space wrap className="mm-confirm-actions">
             <Button ref={cancel} onClick={close} disabled={busy} autoFocus>
               {copy.admin_cancel}
             </Button>
@@ -451,12 +466,17 @@ function RunNow({
               </Button>
             )}
           </Space>
-        }
+        </div>
+      }
+    >
+      <Button
+        onClick={() => (open ? close() : show())}
+        aria-label={`${copy.admin_runNow}: ${job}`}
+        aria-expanded={open}
       >
-        <p>{fill(copy.admin_runNowBody, names)}</p>
-        {error && <Alert type="error" showIcon title={error} role="alert" />}
-      </Modal>
-    </>
+        {copy.admin_runNow}
+      </Button>
+    </Popover>
   );
 }
 

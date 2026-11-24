@@ -1,5 +1,6 @@
 import { useMemo } from "react";
-import { Alert, Card, Col, Empty, Progress, Row, Space, Table } from "antd";
+import { Alert, Empty, Progress, Space, Table } from "antd";
+import { Panel, Panels } from "../components/Panels";
 import { Dashboard } from "../components/Dashboard";
 import { EChart } from "../components/EChart";
 import { KpiRow, type KpiItem } from "../components/Kpi";
@@ -235,126 +236,111 @@ function SentimentBody({ s }: { s: SentimentSummary }) {
         />
       )}
       <KpiRow items={kpis} cols={{ xs: 12, md: 6 }} />
-      <Row gutter={[16, 16]}>
-        <Col xs={24} lg={10}>
-          <Card size="small" title={copy.sent_dims} style={{ height: "100%" }}>
-            {dims.length === 0 && <Empty description={copy.noData} />}
-            {dims.map((d) => (
-              <div key={d.k} style={{ marginBottom: 12 }}>
-                <div className="mm-between">
-                  <b>{d.k}</b>
-                  <span className="mm-muted">
-                    {fill(copy.sent_history, {
-                      d1: fmt(d.d1, 0),
-                      d5: fmt(d.d5, 0),
-                      d20: fmt(d.d20, 0),
-                    })}
-                  </span>
-                </div>
-                <Progress
-                  percent={isNum(d.v) ? d.v : 0}
-                  format={() => fmt(d.v, 1)}
-                  strokeColor={barColor(d.v)}
-                />
-                <div className="mm-muted">
-                  {[d.desc, d.verdict].filter(Boolean).join(" · ")}
-                </div>
-              </div>
-            ))}
-          </Card>
-        </Col>
-        <Col xs={24} lg={14}>
-          <Card size="small" title={copy.sent_grid} style={{ height: "100%" }}>
-            {gridOption ? (
-              <EChart label={copy.sent_grid} option={gridOption} height={300} />
-            ) : (
-              <Empty description={copy.noData} />
-            )}
-            <div className="mm-muted">{copy.sent_gridNote}</div>
-          </Card>
-        </Col>
-      </Row>
-      <Row gutter={[16, 16]}>
-        <Col xs={24} lg={12}>
-          <Card
-            size="small"
-            title={copy.sent_process}
-            extra={
-              sig && (
+      <Panels>
+        <Panel title={copy.sent_dims}>
+          {dims.length === 0 && <Empty description={copy.noData} />}
+          {dims.map((d) => (
+            <div key={d.k} style={{ marginBottom: 12 }}>
+              <div className="mm-between">
+                <b>{d.k}</b>
                 <span className="mm-muted">
-                  {fill(copy.sent_processNote, {
-                    n: sig.hist_n ?? DASH,
-                    med: signed(sig.hist_med20, 2),
-                    win: fmt(sig.hist_win20, 0),
+                  {fill(copy.sent_history, {
+                    d1: fmt(d.d1, 0),
+                    d5: fmt(d.d5, 0),
+                    d20: fmt(d.d20, 0),
                   })}
                 </span>
-              )
-            }
-          >
-            {sigOption ? (
-              <EChart
-                label={copy.sent_process}
-                option={sigOption}
-                height={300}
+              </div>
+              <Progress
+                percent={isNum(d.v) ? d.v : 0}
+                format={() => fmt(d.v, 1)}
+                strokeColor={barColor(d.v)}
               />
-            ) : (
-              <Empty description={copy.noData} />
-            )}
-          </Card>
-        </Col>
-        <Col xs={24} lg={12}>
-          <Card size="small" title={copy.sent_alerts}>
-            {arr(s.alerts).length === 0 && <Empty description={copy.noData} />}
-            {arr(s.alerts).map((a, i) => (
-              <Alert
-                key={i}
-                style={{ marginBottom: 8 }}
-                type={alertType(a.level)}
-                title={a.title}
-                description={stripTags(a.body)}
-              />
-            ))}
-          </Card>
-        </Col>
-      </Row>
-      <Card size="small" title={copy.sent_trajectory}>
-        {arr(traj?.dates).length ? (
-          <EChart
-            label={copy.sent_trajectory}
-            option={trajOption}
-            height={340}
+              <div className="mm-muted">
+                {[d.desc, d.verdict].filter(Boolean).join(" · ")}
+              </div>
+            </div>
+          ))}
+        </Panel>
+        <Panel title={copy.sent_grid}>
+          {gridOption ? (
+            <EChart label={copy.sent_grid} option={gridOption} height={300} />
+          ) : (
+            <Empty description={copy.noData} />
+          )}
+          <div className="mm-muted">{copy.sent_gridNote}</div>
+        </Panel>
+        <Panel
+          title={copy.sent_process}
+          extra={
+            sig && (
+              <span className="mm-muted">
+                {fill(copy.sent_processNote, {
+                  n: sig.hist_n ?? DASH,
+                  med: signed(sig.hist_med20, 2),
+                  win: fmt(sig.hist_win20, 0),
+                })}
+              </span>
+            )
+          }
+        >
+          {sigOption ? (
+            <EChart label={copy.sent_process} option={sigOption} height={300} />
+          ) : (
+            <Empty description={copy.noData} />
+          )}
+        </Panel>
+        <Panel title={copy.sent_alerts}>
+          {arr(s.alerts).length === 0 && <Empty description={copy.noData} />}
+          {arr(s.alerts).map((a, i) => (
+            <Alert
+              key={i}
+              style={{ marginBottom: 8 }}
+              type={alertType(a.level)}
+              title={a.title}
+              description={stripTags(a.body)}
+            />
+          ))}
+        </Panel>
+        <Panel kind="wide" title={copy.sent_trajectory}>
+          {arr(traj?.dates).length ? (
+            <EChart
+              label={copy.sent_trajectory}
+              option={trajOption}
+              height={340}
+            />
+          ) : (
+            <Empty description={copy.noData} />
+          )}
+        </Panel>
+        <Panel kind="detail" title={copy.sent_extreme}>
+          <Table
+            size="small"
+            pagination={false}
+            rowKey="name"
+            dataSource={arr(s.extreme)}
+            columns={[
+              { title: copy.sent_indicator, dataIndex: "name" },
+              { title: copy.sent_value, dataIndex: "v", align: "right" },
+              {
+                title: copy.sent_pct3y,
+                dataIndex: "pct",
+                width: "45%",
+                render: (x: Num) => (
+                  <Progress
+                    percent={isNum(x) ? x : 0}
+                    size="small"
+                    format={() => fmt(x, 0)}
+                    strokeColor={
+                      isNum(x) && (x > 85 || x < 15) ? v.danger : undefined
+                    }
+                  />
+                ),
+              },
+            ]}
           />
-        ) : (
-          <Empty description={copy.noData} />
-        )}
-      </Card>
-      <Card size="small" title={copy.sent_extreme}>
-        <Table
-          size="small"
-          pagination={false}
-          rowKey="name"
-          dataSource={arr(s.extreme)}
-          columns={[
-            { title: copy.sent_indicator, dataIndex: "name" },
-            { title: copy.sent_value, dataIndex: "v", align: "right" },
-            {
-              title: copy.sent_pct3y,
-              dataIndex: "pct",
-              width: "45%",
-              render: (x: Num) => (
-                <Progress
-                  percent={isNum(x) ? x : 0}
-                  size="small"
-                  format={() => fmt(x, 0)}
-                  strokeColor={
-                    isNum(x) && (x > 85 || x < 15) ? v.danger : undefined
-                  }
-                />
-              ),
-            },
-          ]}
-        />
-      </Card>
+        </Panel>
+      </Panels>
     </Space>
   );
 }

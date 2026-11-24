@@ -1,7 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
 import {
   Alert,
-  Card,
   Col,
   Descriptions,
   Drawer,
@@ -18,6 +17,7 @@ import {
 } from "antd";
 import type { TableColumnsType } from "antd";
 import { ByteSearch } from "../components/ByteSearch";
+import { Panel, Panels } from "../components/Panels";
 import { Dashboard } from "../components/Dashboard";
 import { EChart } from "../components/EChart";
 import { KpiRow, type KpiItem } from "../components/Kpi";
@@ -519,257 +519,211 @@ function PanoramaBody({
   return (
     <Space orientation="vertical" size="middle" style={{ width: "100%" }}>
       <KpiRow items={kpis} cols={{ xs: 12, md: 8, xl: 4 }} />
-      <Row gutter={[16, 16]}>
+      <Panels>
         {heatIndustries.length > 0 && (
-          <Col xs={24} lg={9}>
-            <Card
-              size="small"
-              title={copy.pano_heat}
-              style={{ height: "100%" }}
-            >
-              <EChart
-                label={copy.pano_heat}
-                option={heatOption}
-                height={heatIndustries.length * 22 + 40}
-              />
-            </Card>
-          </Col>
+          <Panel kind="wide" title={copy.pano_heat}>
+            <EChart
+              label={copy.pano_heat}
+              option={heatOption}
+              height={heatIndustries.length * 22 + 40}
+            />
+          </Panel>
         )}
-        <Col xs={24} lg={heatIndustries.length > 0 ? 15 : 24}>
-          <Space orientation="vertical" size="middle" style={{ width: "100%" }}>
-            <Row gutter={[16, 16]}>
-              <Col xs={24} md={12} lg={heatIndustries.length > 0 ? 12 : 8}>
-                <Card
-                  size="small"
-                  title={copy.pano_labels}
-                  style={{ height: "100%" }}
-                >
-                  {labelEntries.length ? (
-                    <EChart
-                      label={copy.pano_labels}
-                      option={labelOption}
-                      height={240}
-                    />
-                  ) : (
-                    <Empty description={copy.noData} />
-                  )}
-                </Card>
-              </Col>
-              <Col xs={24} md={12} lg={heatIndustries.length > 0 ? 12 : 8}>
-                <Card
-                  size="small"
-                  title={copy.pano_quads}
-                  style={{ height: "100%" }}
-                >
-                  <Row gutter={[8, 8]}>
-                    {quadCells.map(([name, bg, fg]) => (
-                      <Col span={12} key={name}>
-                        <div className="mm-quad" style={{ background: bg }}>
-                          <div
-                            style={{ color: fg, fontSize: 24, fontWeight: 600 }}
-                          >
-                            {isNum(meta.quads?.[name])
-                              ? meta.quads[name]
-                              : DASH}
-                          </div>
-                          <div className="mm-muted">
-                            {valueLabel(copy, name)}
-                          </div>
-                        </div>
-                      </Col>
-                    ))}
-                  </Row>
-                  <div className="mm-muted" style={{ marginTop: 8 }}>
-                    {copy.pano_quadNote}
+        <Panel title={copy.pano_labels}>
+          {labelEntries.length ? (
+            <EChart
+              label={copy.pano_labels}
+              option={labelOption}
+              height={240}
+            />
+          ) : (
+            <Empty description={copy.noData} />
+          )}
+        </Panel>
+        <Panel title={copy.pano_quads}>
+          <Row gutter={[8, 8]}>
+            {quadCells.map(([name, bg, fg]) => (
+              <Col span={12} key={name}>
+                <div className="mm-quad" style={{ background: bg }}>
+                  <div style={{ color: fg, fontSize: 24, fontWeight: 600 }}>
+                    {isNum(meta.quads?.[name]) ? meta.quads[name] : DASH}
                   </div>
-                </Card>
+                  <div className="mm-muted">{valueLabel(copy, name)}</div>
+                </div>
               </Col>
-              <Col xs={24} lg={heatIndustries.length > 0 ? 24 : 8}>
-                <Card
-                  size="small"
-                  title={copy.pano_coverage}
-                  style={{ height: "100%" }}
-                >
-                  {STRATS.map((key) => (
-                    <div key={key} className="mm-between">
-                      <span style={{ minWidth: 56 }}>{stratName(key)}</span>
-                      <Progress
-                        size="small"
-                        percent={
-                          isNum(meta.coverage?.[key]?.mean)
-                            ? Math.round(meta.coverage[key].mean! * 100)
-                            : 0
-                        }
-                        style={{ flex: 1, marginLeft: 12 }}
-                      />
-                    </div>
-                  ))}
-                </Card>
-              </Col>
-            </Row>
-            {shift.length > 0 && (
-              <Card
+            ))}
+          </Row>
+          <div className="mm-muted" style={{ marginTop: 8 }}>
+            {copy.pano_quadNote}
+          </div>
+        </Panel>
+        <Panel title={copy.pano_coverage}>
+          {STRATS.map((key) => (
+            <div key={key} className="mm-between">
+              <span style={{ minWidth: 56 }}>{stratName(key)}</span>
+              <Progress
                 size="small"
-                title={
-                  <Space wrap>
-                    <span>{copy.pano_shift}</span>
-                    <span className="mm-muted">
-                      {summary.diff?.prev} → {summary.diff?.cur}
-                    </span>
-                  </Space>
+                percent={
+                  isNum(meta.coverage?.[key]?.mean)
+                    ? Math.round(meta.coverage[key].mean! * 100)
+                    : 0
                 }
-              >
-                <Table<ShiftRow>
-                  size="small"
-                  pagination={false}
-                  rowKey="s"
-                  dataSource={shift}
-                  columns={shiftColumns}
-                  onRow={(r) => ({
-                    onClick: () => setSelected({ code: r.s, name: r.n }),
-                    style: { cursor: "pointer" },
-                  })}
-                />
-              </Card>
-            )}
-          </Space>
-        </Col>
-      </Row>
-      <Row gutter={[16, 16]}>
-        <Col xs={24} lg={12}>
-          <Card
-            size="small"
+                style={{ flex: 1, marginLeft: 12 }}
+              />
+            </div>
+          ))}
+        </Panel>
+        {shift.length > 0 && (
+          <Panel
+            kind="detail"
             title={
               <Space wrap>
-                <span>{copy.pano_strategy}</span>
-                <Segmented
-                  size="small"
-                  value={strat}
-                  onChange={setStrat}
-                  options={STRATS.map((key) => ({
-                    value: key,
-                    label: stratName(key),
-                  }))}
-                />
+                <span>{copy.pano_shift}</span>
+                <span className="mm-muted">
+                  {summary.diff?.prev} → {summary.diff?.cur}
+                </span>
               </Space>
             }
           >
-            {current?.desc && (
-              <div style={{ marginBottom: 8 }}>{current.desc}</div>
-            )}
-            <Space wrap style={{ marginBottom: 8 }}>
-              {arr(current?.templates).map((t) => (
-                <Tooltip key={t.id} title={t.desc}>
-                  <Tag color="blue">
-                    {t.name} · {t.n ?? DASH}
-                  </Tag>
-                </Tooltip>
-              ))}
-            </Space>
-            {weights.length ? (
-              <EChart
-                label={copy.pano_weights}
-                option={weightOption}
-                height={Math.max(180, weights.length * 28 + 30)}
-              />
-            ) : (
-              <Empty description={copy.noData} />
-            )}
-          </Card>
-        </Col>
-        <Col xs={24} lg={12}>
-          <Card
-            size="small"
-            title={copy.pano_methods}
-            style={{ height: "100%" }}
-          >
-            <Table
+            <Table<ShiftRow>
               size="small"
               pagination={false}
-              rowKey="id"
-              dataSource={arr(summary.methods)}
-              columns={[
-                { title: copy.pano_method, dataIndex: "name" },
-                {
-                  title: copy.pano_weight,
-                  dataIndex: "weight",
-                  align: "right",
-                  render: (x: Num) => fmt(x, 1),
-                },
-                { title: copy.pano_cov, dataIndex: "cov", align: "right" },
-              ]}
+              rowKey="s"
+              dataSource={shift}
+              columns={shiftColumns}
+              onRow={(r) => ({
+                onClick: () => setSelected({ code: r.s, name: r.n }),
+                style: { cursor: "pointer" },
+              })}
             />
-          </Card>
-        </Col>
-      </Row>
-      <Card size="small" title={copy.pano_screener}>
-        <Space wrap style={{ marginBottom: 12 }}>
-          <ByteSearch
-            placeholder={copy.searchPlaceholder}
-            width={200}
-            onSearch={setSearch}
-          />
-          <Select
-            allowClear
-            placeholder={copy.pano_label}
-            value={label}
-            onChange={setLabel}
-            style={{ width: 130 }}
-            options={valueOptions(copy, Object.keys(meta.labels ?? {}))}
-          />
-          <Select
-            allowClear
-            placeholder={copy.pano_quad}
-            value={quad}
-            onChange={setQuad}
-            style={{ width: 130 }}
-            options={valueOptions(copy, Object.keys(meta.quads ?? {}))}
-          />
-          <Select
-            allowClear
-            placeholder={copy.pano_profile}
-            value={profile}
-            onChange={setProfile}
-            style={{ width: 110 }}
-            options={valueOptions(copy, Object.keys(meta.profiles ?? {}))}
-          />
-          {industryNames.length > 0 ? (
-            <Select
-              allowClear
-              showSearch
-              placeholder={copy.pano_industry}
-              value={industry || undefined}
-              onChange={(x?: string) => setIndustry(x ?? "")}
-              style={{ width: 150 }}
-              // The industry list leaves out unclassified stocks; keep them
-              // filterable as the exact-name search allowed.
-              options={[...new Set([...industryNames, UNCLASSIFIED])].map(
-                (name) => ({
-                  value: name,
-                  label: name === UNCLASSIFIED ? copy.pano_unclassified : name,
-                }),
-              )}
+          </Panel>
+        )}
+        <Panel
+          title={
+            <Space wrap>
+              <span>{copy.pano_strategy}</span>
+              <Segmented
+                size="small"
+                value={strat}
+                onChange={setStrat}
+                options={STRATS.map((key) => ({
+                  value: key,
+                  label: stratName(key),
+                }))}
+              />
+            </Space>
+          }
+        >
+          {current?.desc && (
+            <div style={{ marginBottom: 8 }}>{current.desc}</div>
+          )}
+          <Space wrap style={{ marginBottom: 8 }}>
+            {arr(current?.templates).map((t) => (
+              <Tooltip key={t.id} title={t.desc}>
+                <Tag color="blue">
+                  {t.name} · {t.n ?? DASH}
+                </Tag>
+              </Tooltip>
+            ))}
+          </Space>
+          {weights.length ? (
+            <EChart
+              label={copy.pano_weights}
+              option={weightOption}
+              height={Math.max(180, weights.length * 28 + 30)}
             />
           ) : (
-            <ByteSearch
-              placeholder={copy.pano_industryExact}
-              width={170}
-              onSearch={setIndustry}
-            />
+            <Empty description={copy.noData} />
           )}
-        </Space>
-        <RowTable<PanoramaRow>
-          module="panorama"
-          date={date}
-          revision={revision}
-          columns={columns}
-          defaultSort={`s_${strat}`}
-          q={search}
-          filters={filters}
-          scrollX={1260}
-          onSelect={setSelected}
-        />
-      </Card>
+        </Panel>
+        <Panel title={copy.pano_methods}>
+          <Table
+            size="small"
+            pagination={false}
+            rowKey="id"
+            dataSource={arr(summary.methods)}
+            columns={[
+              { title: copy.pano_method, dataIndex: "name" },
+              {
+                title: copy.pano_weight,
+                dataIndex: "weight",
+                align: "right",
+                render: (x: Num) => fmt(x, 1),
+              },
+              { title: copy.pano_cov, dataIndex: "cov", align: "right" },
+            ]}
+          />
+        </Panel>
+        <Panel kind="detail" title={copy.pano_screener}>
+          <Space wrap style={{ marginBottom: 12 }}>
+            <ByteSearch
+              placeholder={copy.searchPlaceholder}
+              width={200}
+              onSearch={setSearch}
+            />
+            <Select
+              allowClear
+              placeholder={copy.pano_label}
+              value={label}
+              onChange={setLabel}
+              style={{ width: 130 }}
+              options={valueOptions(copy, Object.keys(meta.labels ?? {}))}
+            />
+            <Select
+              allowClear
+              placeholder={copy.pano_quad}
+              value={quad}
+              onChange={setQuad}
+              style={{ width: 130 }}
+              options={valueOptions(copy, Object.keys(meta.quads ?? {}))}
+            />
+            <Select
+              allowClear
+              placeholder={copy.pano_profile}
+              value={profile}
+              onChange={setProfile}
+              style={{ width: 110 }}
+              options={valueOptions(copy, Object.keys(meta.profiles ?? {}))}
+            />
+            {industryNames.length > 0 ? (
+              <Select
+                allowClear
+                showSearch
+                placeholder={copy.pano_industry}
+                value={industry || undefined}
+                onChange={(x?: string) => setIndustry(x ?? "")}
+                style={{ width: 150 }}
+                // The industry list leaves out unclassified stocks; keep them
+                // filterable as the exact-name search allowed.
+                options={[...new Set([...industryNames, UNCLASSIFIED])].map(
+                  (name) => ({
+                    value: name,
+                    label:
+                      name === UNCLASSIFIED ? copy.pano_unclassified : name,
+                  }),
+                )}
+              />
+            ) : (
+              <ByteSearch
+                placeholder={copy.pano_industryExact}
+                width={170}
+                onSearch={setIndustry}
+              />
+            )}
+          </Space>
+          <RowTable<PanoramaRow>
+            module="panorama"
+            date={date}
+            revision={revision}
+            columns={columns}
+            defaultSort={`s_${strat}`}
+            q={search}
+            filters={filters}
+            scrollX={1260}
+            onSelect={setSelected}
+          />
+        </Panel>
+      </Panels>
       <PanoramaDrawer
         code={selected?.code ?? null}
         fallback={selected}
