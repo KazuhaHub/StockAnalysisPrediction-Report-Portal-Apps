@@ -19,6 +19,7 @@ import { Dashboard } from "../components/Dashboard";
 import { EChart } from "../components/EChart";
 import { KpiRow } from "../components/Kpi";
 import { RowTable } from "../components/RowTable";
+import { Signed } from "../components/Signed";
 import { useVisual, type Visual } from "../components/useVisual";
 import { useCopy, type Copy } from "../lib/copy";
 import {
@@ -117,21 +118,22 @@ function stateColor(state: string | undefined): string {
   return (
     (
       {
-        临界: "error",
-        潜伏: "warning",
+        // Statuses, not signs (docs/charts.md): never red or green.
+        临界: "orange",
+        潜伏: "gold",
         已去杠杆: "processing",
-        安全: "success",
+        安全: "default",
       } as Record<string, string>
     )[state ?? ""] ?? "default"
   );
 }
 const levelColor = (level: string | undefined) =>
-  (({ 高危: "error", 关注: "warning" }) as Record<string, string>)[
-    level ?? ""
-  ] ?? "default";
+  (({ 高危: "orange", 关注: "gold" }) as Record<string, string>)[level ?? ""] ??
+  "default";
 
 function redIf(cond: boolean, v: Visual, text: string) {
-  return <span style={cond ? { color: v.danger } : undefined}>{text}</span>;
+  // A warning highlight, not a sign: strong orange, never red.
+  return <span style={cond ? { color: v.alert } : undefined}>{text}</span>;
 }
 
 export function MarginPage() {
@@ -210,7 +212,8 @@ function MarginBody({
           type: "bar",
           data: ratioHistBars(ratioHist).map((b) => ({
             value: b.value,
-            itemStyle: { color: b.danger ? v.danger : v.primary },
+            // Bins past the crowding threshold stand out in amber (not red: no sign).
+            itemStyle: { color: b.danger ? v.orange : v.primary },
           })),
           markLine: isNum(median)
             ? {
@@ -240,7 +243,7 @@ function MarginBody({
           data: [o.ratio_med, o.ratio_p90, o.ratio_p99].map((value) => ({
             value: isNum(value) ? value : null,
             itemStyle: {
-              color: isNum(value) && value >= 8 ? v.danger : v.primary,
+              color: isNum(value) && value >= 8 ? v.orange : v.primary,
             },
           })),
           label: {
@@ -257,10 +260,10 @@ function MarginBody({
                 label: {
                   formatter: "8%",
                   position: "insideEndTop",
-                  color: v.danger,
+                  color: v.text,
                   textBorderWidth: 0,
                 },
-                lineStyle: { color: v.danger },
+                lineStyle: v.threshold,
               },
             ],
           },
@@ -295,10 +298,10 @@ function MarginBody({
               value,
               itemStyle: {
                 color: {
-                  临界: v.danger,
-                  潜伏: v.warning,
+                  临界: v.alert,
+                  潜伏: v.orange,
                   已去杠杆: v.primary,
-                  安全: v.success,
+                  安全: v.series[4],
                 }[key],
               },
             })),
@@ -317,7 +320,7 @@ function MarginBody({
         {
           type: "bar",
           data: resHist.map((h) => h.n ?? null),
-          itemStyle: { color: v.orange },
+          itemStyle: { color: v.primary },
           label: { show: true, position: "top" },
         },
       ],
@@ -370,10 +373,15 @@ function MarginBody({
     num(
       copy.col_dratio20,
       "dratio20",
-      (x) => (isNum(x) ? `${signed(x, 2)}pp` : DASH),
+      (x) => <Signed value={x} digits={2} suffix="pp" />,
       110,
     ),
-    num(copy.col_pnl, "pnl", (x) => (isNum(x) ? `${signed(x, 1)}%` : DASH), 88),
+    num(
+      copy.col_pnl,
+      "pnl",
+      (x) => <Signed value={x} digits={1} suffix="%" />,
+      88,
+    ),
     num(
       copy.col_bufCall,
       "buf_call",
@@ -425,7 +433,7 @@ function MarginBody({
     num(
       copy.col_gdhsChg,
       "gdhs_chg",
-      (x) => (isNum(x) ? `${signed(x, 1)}%` : DASH),
+      (x) => <Signed value={x} digits={1} suffix="%" />,
       96,
     ),
     num(
@@ -437,7 +445,8 @@ function MarginBody({
     num(
       copy.col_resCnt,
       "res_cnt",
-      (x) => (isNum(x) && x >= 2 ? <Tag color="error">{x}</Tag> : x ? x : DASH),
+      (x) =>
+        isNum(x) && x >= 2 ? <Tag color="orange">{x}</Tag> : x ? x : DASH,
       80,
     ),
   ];
@@ -625,25 +634,25 @@ function MarginDrawer({
     const lines: {
       yAxis: number;
       label: { formatter: string };
-      lineStyle: { color: string };
+      lineStyle: { color: string; type?: string; width?: number };
     }[] = [];
     if (isNum(cost) && cost > 0) {
       lines.push({
         yAxis: cost,
         label: { formatter: copy.drawer_cost },
-        lineStyle: { color: v.text },
+        lineStyle: { ...v.threshold, type: "solid" },
       });
       if (isNum(kCall))
         lines.push({
           yAxis: +(cost * kCall).toFixed(2),
           label: { formatter: copy.drawer_callLine },
-          lineStyle: { color: v.danger },
+          lineStyle: v.threshold,
         });
       if (isNum(kLiq))
         lines.push({
           yAxis: +(cost * kLiq).toFixed(2),
           label: { formatter: copy.drawer_liqLine },
-          lineStyle: { color: v.warning },
+          lineStyle: { ...v.threshold, type: "dotted" },
         });
     }
     return {
@@ -740,17 +749,17 @@ function MarginDrawer({
               item(copy.col_ratio, pctOr(row.ratio, 2)),
               item(
                 copy.col_dratio20,
-                isNum(row.dratio20) ? `${signed(row.dratio20, 2)} pp` : DASH,
+                <Signed value={row.dratio20} digits={2} suffix=" pp" />,
               ),
               item(copy.drawer_rz, isNum(row.rz) ? fmt(row.rz, 2) : DASH),
               item(
                 copy.drawer_rzChg20,
-                isNum(row.rz_chg20) ? `${signed(row.rz_chg20, 1)}%` : DASH,
+                <Signed value={row.rz_chg20} digits={1} suffix="%" />,
               ),
               item(copy.drawer_cost, fmt(row.cost, 2)),
               item(
                 copy.col_pnl,
-                isNum(row.pnl) ? `${signed(row.pnl, 1)}%` : DASH,
+                <Signed value={row.pnl} digits={1} suffix="%" />,
               ),
               item(copy.col_bufCall, pctOr(row.buf_call)),
               item(copy.drawer_bufLiq, pctOr(row.buf_liq)),
@@ -774,7 +783,7 @@ function MarginDrawer({
               item(copy.drawer_blkDisc, pctOr(row.blk_disc)),
               item(
                 copy.col_gdhsChg,
-                isNum(row.gdhs_chg) ? `${signed(row.gdhs_chg, 1)}%` : DASH,
+                <Signed value={row.gdhs_chg} digits={1} suffix="%" />,
               ),
               item(copy.col_fundPct, pctOr(row.fund_pct, 2)),
             ]}

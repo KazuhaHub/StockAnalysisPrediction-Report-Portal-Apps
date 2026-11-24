@@ -15,6 +15,7 @@ import { EChart, type ChartOption } from "../components/EChart";
 import { KpiRow, type KpiItem } from "../components/Kpi";
 import { Panel, Panels } from "../components/Panels";
 import { rich } from "../components/Rich";
+import { Signed, SignedIn } from "../components/Signed";
 import { useVisual } from "../components/useVisual";
 import { useCopy, type Copy } from "../lib/copy";
 import { arr, fill, fmt, isNum, signed, DASH, type Num } from "../lib/format";
@@ -68,10 +69,11 @@ function Gate({
 }) {
   const v = useVisual();
   const style =
+    // Statuses, not signs: a failed check strong orange, a passed one blue.
     tone === "hit"
-      ? { borderColor: v.danger, background: v.errorBg }
+      ? { borderColor: v.alert, background: v.fillQuaternary }
       : tone === "out"
-        ? { borderColor: v.success, background: v.successBg }
+        ? { borderColor: v.primary, background: v.fillQuaternary }
         : { borderColor: v.borderStrong };
   return (
     <div className="mm-gate" style={style} data-tone={tone || "none"}>
@@ -157,7 +159,7 @@ function QuantBody({ d }: { d: QuantSummary }) {
   const estimated = mon.expectSrc === "weekday";
   // On the estimated basis a holiday reads as "1 day behind": yellow, never red.
   const lagWarn = isNum(lag) && lag > 0 && estimated;
-  const lagColor = lag === 0 ? v.success : lagWarn ? v.warning : v.danger;
+  const lagColor = lag === 0 ? v.primary : lagWarn ? v.orange : v.alert;
   const lagText =
     lag === 0
       ? copy.q_lagOk
@@ -190,26 +192,30 @@ function QuantBody({ d }: { d: QuantSummary }) {
     {
       key: "ndr",
       title: copy.q_ndr,
-      value: `${fmt(d.ndr, 1)}%`,
+      value: `${signed(d.ndr, 1)}%`,
+      color: v.sign(d.ndr),
       note: fill(copy.q_pctile, { v: nv(d.npct) }),
     },
     {
       key: "dd",
       title: copy.q_dd250,
-      value: `${fmt(d.dd250, 1)}%`,
-      note: fill(copy.q_dd60, { v: fmt(d.dd60, 1) }),
+      value: `${signed(d.dd250, 1)}%`,
+      color: v.sign(d.dd250),
+      note: <SignedIn template={copy.q_dd60} value={d.dd60} />,
     },
     {
       key: "rep",
       title: copy.q_rep20,
       value: `${signed(d.rep20, 1)}pp`,
+      color: v.sign(d.rep20),
       note: copy.q_repThr,
     },
     {
       key: "def",
       title: copy.q_def60,
-      value: `${fmt(d.r60def, 1)}%`,
-      note: fill(copy.q_leadSame, { v: fmt(d.r60lead, 1) }),
+      value: `${signed(d.r60def, 1)}%`,
+      color: v.sign(d.r60def),
+      note: <SignedIn template={copy.q_leadSame} value={d.r60lead} />,
     },
   ];
   const mnear = nearestSince(d.msince);
@@ -234,25 +240,28 @@ function QuantBody({ d }: { d: QuantSummary }) {
       key: "share",
       title: copy.q_mShare,
       value: `${fmt(d.mshare, 2)}%`,
-      note: fill(copy.q_mShareNote, { v: fmt(d.msdrop, 1) }),
+      note: <SignedIn template={copy.q_mShareNote} value={d.msdrop} />,
     },
     {
       key: "d60",
       title: copy.q_mDist60,
       value: `${signed(d.md60, 1)}%`,
-      note: fill(copy.q_mDd250, { v: fmt(d.mdd250, 1) }),
+      color: v.sign(d.md60),
+      note: <SignedIn template={copy.q_mDd250} value={d.mdd250} />,
     },
     {
       key: "rs",
       title: copy.q_mRs,
       value: `${signed(d.mrs, 1)}pp`,
-      note: fill(copy.q_mRsNote, { v: signed(d.mrsm, 1) }),
+      color: v.sign(d.mrs),
+      note: <SignedIn template={copy.q_mRsNote} value={d.mrsm} />,
     },
     {
       key: "r60",
       title: copy.q_mR60,
       value: `${signed(d.mr60, 1)}%`,
-      note: fill(copy.q_leadSame, { v: fmt(d.r60lead, 1) }),
+      color: v.sign(d.mr60),
+      note: <SignedIn template={copy.q_leadSame} value={d.r60lead} />,
     },
   ];
   const stateCard = (
@@ -322,13 +331,14 @@ function QuantBody({ d }: { d: QuantSummary }) {
   });
   const toneColor = (state: string) => {
     const t = stateTone(state);
+    // State text is a status: never red or green (docs/charts.md).
     return t === "info"
-      ? v.info
+      ? v.cyan
       : t === "danger"
-        ? v.danger
+        ? v.purple
         : t === "warning"
-          ? v.warning
-          : v.success;
+          ? v.orange
+          : v.primary;
   };
 
   // ---- daily state table ----
@@ -379,7 +389,7 @@ function QuantBody({ d }: { d: QuantSummary }) {
       title: copy.q_colNdr,
       dataIndex: "ndr",
       align: "right",
-      render: (x: Num) => dash(x, (n) => n.toFixed(1)),
+      render: (x: Num) => <Signed value={x} digits={1} />,
     },
     {
       title: copy.q_colStep,
@@ -421,7 +431,7 @@ function QuantBody({ d }: { d: QuantSummary }) {
       dataIndex: "status",
       width: 90,
       render: (s: string) => (
-        <span style={{ color: s === "ok" ? v.success : v.danger }}>
+        <span style={{ color: s === "ok" ? v.primary : v.alert }}>
           {runLabel(s)}
         </span>
       ),
@@ -438,25 +448,77 @@ function QuantBody({ d }: { d: QuantSummary }) {
   });
   const legend = { top: 0, type: "scroll" };
   const noAnim = { animation: false };
+  // Markers follow the terminal habit (docs/charts.md): direction follows
+  // meaning. Every bearish signal is a green ▼ (M1-M4 cap the position, the
+  // micro-cap overheat stops adding, the outflow is an outflow); the bullish V
+  // is a red ▲. Bearish types are told apart by fill (the caps that only warn,
+  // M1/M2 and the overheat, are hollow; M3/M4 and the outflow are solid) and
+  // by a small label; the legend and tooltip name each one.
+  type SigStyle = {
+    color: string;
+    symbol: string;
+    rot: number;
+    hollow: boolean;
+    tag: string;
+  };
+  const BULL = { color: v.up, symbol: "triangle", rot: 0, hollow: false };
+  // A drawn ▼, not a rotated triangle: the legend ignores symbol rotation and
+  // would show a bearish signal as ▲.
+  const BEAR = { color: v.down, symbol: "path://M0,0 L10,0 L5,9 Z", rot: 0 };
+  const SIG_STYLE: Record<string, SigStyle> = {
+    "M1 过热": { ...BEAR, hollow: true, tag: "M1" },
+    "M2 背离": { ...BEAR, hollow: true, tag: "M2" },
+    "M3 破位": { ...BEAR, hollow: false, tag: "M3" },
+    "M4 二波失败": { ...BEAR, hollow: false, tag: "M4" },
+    "V 底部确认": { ...BULL, tag: "V" },
+    微盘过热: { ...BEAR, hollow: true, tag: copy.q_tagOver },
+    资金退潮: { ...BEAR, hollow: false, tag: copy.q_tagOut },
+  };
+  const SIG_COLOR: Record<string, string> = Object.fromEntries(
+    Object.entries(SIG_STYLE).map(([k, x]) => [k, x.color]),
+  );
+  const sigColor = (name: string, fallback: string) =>
+    SIG_COLOR[name] ?? fallback;
+  const stateColor = (st: string) =>
+    (
+      ({
+        熊市确认: v.purple,
+        下跌中: v.purple,
+        顶部警戒: v.orange,
+        过热: v.orange,
+        出清区: v.series[6],
+        确认区: v.series[6],
+        修复中: v.cyan,
+      }) as Record<string, string>
+    )[st] ?? v.textMuted;
   const scatterOf = (list: SignalSeries[], yAxisIndex?: number) =>
-    arr(list).map((s) => ({
-      name: s.name,
-      type: "scatter",
-      ...(yAxisIndex === undefined ? {} : { yAxisIndex }),
-      data: s.pts,
-      symbol: s.sym,
-      symbolRotate: s.rot,
-      symbolSize: s.size,
-      z: 12,
-      // The data's near-black M4 marker disappears on a dark surface.
-      itemStyle: {
-        color: s.color.toUpperCase() === "#2C2C2A" ? v.textStrong : s.color,
-        borderColor: v.surface,
-        borderWidth: 2,
-      },
-      emphasis: { scale: 1.6 },
-      label: { show: false },
-    }));
+    arr(list).map((s) => {
+      const st = SIG_STYLE[s.name];
+      const color = sigColor(s.name, v.textStrong);
+      return {
+        name: s.name,
+        type: "scatter",
+        ...(yAxisIndex === undefined ? {} : { yAxisIndex }),
+        data: s.pts,
+        symbol: st?.symbol ?? s.sym,
+        symbolRotate: st?.rot ?? s.rot,
+        symbolSize: 12,
+        z: 12,
+        itemStyle: st?.hollow
+          ? { color: v.surface, borderColor: color, borderWidth: 2 }
+          : { color, borderColor: v.surface, borderWidth: 1 },
+        emphasis: { scale: 1.5 },
+        label: st
+          ? {
+              show: true,
+              formatter: st.tag,
+              position: st.color === v.down ? "top" : "bottom",
+              fontSize: 9,
+              color: v.text,
+            }
+          : { show: false },
+      };
+    });
 
   const mainOption = useMemo(
     () => ({
@@ -483,17 +545,17 @@ function QuantBody({ d }: { d: QuantSummary }) {
           type: "line",
           data: d.lead,
           symbol: "none",
-          lineStyle: { width: 2, color: v.danger },
-          itemStyle: { color: v.danger },
-          areaStyle: { color: v.danger, opacity: 0.06 },
+          lineStyle: { width: 2, color: v.primary },
+          itemStyle: { color: v.primary },
+          areaStyle: { color: v.primary, opacity: 0.06 },
         },
         {
           name: copy.q_sDef,
           type: "line",
           data: d.def,
           symbol: "none",
-          lineStyle: { width: 1.8, color: v.success },
-          itemStyle: { color: v.success },
+          lineStyle: { width: 1.8, color: v.orange },
+          itemStyle: { color: v.orange },
         },
         {
           name: copy.q_sBreadth,
@@ -501,8 +563,8 @@ function QuantBody({ d }: { d: QuantSummary }) {
           yAxisIndex: 1,
           data: d.breadth,
           symbol: "none",
-          lineStyle: { width: 1.2, color: v.info, type: "dashed" },
-          itemStyle: { color: v.info },
+          lineStyle: { width: 1.2, color: v.cyan, type: "dashed" },
+          itemStyle: { color: v.cyan },
           // State bands sit in the empty 0-3 range of the breadth axis.
           markArea: {
             silent: true,
@@ -511,7 +573,7 @@ function QuantBody({ d }: { d: QuantSummary }) {
               {
                 xAxis: a.x0,
                 yAxis: 0,
-                itemStyle: { color: a.color, opacity: 0.32 },
+                itemStyle: { color: stateColor(a.st), opacity: 0.35 },
               },
               { xAxis: a.x1, yAxis: 3 },
             ]),
@@ -521,13 +583,15 @@ function QuantBody({ d }: { d: QuantSummary }) {
           name: copy.q_sSwitch,
           type: "scatter",
           yAxisIndex: 1,
-          symbol: "triangle",
-          symbolSize: 8,
+          // Neutral: a gray tick, not a coloured triangle.
+          symbol: "rect",
+          symbolSize: [2, 10],
           z: 11,
+          itemStyle: { color: v.textMuted },
           data: arr(d.stmark).map((m) => ({
             value: [m.d, 3.6, m.st],
             itemStyle: {
-              color: m.color,
+              color: v.textMuted,
               borderColor: v.surface,
               borderWidth: 1,
             },
@@ -557,20 +621,25 @@ function QuantBody({ d }: { d: QuantSummary }) {
           name: copy.q_ndr,
           type: "bar",
           yAxisIndex: 1,
-          data: d.ndr2,
-          itemStyle: { color: v.textMuted },
+          // NDR is signed: red above zero, green below; secondary, so light.
+          data: arr(d.ndr2).map((x) => ({
+            value: x,
+            itemStyle: { color: v.sign(x) ?? v.textMuted, opacity: 0.5 },
+          })),
+          itemStyle: { color: v.textMuted, opacity: 0.5 },
         },
         {
           name: copy.q_breadth,
           type: "line",
           data: d.breadth2,
           symbol: "none",
-          lineStyle: { width: 2, color: v.danger },
+          lineStyle: { width: 2, color: v.primary },
+          itemStyle: { color: v.primary },
           markLine: {
             silent: true,
             symbol: "none",
             label: { color: v.text, fontSize: 10, formatter: "20%" },
-            lineStyle: { color: v.warning, type: "dashed", width: 1 },
+            lineStyle: v.threshold,
             data: [{ yAxis: 20 }],
           },
         },
@@ -596,24 +665,24 @@ function QuantBody({ d }: { d: QuantSummary }) {
           type: "line",
           data: d.bA20,
           symbol: "none",
-          lineStyle: { width: 1.2, color: v.warning },
-          itemStyle: { color: v.warning },
+          lineStyle: { width: 1, color: v.ma[20] },
+          itemStyle: { color: v.ma[20] },
         },
         {
           name: ">MA60",
           type: "line",
           data: d.bA60,
           symbol: "none",
-          lineStyle: { width: 1.2, color: v.info },
-          itemStyle: { color: v.info },
+          lineStyle: { width: 1, color: v.ma[60] },
+          itemStyle: { color: v.ma[60] },
         },
         {
           name: ">MA200",
           type: "line",
           data: d.bA200,
           symbol: "none",
-          lineStyle: { width: 1.6, color: v.success },
-          itemStyle: { color: v.success },
+          lineStyle: { width: 1, color: v.ma[200] },
+          itemStyle: { color: v.ma[200] },
         },
         {
           name: copy.q_sBasketIdx,
@@ -621,8 +690,8 @@ function QuantBody({ d }: { d: QuantSummary }) {
           yAxisIndex: 1,
           data: d.leadX,
           symbol: "none",
-          lineStyle: { width: 2, color: v.danger },
-          itemStyle: { color: v.danger },
+          lineStyle: { width: 2, color: v.primary },
+          itemStyle: { color: v.primary },
         },
       ],
     }),
@@ -655,9 +724,9 @@ function QuantBody({ d }: { d: QuantSummary }) {
         step: "end",
         data: step.posa,
         symbol: "none",
-        lineStyle: { width: 1.1, color: v.primary },
-        itemStyle: { color: v.primary },
-        areaStyle: { color: v.primary, opacity: 0.18 },
+        lineStyle: { width: 1, color: v.cyan },
+        itemStyle: { color: v.cyan },
+        areaStyle: { color: v.cyan, opacity: 0.18 },
         z: 1,
       },
       {
@@ -666,8 +735,8 @@ function QuantBody({ d }: { d: QuantSummary }) {
         yAxisIndex: 1,
         data: rebase(step.eq),
         symbol: "none",
-        lineStyle: { width: 2, color: v.success },
-        itemStyle: { color: v.success },
+        lineStyle: { width: 2, color: v.primary },
+        itemStyle: { color: v.primary },
         z: 5,
       },
       {
@@ -676,8 +745,8 @@ function QuantBody({ d }: { d: QuantSummary }) {
         yAxisIndex: 1,
         data: rebase(step.hold),
         symbol: "none",
-        lineStyle: { width: 1.4, color: v.danger, type: "dashed" },
-        itemStyle: { color: v.danger },
+        lineStyle: { width: 1.4, color: v.textMuted, type: "dashed" },
+        itemStyle: { color: v.textMuted },
       },
     ],
   });
@@ -712,12 +781,12 @@ function QuantBody({ d }: { d: QuantSummary }) {
           type: "line",
           data: d.mic,
           symbol: "none",
-          lineStyle: { width: 2, color: v.danger },
-          itemStyle: { color: v.danger },
-          areaStyle: { color: v.danger, opacity: 0.05 },
+          lineStyle: { width: 2, color: v.primary },
+          itemStyle: { color: v.primary },
+          areaStyle: { color: v.primary, opacity: 0.05 },
           markArea: {
             silent: true,
-            itemStyle: { color: v.success, opacity: 0.14 },
+            itemStyle: { color: v.cyan, opacity: 0.14 },
             label: { show: false },
             data: arr(d.mareas),
           },
@@ -727,8 +796,8 @@ function QuantBody({ d }: { d: QuantSummary }) {
           type: "line",
           data: d.mew,
           symbol: "none",
-          lineStyle: { width: 1.4, color: v.textMuted },
-          itemStyle: { color: v.textMuted },
+          lineStyle: { width: 1.4, color: v.series[4] },
+          itemStyle: { color: v.series[4] },
         },
         {
           name: copy.q_sMbw,
@@ -736,8 +805,8 @@ function QuantBody({ d }: { d: QuantSummary }) {
           yAxisIndex: 1,
           data: d.mbw,
           symbol: "none",
-          lineStyle: { width: 1.2, color: v.info, type: "dashed" },
-          itemStyle: { color: v.info },
+          lineStyle: { width: 1.2, color: v.purple, type: "dashed" },
+          itemStyle: { color: v.purple },
         },
         ...scatterOf(d.msigs),
       ],
@@ -773,15 +842,15 @@ function QuantBody({ d }: { d: QuantSummary }) {
           type: "bar",
           yAxisIndex: 1,
           data: d.msh,
-          itemStyle: { color: v.info, opacity: 0.55 },
+          itemStyle: { color: v.cyan, opacity: 0.55 },
         },
         {
           name: copy.q_sMrs,
           type: "line",
           data: d.mrsn,
           symbol: "none",
-          lineStyle: { width: 1.8, color: v.purple },
-          itemStyle: { color: v.purple },
+          lineStyle: { width: 1.8, color: v.primary },
+          itemStyle: { color: v.primary },
         },
         ...scatterOf(d.mfsigs, 1),
       ],

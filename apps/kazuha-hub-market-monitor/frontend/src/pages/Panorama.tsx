@@ -22,18 +22,10 @@ import { Dashboard } from "../components/Dashboard";
 import { EChart } from "../components/EChart";
 import { KpiRow, type KpiItem } from "../components/Kpi";
 import { RowTable } from "../components/RowTable";
+import { Signed } from "../components/Signed";
 import { useVisual, type Visual } from "../components/useVisual";
 import { useCopy, type Copy } from "../lib/copy";
-import {
-  arr,
-  fill,
-  fmt,
-  isNum,
-  pct,
-  signed,
-  DASH,
-  type Num,
-} from "../lib/format";
+import { arr, fill, fmt, isNum, pct, DASH, type Num } from "../lib/format";
 import { useMediaQuery, useRowDetail } from "../lib/hooks";
 import { valueLabel, valueOptions } from "../lib/labels";
 import { escapeHtml } from "../lib/html";
@@ -145,11 +137,12 @@ function labelColor(label: string | undefined): string {
   return (
     (
       {
-        显著低估: "success",
+        // Statuses, not signs (docs/charts.md): opportunity blue, warning amber.
+        显著低估: "processing",
         低估: "cyan",
         合理: "default",
-        高估: "orange",
-        显著高估: "error",
+        高估: "gold",
+        显著高估: "orange",
         分歧过大: "purple",
         单一方法参考: "geekblue",
         数据不足: "default",
@@ -313,7 +306,8 @@ function PanoramaBody({
         min: 30,
         max: 70,
         show: false,
-        inRange: { color: [v.info, v.surface, v.danger] },
+        // Percentiles, not signs: a blue-to-amber scale, never red/green.
+        inRange: { color: [v.primary, v.surface, v.orange] },
       },
       series: [
         {
@@ -338,9 +332,7 @@ function PanoramaBody({
     [summary.diff],
   );
   const pctCell = (x: Num) => (
-    <span style={{ color: isNum(x) ? (x > 0 ? v.up : v.down) : undefined }}>
-      {isNum(x) ? `${signed(x * 100, 1)}%` : DASH}
-    </span>
+    <Signed value={x} scale={100} digits={1} suffix="%" />
   );
   const shiftColumns: TableColumnsType<ShiftRow> = [
     {
@@ -419,10 +411,11 @@ function PanoramaBody({
     [weights, factorNames, v],
   );
   const quadCells: [string, string, string][] = [
-    ["便宜好公司", v.successBg, v.success],
-    ["优质但贵", v.fillQuaternary, v.warning],
-    ["价值陷阱", v.fillQuaternary, v.orange],
-    ["又贵又差", v.errorBg, v.danger],
+    // Statuses, not signs: opportunity blue, warnings amber to strong orange.
+    ["便宜好公司", v.fillQuaternary, v.primary],
+    ["优质但贵", v.fillQuaternary, v.orange],
+    ["价值陷阱", v.fillQuaternary, v.purple],
+    ["又贵又差", v.fillQuaternary, v.alert],
   ];
 
   const columns: TableColumnsType<PanoramaRow> = [
@@ -489,9 +482,7 @@ function PanoramaBody({
       width: 92,
       sorter: true,
       render: (x: Num) => (
-        <span style={{ color: isNum(x) ? (x > 0 ? v.up : v.down) : undefined }}>
-          {isNum(x) ? `${signed(x * 100, 1)}%` : DASH}
-        </span>
+        <Signed value={x} scale={100} digits={1} suffix="%" />
       ),
     },
     {
@@ -770,19 +761,19 @@ function PanoramaDrawer({
     const lines: {
       xAxis: number;
       label: { formatter: string };
-      lineStyle: { color: string };
+      lineStyle: { color: string; type?: string; width?: number };
     }[] = [];
     if (isNum(row.price))
       lines.push({
         xAxis: row.price,
         label: { formatter: `${copy.pano_price} ${fmt(row.price, 2)}` },
-        lineStyle: { color: v.danger },
+        lineStyle: { color: v.primary, width: 2 },
       });
     if (isNum(row.composite))
       lines.push({
         xAxis: row.composite,
         label: { formatter: copy.pano_composite },
-        lineStyle: { color: v.success },
+        lineStyle: { color: v.orange, type: "dashed", width: 2 },
       });
     return {
       tooltip: {},
@@ -922,15 +913,21 @@ function PanoramaDrawer({
                   item(copy.pano_composite, fmt(row.composite, 2)),
                   item(
                     copy.pano_upside,
-                    isNum(row.upside)
-                      ? `${signed(row.upside * 100, 1)}%`
-                      : DASH,
+                    <Signed
+                      value={row.upside}
+                      scale={100}
+                      digits={1}
+                      suffix="%"
+                    />,
                   ),
                   item("PE / PB", `${fmt(row.pe, 1)} / ${fmt(row.pb, 2)}`),
                   item("ROE", isNum(row.roe) ? `${fmt(row.roe, 1)}%` : DASH),
                   item(
                     copy.pano_growth,
-                    `${signed(row.rev_yoy, 1)}% / ${signed(row.np_yoy, 1)}%`,
+                    <>
+                      <Signed value={row.rev_yoy} digits={1} suffix="%" /> /{" "}
+                      <Signed value={row.np_yoy} digits={1} suffix="%" />
+                    </>,
                   ),
                   item(
                     copy.pano_dividend,

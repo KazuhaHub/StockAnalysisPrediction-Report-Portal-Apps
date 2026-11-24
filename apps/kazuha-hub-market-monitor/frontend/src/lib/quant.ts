@@ -180,11 +180,12 @@ export function nv(v: Num): string {
 }
 
 /** antd Tag colour of a state code: ok / warn / cold / bad / neutral. */
+// State tags are statuses, not signs: never red or green (docs/charts.md).
 export const TAG_COLOR: Record<string, string> = {
-  cold: "processing",
-  bad: "error",
+  cold: "cyan",
+  bad: "purple",
   warn: "warning",
-  ok: "success",
+  ok: "processing",
   neutral: "default",
 };
 
@@ -330,7 +331,7 @@ export function mainTooltip(
   const rows = params.map((p) => {
     if (p.seriesName === copy.q_sSwitch) {
       const st = Array.isArray(p.value) ? p.value[2] : "";
-      return `${dot(p.color, "▲")} ${escapeHtml(fill(copy.q_tipSwitch, { st: String(st) }))}`;
+      return `${dot(p.color, "│")} ${escapeHtml(fill(copy.q_tipSwitch, { st: String(st) }))}`;
     }
     if (p.seriesType === "scatter")
       return `${dot(p.color, "◆")} ${escapeHtml(fill(copy.q_tipFired, { name: p.seriesName }))}`;

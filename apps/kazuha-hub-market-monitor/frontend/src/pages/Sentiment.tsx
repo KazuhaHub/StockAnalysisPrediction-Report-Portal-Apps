@@ -67,9 +67,10 @@ export function heatRange(
 const alertType = (level?: string) =>
   (
     ({
-      red: "error",
+      // Alert levels are statuses: never the red/green of up and down.
+      red: "warning",
       amber: "warning",
-      green: "success",
+      green: "info",
       gray: "info",
     }) as const
   )[level as "red"] ?? "info";
@@ -170,19 +171,22 @@ function SentimentBody({ s }: { s: SentimentSummary }) {
           name: copy.sent_histPath,
           type: "line",
           showSymbol: false,
+          // The historical median is the benchmark: gray, dashed.
           data: arr(sig?.path),
-          lineStyle: { type: "dashed" },
+          lineStyle: { type: "dashed", color: v.series[4] },
+          itemStyle: { color: v.series[4] },
         },
         {
           name: copy.sent_curPath,
           type: "line",
           showSymbol: false,
           data: arr(sig?.cur_path),
-          lineStyle: { width: 3 },
+          lineStyle: { width: 3, color: v.primary },
+          itemStyle: { color: v.primary },
         },
       ],
     };
-  }, [sig, copy]);
+  }, [sig, copy, v]);
 
   const kpis: KpiItem[] = [
     {
@@ -222,7 +226,7 @@ function SentimentBody({ s }: { s: SentimentSummary }) {
     isNum(value) && value < 20
       ? v.primary
       : isNum(value) && value > 80
-        ? v.danger
+        ? v.orange
         : v.text;
 
   return (
@@ -332,7 +336,7 @@ function SentimentBody({ s }: { s: SentimentSummary }) {
                     size="small"
                     format={() => fmt(x, 0)}
                     strokeColor={
-                      isNum(x) && (x > 85 || x < 15) ? v.danger : undefined
+                      isNum(x) && (x > 85 || x < 15) ? v.alert : undefined
                     }
                   />
                 ),

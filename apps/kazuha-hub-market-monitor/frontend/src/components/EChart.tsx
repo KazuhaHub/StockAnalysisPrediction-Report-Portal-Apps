@@ -53,7 +53,7 @@ function chartTheme(v: Visual) {
   // outline shows as a halo on a dark background.
   const label = { label: { color: v.text, textBorderWidth: 0 } };
   return {
-    color: v.palette,
+    color: v.series,
     bar: label,
     pie: label,
     line: label,
