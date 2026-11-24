@@ -1,0 +1,12 @@
+{
+  "app_id": "kazuha-hub-market-monitor",
+  "version": "0.1.0-beta.8",
+  "commit": "d333967f1f06583edcc495a37ccf22b4a013619d",
+  "run_url": "https://github.com/KazuhaHub/StockAnalysisPrediction-Report-Portal-Apps/actions/runs/45345253318",
+  "package_oci": {
+    "repository": "ghcr.io/kazuhahub/portal-apps/kazuha-hub-market-monitor",
+    "digest": "sha256:36fb053b08a9d6b22c04b11186aed9ec3ec68432662193e22a36cf780d05ce91"
+  },
+  "package_sha256": "1457a80e128baee1233be6a0d0e3c74d11201652a2df368096a351f76fef6e5b",
+  "notes": "Margin no longer fails when eastmoney cuts off the margin-account statistics (it reuses the last stored ones); Panorama's freshness check reads the bar store's trading calendar; Sentiment's panel build fits in memory; jobs wait for the egress proxy at startup."
+}
