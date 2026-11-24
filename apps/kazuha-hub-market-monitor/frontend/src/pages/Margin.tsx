@@ -5,7 +5,6 @@ import {
   Drawer,
   Empty,
   Progress,
-  Segmented,
   Select,
   Space,
   Spin,
@@ -13,6 +12,7 @@ import {
   Typography,
 } from "antd";
 import type { TableColumnsType } from "antd";
+import { FoldSegmented } from "../components/FoldSegmented";
 import { ByteSearch } from "../components/ByteSearch";
 import { Panel, Panels } from "../components/Panels";
 import { Dashboard } from "../components/Dashboard";
@@ -536,8 +536,8 @@ function MarginBody({
           title={
             <Space wrap>
               <span>{fill(copy.margin_scan, { date })}</span>
-              <Segmented
-                size="small"
+              <FoldSegmented
+                label={copy.margin_scanView}
                 value={view}
                 onChange={setView}
                 options={[
@@ -575,7 +575,7 @@ function MarginBody({
               placeholder={copy.margin_mechanism}
               value={mechanism}
               onChange={setMechanism}
-              style={{ width: 170 }}
+              style={{ width: 210 }}
               options={MECHANISMS.map((name) => ({
                 value: name,
                 label: copy[`mech_${name}`],

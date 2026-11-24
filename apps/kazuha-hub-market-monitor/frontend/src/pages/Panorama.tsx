@@ -7,15 +7,15 @@ import {
   Empty,
   Progress,
   Row,
-  Segmented,
   Select,
   Space,
   Spin,
-  Table,
   Tag,
   Tooltip,
 } from "antd";
 import type { TableColumnsType } from "antd";
+import { FoldSegmented } from "../components/FoldSegmented";
+import { CardTable } from "../components/CardTable";
 import { ByteSearch } from "../components/ByteSearch";
 import { Panel, Panels } from "../components/Panels";
 import { Dashboard } from "../components/Dashboard";
@@ -581,7 +581,7 @@ function PanoramaBody({
               </Space>
             }
           >
-            <Table<ShiftRow>
+            <CardTable<ShiftRow>
               size="small"
               pagination={false}
               rowKey="s"
@@ -598,8 +598,8 @@ function PanoramaBody({
           title={
             <Space wrap>
               <span>{copy.pano_strategy}</span>
-              <Segmented
-                size="small"
+              <FoldSegmented
+                label={copy.pano_strategy}
                 value={strat}
                 onChange={setStrat}
                 options={STRATS.map((key) => ({
@@ -633,7 +633,7 @@ function PanoramaBody({
           )}
         </Panel>
         <Panel title={copy.pano_methods}>
-          <Table
+          <CardTable
             size="small"
             pagination={false}
             rowKey="id"
@@ -662,7 +662,7 @@ function PanoramaBody({
               placeholder={copy.pano_label}
               value={label}
               onChange={setLabel}
-              style={{ width: 130 }}
+              style={{ width: 160 }}
               options={valueOptions(copy, Object.keys(meta.labels ?? {}))}
             />
             <Select

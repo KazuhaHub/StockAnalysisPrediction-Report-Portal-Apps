@@ -1,5 +1,6 @@
-import { configure } from "@testing-library/react";
-import { vi } from "vitest";
+import { cleanup, configure } from "@testing-library/react";
+import { afterEach, vi } from "vitest";
+import { installMatchMedia, resetViewport } from "./viewport";
 
 // findBy*/waitFor give up after one second by default. A page mount here renders antd tables and
 // forms; on a loaded shared runner the first mount of a file took 1.9 s and failed with "Unable to
@@ -7,14 +8,10 @@ import { vi } from "vitest";
 // appears, so the longer limit costs nothing except when something is really wrong.
 configure({ asyncUtilTimeout: 8000 });
 
-Object.defineProperty(window, "matchMedia", {
-  value: vi.fn(() => ({
-    matches: false,
-    addListener() {},
-    removeListener() {},
-    addEventListener() {},
-    removeEventListener() {},
-  })),
+installMatchMedia();
+afterEach(() => {
+  cleanup();
+  resetViewport();
 });
 globalThis.ResizeObserver = class {
   observe() {}

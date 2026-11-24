@@ -1,5 +1,5 @@
-import type { ReactNode } from "react";
-import { Alert, Button, Empty, Segmented, Select, Space, Spin } from "antd";
+import { useLayoutEffect, useRef, type ReactNode } from "react";
+import { Alert, Button, Empty, Select, Space, Spin } from "antd";
 import {
   useAppBackend,
   useAppDraft,
@@ -9,6 +9,7 @@ import {
 import type { ModuleId } from "../lib/api";
 import { useCopy } from "../lib/copy";
 import { useSnapshot } from "../lib/hooks";
+import { useScrollEdges } from "../lib/useScrollEdges";
 
 export const ROUTES: {
   path: string;
@@ -22,22 +23,76 @@ export const ROUTES: {
   { path: "/quant", key: "quant" },
 ];
 
+/**
+ * The module switcher: one row of tabs that never wraps. When they do not fit
+ * (a phone) the row scrolls sideways, by swipe, wheel or drag, with a fade at
+ * the side that has more (useScrollEdges, `.mm-scroll-row`); there is no "…"
+ * overflow menu. The active tab is kept in view, also when the row is resized.
+ */
 export function ModuleNav() {
   const { copy } = useCopy();
   const navigation = useAppNavigation();
+  const row = useRef<HTMLDivElement>(null);
+  const active = navigation.path ?? "/";
+  useScrollEdges(row, [active]);
+  useLayoutEffect(() => {
+    const element = row.current;
+    if (!element) return;
+    const reveal = () => {
+      const tab = element.querySelector<HTMLElement>('[aria-selected="true"]');
+      if (!tab) return;
+      const room = element.clientWidth;
+      const left = tab.offsetLeft;
+      const right = left + tab.offsetWidth;
+      if (left >= element.scrollLeft && right <= element.scrollLeft + room)
+        return;
+      element.scrollTo?.({ left: left - (room - tab.offsetWidth) / 2 });
+    };
+    reveal();
+    const observer = new ResizeObserver(reveal);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [active]);
+  const go = (index: number) => {
+    const next = ROUTES[(index + ROUTES.length) % ROUTES.length];
+    navigation.navigate(next.path);
+    row.current
+      ?.querySelectorAll<HTMLElement>('[role="tab"]')
+      [(index + ROUTES.length) % ROUTES.length]?.focus();
+  };
   return (
-    <Segmented
-      aria-label={copy.navigation}
-      value={navigation.path ?? "/"}
-      disabled={!navigation.ready}
-      onChange={(path) => {
-        navigation.navigate(String(path));
-      }}
-      options={ROUTES.map((route) => ({
-        value: route.path,
-        label: copy[`nav_${route.key}`],
-      }))}
-    />
+    <nav aria-label={copy.navigation} className="mm-nav-landmark">
+      <div
+        ref={row}
+        role="tablist"
+        className="mm-nav mm-scroll-row"
+        onKeyDown={(event) => {
+          const at = ROUTES.findIndex((route) => route.path === active);
+          const step =
+            event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0;
+          if (step) go(at + step);
+          else if (event.key === "Home") go(0);
+          else if (event.key === "End") go(ROUTES.length - 1);
+          else return;
+          event.preventDefault();
+        }}
+      >
+        {ROUTES.map((route) => (
+          <button
+            key={route.path}
+            type="button"
+            role="tab"
+            className="mm-nav-tab"
+            aria-selected={route.path === active}
+            tabIndex={route.path === active ? 0 : -1}
+            disabled={!navigation.ready}
+            onClick={() => navigation.navigate(route.path)}
+          >
+            {copy[`nav_${route.key}`]}
+          </button>
+        ))}
+      </div>
+    </nav>
   );
 }
 
@@ -140,17 +195,17 @@ export function Dashboard<S>({ module, title, children }: Props<S>) {
       <Space orientation="vertical" size="middle" style={{ width: "100%" }}>
         <div className="mm-toolbar">
           <ModuleNav />
-          <Space>
+          <div className="mm-date">
             <span className="mm-muted">{copy.date}</span>
             <Select
               aria-label={copy.date}
-              style={{ width: 140 }}
+              className="mm-date-select"
               value={snap.date}
               disabled={snap.dates.length === 0}
               onChange={snap.setDate}
               options={snap.dates.map((value) => ({ value, label: value }))}
             />
-          </Space>
+          </div>
         </div>
         {body}
       </Space>

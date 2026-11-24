@@ -1,14 +1,52 @@
 .mm {
   width: 100%;
   min-width: 0;
+  /* antd rows pull their edges out by half a gutter; this keeps that inside
+     the frame instead of scrolling the page sideways. */
+  padding-inline: 8px;
 }
 
+/* The frame's header: the module tabs take what the date picker leaves and
+   scroll inside it; on a phone they stack, the tabs on a line of their own. */
 .mm-toolbar {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 8px 12px;
+}
+
+.mm-toolbar > .mm-nav-landmark {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.mm-date {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+}
+
+.mm-date-select {
+  width: 140px;
+}
+
+@media (max-width: 575px) {
+  .mm-toolbar {
+    flex-direction: column;
+    flex-wrap: nowrap;
+    align-items: stretch;
+  }
+
+  .mm-toolbar > .mm-nav-landmark {
+    flex: none;
+  }
+
+  .mm-date-select {
+    flex: 1;
+    width: auto;
+  }
 }
 
 .mm-muted {
@@ -18,6 +56,26 @@
 
 .mm-kpi .ant-statistic-content {
   font-size: 22px;
+}
+
+/* A number is never cut off: it wraps inside its card instead. */
+.mm-kpi .ant-statistic-content-value {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.mm-kpi .ant-statistic-title {
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 575px) {
+  .mm-kpi.ant-card-small > .ant-card-body {
+    padding: 10px;
+  }
+
+  .mm-kpi .ant-statistic-content {
+    font-size: 18px;
+  }
 }
 
 .mm-chart {
@@ -309,4 +367,464 @@
 
 .mm-spec code {
   font-size: 12px;
+}
+
+/* ---- Responsive layer. These rules are shared: pages opt in through the
+   shared components (CardTable, FoldSegmented, EChart, useScrollEdges, Kpi) and
+   never carry their own phone layout. Phone width is 767px and below
+   (useNarrow), card width 575px and below (usePhone). ---- */
+
+/* Every card header: when the title and its controls do not fit on one line,
+   the controls move to a line of their own instead of squeezing the title to
+   an ellipsis or running into it. */
+.ant-card .ant-card-head > .ant-card-head-wrapper {
+  flex-wrap: wrap;
+  column-gap: 12px;
+  row-gap: 8px;
+  padding-block: 8px;
+}
+
+.ant-card-head .ant-card-head-title {
+  flex: 1 0 auto;
+  max-width: 100%;
+  overflow: visible;
+  white-space: normal;
+  text-overflow: clip;
+  overflow-wrap: anywhere;
+}
+
+.ant-card-head .ant-card-extra {
+  margin-inline-start: auto;
+  max-width: 100%;
+}
+
+/* Hints inside a card header or a panel wrap instead of overflowing. */
+.mm-panel .mm-muted,
+.mm-panel .ant-card-extra {
+  overflow-wrap: anywhere;
+}
+
+/* One swipeable line (useScrollEdges): no scrollbar, and a fade at each side
+   that has more instead. */
+.mm-scroll-row {
+  overflow-x: auto;
+  scrollbar-width: none;
+  overscroll-behavior-x: contain;
+}
+
+.mm-scroll-row::-webkit-scrollbar {
+  display: none;
+}
+
+.mm-scroll-row[data-dragging] {
+  cursor: grabbing;
+  user-select: none;
+}
+
+.mm-scroll-row[data-dragging] * {
+  cursor: grabbing;
+}
+
+.mm-scroll-row[data-start] {
+  mask-image: linear-gradient(to right, transparent, #000 32px);
+}
+
+.mm-scroll-row[data-end] {
+  mask-image: linear-gradient(to left, transparent, #000 32px);
+}
+
+.mm-scroll-row[data-start][data-end] {
+  mask-image: linear-gradient(
+    to right,
+    transparent,
+    #000 32px,
+    #000 calc(100% - 32px),
+    transparent
+  );
+}
+
+/* Every antd tab row that does not fit scrolls (antd's own swipe and wheel)
+   and fades at the side that has more; antd's "…" overflow menu hid tabs
+   behind a click. */
+.ant-tabs > .ant-tabs-nav .ant-tabs-nav-operations {
+  display: none !important;
+}
+
+.ant-tabs > .ant-tabs-nav .ant-tabs-nav-wrap::before,
+.ant-tabs > .ant-tabs-nav .ant-tabs-nav-wrap::after {
+  display: none;
+}
+
+.ant-tabs-nav-wrap.ant-tabs-nav-wrap-ping-left {
+  mask-image: linear-gradient(to right, transparent, #000 32px);
+}
+
+.ant-tabs-nav-wrap.ant-tabs-nav-wrap-ping-right {
+  mask-image: linear-gradient(to left, transparent, #000 32px);
+}
+
+.ant-tabs-nav-wrap.ant-tabs-nav-wrap-ping-left.ant-tabs-nav-wrap-ping-right {
+  mask-image: linear-gradient(
+    to right,
+    transparent,
+    #000 32px,
+    #000 calc(100% - 32px),
+    transparent
+  );
+}
+
+/* The module tab row (ModuleNav): one swipeable line with an underline, a fade
+   at the side that has more, and no "…" menu. */
+.mm-nav {
+  display: flex;
+  box-shadow: inset 0 -1px 0 var(--ant-color-border-secondary);
+  /* A swipe at either end stays in the row; it must not become the browser's
+     back or forward gesture. */
+  overscroll-behavior-x: contain;
+}
+
+.mm-nav-tab {
+  flex: 0 0 auto;
+  min-height: 40px;
+  padding: 8px 12px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--ant-color-text-secondary);
+  font: inherit;
+  cursor: pointer;
+  transition: color var(--ant-motion-duration-mid, 0.2s);
+}
+
+.mm-nav-tab:hover {
+  color: var(--ant-color-text);
+}
+
+.mm-nav-tab[aria-selected="true"] {
+  border-bottom-color: var(--ant-color-primary);
+  color: var(--ant-color-primary);
+}
+
+.mm-nav-tab:focus-visible {
+  outline: 2px solid var(--ant-color-primary);
+  outline-offset: -2px;
+}
+
+.mm-nav-tab:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+/* A folded segmented choice (FoldSegmented). */
+.mm-fold-select {
+  min-width: 112px;
+}
+
+/* CardTable on a phone: each row is a card of label and value, so no table
+   needs a sideways scroll. The !important lines undo widths, offsets and
+   stickiness antd writes inline for columns and fixed cells, which a card has
+   no use for. */
+.mm-card-sort {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.mm-card-sort .ant-select {
+  flex: 1;
+  min-width: 0;
+}
+
+.mm-card-table--cards .ant-table {
+  background: transparent;
+}
+
+.mm-card-table--cards .ant-table-thead,
+.mm-card-table--cards colgroup {
+  display: none;
+}
+
+.mm-card-table--cards table,
+.mm-card-table--cards tbody {
+  display: block;
+  width: 100% !important;
+  min-width: 0 !important;
+  table-layout: auto !important;
+}
+
+.mm-card-table--cards .ant-table-tbody > tr.ant-table-row {
+  display: block;
+  margin-bottom: 8px;
+  padding: 6px 12px;
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: var(--ant-border-radius-lg, 8px);
+  background: var(--ant-color-bg-container);
+}
+
+.mm-card-table--cards .ant-table-tbody > tr.ant-table-row > td {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+  width: auto !important;
+  min-width: 0;
+  padding: 5px 0 !important;
+  border: 0 !important;
+  position: static !important;
+  inset: auto !important;
+  background: transparent !important;
+  text-align: start !important;
+  overflow-wrap: anywhere;
+}
+
+.mm-card-table--cards .ant-table-tbody > tr.ant-table-row > td::before {
+  content: attr(data-label);
+  flex: 0 0 32%;
+  color: var(--ant-color-text-secondary);
+  font-size: 12px;
+}
+
+.mm-card-table--cards
+  .ant-table-tbody
+  > tr.ant-table-row
+  > td[data-label=""]::before,
+.mm-card-table--cards
+  .ant-table-tbody
+  > tr.ant-table-row
+  > td:not([data-label])::before {
+  content: none;
+}
+
+.mm-card-table--cards .ant-table-tbody > tr.ant-table-row > td > * {
+  min-width: 0;
+}
+
+/* Tags in a card wrap onto lines of their own; they are never shrunk. */
+.mm-card-table--cards .ant-table-tbody > tr.ant-table-row > td > .ant-tag {
+  flex: none;
+  max-width: 100%;
+  white-space: normal;
+  margin-inline-end: 0;
+}
+
+/* The first column is the card's title: full width, unlabelled, set apart
+   from the fields below. */
+.mm-card-table--cards .ant-table-tbody > tr.ant-table-row > td[data-primary] {
+  padding-block: 6px 8px !important;
+  margin-bottom: 2px;
+  border-bottom: 1px solid var(--ant-color-split) !important;
+  font-weight: 500;
+}
+
+.mm-card-table--cards
+  .ant-table-tbody
+  > tr.ant-table-row
+  > td[data-primary]::before {
+  content: none;
+}
+
+.mm-card-table--cards
+  .ant-table-tbody
+  > tr.ant-table-row
+  > td[data-primary]:last-child {
+  border-bottom: 0 !important;
+}
+
+.mm-card-table--cards .ant-table-tbody > tr.ant-table-row:hover > td {
+  background: transparent !important;
+}
+
+.mm-card-table--cards .ant-table-tbody > tr:not(.ant-table-row) {
+  display: block;
+}
+
+.mm-card-table--cards .ant-table-tbody > tr:not(.ant-table-row) > td {
+  display: block;
+  border: 0;
+}
+
+.mm-card-table--cards .ant-table-container,
+.mm-card-table--cards .ant-table-content {
+  overflow: visible !important;
+}
+
+.mm-card-table--cards .ant-table-pagination {
+  flex-wrap: wrap;
+  row-gap: 8px;
+}
+
+/* Today's row of the signal log keeps its tint on a card. */
+.mm-card-table--cards .mm-today {
+  background: var(--ant-color-fill-quaternary);
+}
+
+/* The methodology tables (QuantMethod) are plain HTML tables; each cell carries
+   its column's name, so on a phone a row is a card the same way. */
+@media (max-width: 575px) {
+  .mm-spec-scroll {
+    overflow: visible;
+  }
+
+  .mm-spec table,
+  .mm-spec tbody,
+  .mm-spec tr,
+  .mm-spec td {
+    display: block;
+    min-width: 0;
+    width: 100% !important;
+  }
+
+  .mm-spec thead {
+    display: none;
+  }
+
+  .mm-spec tr {
+    margin-bottom: 8px;
+    padding: 6px 12px;
+    border: 1px solid var(--ant-color-border-secondary);
+    border-radius: var(--ant-border-radius-lg, 8px);
+  }
+
+  .mm-spec td {
+    padding: 5px 0;
+    border: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .mm-spec td[data-label]:not(.mm-spec-k)::before {
+    content: attr(data-label);
+    display: block;
+    color: var(--ant-color-text-secondary);
+    font-size: 12px;
+  }
+}
+
+/* A filter row (Space wrap of selects and a search): on a phone each control
+   takes the line, so a placeholder is never squeezed to an ellipsis. */
+@media (max-width: 575px) {
+  .mm
+    .ant-space-wrap
+    > .ant-space-item:has(
+      > .ant-select,
+      > .ant-input-affix-wrapper,
+      > .ant-input-search
+    ) {
+    flex: 1 1 100%;
+  }
+
+  .mm .ant-space[style*="flex-wrap: wrap"] > .ant-space-item > .ant-select,
+  .mm
+    .ant-space[style*="flex-wrap: wrap"]
+    > .ant-space-item
+    > .ant-input-affix-wrapper {
+    width: 100% !important;
+  }
+}
+
+/* Panels: below lg they stack, so the row's gutters would only push the
+   cards past the frame's edge. */
+@media (max-width: 991px) {
+  .mm-panels > .ant-row {
+    margin-inline: 0 !important;
+  }
+
+  .mm-panels > .ant-row > .ant-col {
+    padding-inline: 0 !important;
+  }
+}
+
+/* Drawers, popovers and menus never exceed the phone. */
+.ant-drawer .ant-drawer-content-wrapper {
+  max-width: 100vw;
+}
+
+.ant-popover {
+  max-width: calc(100vw - 16px);
+}
+
+.ant-select-dropdown {
+  max-width: calc(100vw - 16px);
+}
+
+.mm-confirm {
+  max-width: min(320px, calc(100vw - 48px));
+}
+
+@media (max-width: 575px) {
+  .ant-drawer .ant-drawer-body {
+    padding: 12px;
+  }
+
+  .mm-admin-runs .ant-collapse-header {
+    align-items: flex-start;
+  }
+
+  .mm-admin-runs .ant-collapse-title {
+    min-width: 0;
+  }
+
+  .mm-confirm-actions {
+    flex-wrap: wrap;
+  }
+}
+
+/* Touch screens: small controls get a target a finger can hit (44px). */
+@media (pointer: coarse) {
+  .mm-nav-tab {
+    min-height: 44px;
+  }
+
+  .mm .ant-btn,
+  .ant-popover .ant-btn,
+  .ant-drawer .ant-btn {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  .mm .ant-select .ant-select-selector,
+  .mm .ant-select-sm .ant-select-selector,
+  .mm .ant-input,
+  .mm .ant-input-affix-wrapper {
+    min-height: 44px;
+  }
+
+  .mm .ant-select .ant-select-content {
+    line-height: 42px;
+  }
+
+  .mm .ant-segmented .ant-segmented-item,
+  .mm .ant-segmented .ant-segmented-item .ant-segmented-item-label {
+    min-height: 44px;
+    line-height: 42px;
+  }
+
+  .mm .ant-pagination .ant-pagination-item,
+  .mm .ant-pagination .ant-pagination-prev,
+  .mm .ant-pagination .ant-pagination-next {
+    min-width: 44px;
+    height: 44px;
+    line-height: 42px;
+  }
+
+  .mm .ant-pagination .ant-pagination-prev .ant-pagination-item-link,
+  .mm .ant-pagination .ant-pagination-next .ant-pagination-item-link {
+    width: 44px;
+    height: 44px;
+  }
+
+  .ant-drawer .ant-drawer-close {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .mm .ant-collapse-header {
+    min-height: 44px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mm-scroll-row {
+    scroll-behavior: auto;
+  }
 }

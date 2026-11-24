@@ -110,6 +110,9 @@ export function QuantMethod({ vars }: { vars: Record<string, string> }) {
                               ? cols - present.length + 1
                               : undefined
                           }
+                          data-label={
+                            block.head ? text(`qm_${id}_h${c}`) : undefined
+                          }
                           className={
                             c === 0
                               ? "mm-spec-k"

@@ -1,15 +1,8 @@
 import { useMemo, useState } from "react";
-import {
-  Card,
-  Descriptions,
-  Empty,
-  Segmented,
-  Select,
-  Space,
-  Table,
-  Tag,
-} from "antd";
+import { Card, Descriptions, Empty, Select, Space, Tag } from "antd";
 import type { TableColumnsType } from "antd";
+import { FoldSegmented } from "../components/FoldSegmented";
+import { CardTable } from "../components/CardTable";
 import { ByteSearch } from "../components/ByteSearch";
 import { Panel, Panels } from "../components/Panels";
 import { Dashboard } from "../components/Dashboard";
@@ -367,8 +360,8 @@ function EtfBody({
         size="small"
         title={copy.etf_flowTitle}
         extra={
-          <Segmented
-            size="small"
+          <FoldSegmented
+            label={copy.chart_range}
             value={range}
             onChange={setRange}
             options={[
@@ -432,7 +425,7 @@ function EtfBody({
           ))}
         </Panel>
         <Panel title={copy.etf_runs}>
-          <Table
+          <CardTable
             size="small"
             pagination={false}
             rowKey="start"
