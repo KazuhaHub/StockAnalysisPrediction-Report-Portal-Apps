@@ -27,7 +27,11 @@ MM = "apps/kazuha-hub-market-monitor/"
 EVERYWHERE = frozenset(AREAS)
 # Frontends reach every job that builds a frontend; the shared scripts reach every consumer of them.
 SCRIPT_CONSUMERS = frozenset({"platform", "templates", "sd", "mm_frontend", "status"})
-IMAGE_INPUTS = ("service/Dockerfile", "service/go.mod", "service/go.sum", "service/testdata/", "service/history", "service/rlimit", "pipeline/requirements")
+# What the market-monitor image is built from (its Dockerfile COPYs the service, the pipeline and both Go
+# modules; .dockerignore drops the pipeline's tests, systemd units, config and install scripts). The whole
+# directories are listed rather than the files the image checks exercise today, so a new dependency of
+# `validate-history` cannot slip past the filter; the price is about 100 s on a service or pipeline PR.
+IMAGE_PIPELINE_EXCLUDED = ("pipeline/tests/", "pipeline/systemd/", "pipeline/config/", "pipeline/install.sh", "pipeline/uninstall.sh")
 
 
 def areas_of(path):
@@ -44,11 +48,12 @@ def areas_of(path):
     if path.startswith("scripts/"):
         return SCRIPT_CONSUMERS
     if path.startswith("packages/app-sdk/"):
-        return frozenset({"platform", "sd", "mm_frontend", "status"})
+        # Every frontend imports it, both templates depend on it, and the root-v2 test reads its fixtures.
+        return frozenset({"platform", "templates", "sd", "mm_frontend", "status"})
     if path.startswith("packages/extensionprotocol/"):
-        return frozenset({"protocol", "templates", "platform", "sd", "mm_service"})
+        return frozenset({"protocol", "templates", "platform", "sd", "mm_service", "mm_image"})
     if path.startswith("packages/proxy/"):
-        return frozenset({"proxy", "templates", "platform", "mm_service"})
+        return frozenset({"proxy", "templates", "platform", "mm_service", "mm_image"})
     if path.startswith("templates/"):
         return frozenset({"platform", "templates"})
     if path.startswith(("apps/demo-symbols/", "apps/notes-sample/")):
@@ -72,7 +77,7 @@ def areas_of(path):
             found.add("mm_pipeline")
         elif not rest.startswith("docs/"):
             return EVERYWHERE
-        if rest.startswith(IMAGE_INPUTS):
+        if rest.startswith("service/") or (rest.startswith("pipeline/") and not rest.startswith(IMAGE_PIPELINE_EXCLUDED)):
             found.add("mm_image")
         return frozenset(found)
     return EVERYWHERE

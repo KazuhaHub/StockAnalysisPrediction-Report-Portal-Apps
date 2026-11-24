@@ -20,7 +20,9 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   workflow-lint:
-    # Also decides which of the other jobs a pull request needs (the outputs below), so it stays fast.
+    # Also decides which of the other jobs a pull request needs (the outputs below), so it stays fast. On a pull
+    # request the others start only when this job succeeded: a red lint or secret scan launches nothing else.
+    # Main and manual runs start them whatever this job does, so one failure does not hide the others.
     runs-on: ubuntu-latest
     outputs:
       platform: ${{ steps.scope.outputs.platform }}
@@ -54,9 +56,10 @@ jobs:
             python3 -B scripts/ci_changes.py --all | tee -a "$GITHUB_OUTPUT"
           fi
       # Secret scan of what this change adds, not of the history: a pull request's own commits
-      # (HEAD^1 is the base branch in the merge commit), a push's new commits, or the tip commit of a
-      # manual run. Merge commits are scanned too, because a conflict resolution can add a line that
-      # no other commit has. The release binary is pinned and checked against the checksum published
+      # (HEAD^1 is the base branch in the merge commit), a push's new commits, or the last 50 commits
+      # of a manual run or of a push whose previous tip is gone (a force push). `git log -p` shows no
+      # diff for a merge commit, so --diff-merges=first-parent makes it show the merge against its
+      # first parent: a line added only by a conflict resolution is scanned like any other. The release binary is pinned and checked against the checksum published
       # with v8.30.1. .gitleaks.toml keeps the default rules and allows nothing; a known false
       # positive is listed by fingerprint in .gitleaksignore, so a finding anywhere, docs included,
       # fails. A finding names the file and line; the secret itself is redacted.
@@ -76,10 +79,10 @@ jobs:
           tar -xzf "$tool/$archive" -C "$tool" gitleaks
           case "$EVENT_NAME" in
             pull_request) range='HEAD^1..HEAD' ;;
-            push) if git cat-file -e "$PUSH_BEFORE^{commit}" 2>/dev/null; then range="$PUSH_BEFORE..HEAD"; else range='-n 1'; fi ;;
-            *) range='-n 1' ;;
+            push) if git cat-file -e "$PUSH_BEFORE^{commit}" 2>/dev/null; then range="$PUSH_BEFORE..HEAD"; else range='-n 50'; fi ;;
+            *) range='-n 50' ;;
           esac
-          "$tool/gitleaks" git --no-banner --redact=100 --config .gitleaks.toml --log-opts "$range" .
+          "$tool/gitleaks" git --no-banner --redact=100 --config .gitleaks.toml --log-opts "--diff-merges=first-parent $range" .
       # The release binary, checked against the checksum published with v1.7.12: cheaper than
       # compiling it with `go run` on every run, and this job gates every other one.
       - name: Workflow lint
@@ -189,7 +192,7 @@ jobs:
           retention-days: 30
   frontend-standard:
     needs: workflow-lint
-    if: ${{ !cancelled() && (github.event_name != 'pull_request' || needs.workflow-lint.outputs.platform == 'true') }}
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || (needs.workflow-lint.result == 'success' && needs.workflow-lint.outputs.platform == 'true')) }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -234,7 +237,7 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
   protocol:
     needs: workflow-lint
-    if: ${{ !cancelled() && (github.event_name != 'pull_request' || needs.workflow-lint.outputs.protocol == 'true') }}
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || (needs.workflow-lint.result == 'success' && needs.workflow-lint.outputs.protocol == 'true')) }}
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -253,7 +256,7 @@ jobs:
       - run: go test -race ./...
   proxy:
     needs: workflow-lint
-    if: ${{ !cancelled() && (github.event_name != 'pull_request' || needs.workflow-lint.outputs.proxy == 'true') }}
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || (needs.workflow-lint.result == 'success' && needs.workflow-lint.outputs.proxy == 'true')) }}
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -268,7 +271,7 @@ jobs:
       - run: go test -race ./...
   scheduled-digest:
     needs: workflow-lint
-    if: ${{ !cancelled() && (github.event_name != 'pull_request' || needs.workflow-lint.outputs.sd == 'true') }}
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || (needs.workflow-lint.result == 'success' && needs.workflow-lint.outputs.sd == 'true')) }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -297,7 +300,7 @@ jobs:
       - run: docker build -f apps/scheduled-digest/service/Dockerfile -t scheduled-digest-development .
   market-monitor-frontend:
     needs: workflow-lint
-    if: ${{ !cancelled() && (github.event_name != 'pull_request' || needs.workflow-lint.outputs.mm_frontend == 'true') }}
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || (needs.workflow-lint.result == 'success' && needs.workflow-lint.outputs.mm_frontend == 'true')) }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -338,7 +341,7 @@ jobs:
 
   market-monitor:
     needs: workflow-lint
-    if: ${{ !cancelled() && (github.event_name != 'pull_request' || needs.workflow-lint.outputs.mm_service == 'true') }}
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || (needs.workflow-lint.result == 'success' && needs.workflow-lint.outputs.mm_service == 'true')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     defaults:
@@ -413,7 +416,7 @@ jobs:
           test "$size" -lt $((350 * 1048576))
   market-monitor-pipeline:
     needs: workflow-lint
-    if: ${{ !cancelled() && (github.event_name != 'pull_request' || needs.workflow-lint.outputs.mm_pipeline == 'true') }}
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || (needs.workflow-lint.result == 'success' && needs.workflow-lint.outputs.mm_pipeline == 'true')) }}
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -436,7 +439,7 @@ jobs:
       - run: python3 tests/test_pipeline_scripts.py
   status:
     needs: workflow-lint
-    if: ${{ !cancelled() && (github.event_name != 'pull_request' || needs.workflow-lint.outputs.status == 'true') }}
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || (needs.workflow-lint.result == 'success' && needs.workflow-lint.outputs.status == 'true')) }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -469,7 +472,7 @@ jobs:
     # The real-Portal browser suite (a released Portal binary and Playwright, ~3.5 min): main, manual, and a pull
     # request that changes the suite itself. The Status service and frontend unit tests cover the logic on pull requests.
     needs: workflow-lint
-    if: ${{ !cancelled() && (github.event_name != 'pull_request' || needs.workflow-lint.outputs.status_browser == 'true') }}
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || (needs.workflow-lint.result == 'success' && needs.workflow-lint.outputs.status_browser == 'true')) }}
     runs-on: ubuntu-latest
     env:
       GOWORK: 'off'
@@ -535,7 +538,7 @@ jobs:
           retention-days: 7
   status-container:
     needs: workflow-lint
-    if: ${{ !cancelled() && (github.event_name != 'pull_request' || needs.workflow-lint.outputs.status == 'true') }}
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || (needs.workflow-lint.result == 'success' && needs.workflow-lint.outputs.status == 'true')) }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

@@ -26,30 +26,38 @@ class Classify(unittest.TestCase):
     def test_a_market_monitor_frontend_change_runs_its_frontend_and_the_shared_frontend_gate_only(self):
         self.assertEqual(on(MM + "frontend/src/App.tsx"), {"platform", "mm_frontend"})
 
-    def test_a_market_monitor_service_change_runs_the_service_only(self):
-        self.assertEqual(on(MM + "service/api.go"), {"mm_service"})
+    def test_a_market_monitor_service_change_runs_the_service_and_the_image_checks(self):
+        self.assertEqual(on(MM + "service/api.go"), {"mm_service", "mm_image"})
 
     def test_the_image_checks_run_for_what_the_image_is_made_of(self):
-        for path in ("service/Dockerfile", "service/go.mod", "service/go.sum", "service/history_child.go", "service/rlimit_linux.go",
-                     "service/testdata/make_history.py", "pipeline/requirements.lock"):
+        # The whole service and pipeline directories and both Go modules are COPYed into the image.
+        for path in ("service/Dockerfile", "service/go.mod", "service/api.go", "service/history_child.go", "service/testdata/make_history.py",
+                     "pipeline/requirements.lock", "pipeline/mm_job.py", "pipeline/workspace/panorama/data/code_name.csv"):
             self.assertIn("mm_image", on(MM + path), path)
-        self.assertIn("mm_image", on(".dockerignore"))
-        self.assertNotIn("mm_image", on(MM + "service/api.go", MM + "pipeline/mm_job.py"))
+        for path in (".dockerignore", "packages/extensionprotocol/frame.go", "packages/proxy/proxy.go"):
+            self.assertIn("mm_image", on(path), path)
+        # .dockerignore keeps these out of the image.
+        for path in ("pipeline/tests/test_mm_job.py", "pipeline/systemd/x.service", "pipeline/install.sh"):
+            self.assertNotIn("mm_image", on(MM + path), path)
+        self.assertNotIn("mm_image", on(MM + "frontend/src/App.tsx", "packages/app-sdk/src/index.ts"))
 
     def test_the_descriptor_is_read_by_the_frontend_the_service_and_the_shared_gate(self):
         self.assertEqual(on(MM + "app.v2.json"), {"platform", "mm_frontend", "mm_service"})
 
-    def test_a_pipeline_change_runs_the_pipeline_tests_only(self):
-        self.assertEqual(on(MM + "pipeline/mm_job.py"), {"mm_pipeline"})
+    def test_a_pipeline_change_runs_the_pipeline_tests_and_the_image_checks(self):
+        self.assertEqual(on(MM + "pipeline/mm_job.py"), {"mm_pipeline", "mm_image"})
+        self.assertEqual(on(MM + "pipeline/tests/test_mm_job.py"), {"mm_pipeline"})
 
     def test_the_protocol_module_reaches_every_service_that_links_it_and_the_templates(self):
-        self.assertEqual(on("packages/extensionprotocol/frame.go"), {"protocol", "templates", "sd", "mm_service", "platform"})
+        self.assertEqual(on("packages/extensionprotocol/frame.go"), {"protocol", "templates", "sd", "mm_service", "mm_image", "platform"})
 
     def test_the_proxy_module_reaches_the_market_monitor_service_and_the_templates(self):
-        self.assertEqual(on("packages/proxy/proxy.go"), {"proxy", "templates", "mm_service", "platform"})
+        self.assertEqual(on("packages/proxy/proxy.go"), {"proxy", "templates", "mm_service", "mm_image", "platform"})
 
-    def test_the_sdk_reaches_every_frontend(self):
-        self.assertEqual(on("packages/app-sdk/src/index.ts"), {"platform", "sd", "mm_frontend", "status"})
+    def test_the_sdk_reaches_every_frontend_and_the_template_tests(self):
+        # Both templates depend on it and scripts/test-app-root-v2.py reads packages/app-sdk/tests/fixtures.
+        self.assertEqual(on("packages/app-sdk/src/index.ts"), {"platform", "templates", "sd", "mm_frontend", "status"})
+        self.assertIn("templates", on("packages/app-sdk/tests/fixtures/root-v2/main.tsx"))
 
     def test_a_scheduled_digest_service_change_runs_that_app_and_its_frontend_gate(self):
         self.assertEqual(on("apps/scheduled-digest/service/main.go"), {"sd"})
