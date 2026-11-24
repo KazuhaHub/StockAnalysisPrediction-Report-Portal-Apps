@@ -79,7 +79,10 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // ---------------------------------------------------------------- processes
 const children = [];
+// Set once the run is over, so stopping Chrome is not taken for a crash.
+let finishing = false;
 function cleanup() {
+  finishing = true;
   for (const child of children.splice(0))
     try {
       process.kill(child.pid);
@@ -98,7 +101,12 @@ async function until(fn, what, timeout = 60_000) {
   const end = Date.now() + timeout;
   for (;;) {
     try {
-      const value = await fn();
+      // A call that never settles (a dead socket) still ends at the deadline.
+      const left = Math.max(end - Date.now(), 1);
+      const value = await Promise.race([
+        fn(),
+        sleep(left).then(() => undefined),
+      ]);
       if (value) return value;
     } catch {
       /* not ready yet */
@@ -144,7 +152,20 @@ async function browserEndpoint() {
     { stdio: "ignore" },
   );
   children.push(chrome);
-  process.on("exit", () => rmSync(profile, { recursive: true, force: true }));
+  // Chrome may still be writing its profile right after the SIGTERM: retry,
+  // and never let the cleanup change the exit code.
+  process.on("exit", () => {
+    try {
+      rmSync(profile, {
+        recursive: true,
+        force: true,
+        maxRetries: 10,
+        retryDelay: 100,
+      });
+    } catch {
+      /* left for the OS */
+    }
+  });
   const portFile = join(profile, "DevToolsActivePort");
   const port = await until(
     () => existsSync(portFile) && readFileSync(portFile, "utf8").split("\n")[0],
@@ -164,6 +185,7 @@ class Cdp {
       const message = JSON.parse(event.data);
       if (message.id) {
         const waiting = this.pending.get(message.id);
+        if (!waiting) return; // answered after its timeout
         this.pending.delete(message.id);
         if (message.error)
           waiting.reject(
@@ -172,11 +194,34 @@ class Cdp {
         else waiting.resolve(message.result);
       } else for (const listener of this.listeners) listener(message);
     };
+    // Chrome gone: fail every waiting call and stop, rather than hang the run.
+    ws.onclose = () => {
+      this.closed = true;
+      if (finishing) return;
+      for (const waiting of this.pending.values())
+        waiting.reject(new Error(`${waiting.method}: Chrome closed`));
+      this.pending.clear();
+      console.error("Chrome closed the DevTools connection");
+      process.exit(1);
+    };
   }
-  send(method, params = {}, sessionId) {
+  send(method, params = {}, sessionId, timeout = 30_000) {
     const id = ++this.id;
     return new Promise((resolve, reject) => {
-      this.pending.set(id, { resolve, reject, method });
+      if (this.closed) return reject(new Error(`${method}: Chrome closed`));
+      const timer = setTimeout(() => {
+        this.pending.delete(id);
+        reject(new Error(`${method}: no answer in ${timeout} ms`));
+      }, timeout);
+      const done = (fn) => (value) => {
+        clearTimeout(timer);
+        fn(value);
+      };
+      this.pending.set(id, {
+        resolve: done(resolve),
+        reject: done(reject),
+        method,
+      });
       this.ws.send(JSON.stringify({ id, method, params, sessionId }));
     });
   }

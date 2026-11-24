@@ -370,7 +370,7 @@
 }
 
 /* ---- Responsive layer. These rules are shared: pages opt in through the
-   shared components (CardTable, FoldSegmented, EChart, ScrollRow, Kpi) and
+   shared components (CardTable, FoldSegmented, EChart, useScrollEdges, Kpi) and
    never carry their own phone layout. Phone width is 767px and below
    (useNarrow), card width 575px and below (usePhone). ---- */
 

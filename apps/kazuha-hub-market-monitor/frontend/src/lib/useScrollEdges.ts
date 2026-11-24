@@ -1,8 +1,8 @@
 import { useLayoutEffect, type RefObject } from "react";
 
 // A row that scrolls sideways without a scrollbar marks the sides that have more content
-// (data-start / data-end), and .rp-scroll-row in index.css fades those edges: the settings tab row,
-// the stock timeline, anything else laid out as one swipeable line. Kept current on scroll, on a
+// (data-start / data-end), and .mm-scroll-row in style.css fades those edges: the module tab row,
+// anything else laid out as one swipeable line. Kept current on scroll, on a
 // resize of the row and when its children change size.
 // A mouse cannot swipe, and its wheel only moves up and down: on such a row the mouse wheel and a
 // press-and-drag scroll it sideways, the way a trackpad or a finger already does. The wheel is kept

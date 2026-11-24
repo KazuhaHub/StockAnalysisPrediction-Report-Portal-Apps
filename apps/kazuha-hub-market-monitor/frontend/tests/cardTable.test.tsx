@@ -51,6 +51,38 @@ describe("CardTable", () => {
     expect(container.querySelector(".mm-card-sort")).toBeNull();
   });
 
+  // A title written as markup (a tooltip span) still labels its cards with its text, never with
+  // the column's identifier.
+  it("labels a card with the text of a title written as markup", () => {
+    setViewport(390);
+    const { container } = render(
+      <CardTable<Row>
+        rowKey="id"
+        columns={[
+          columns[0],
+          {
+            ...columns[1],
+            title: (
+              <span title="tip">
+                <b>Breadth</b> %
+              </span>
+            ),
+          } as never,
+        ]}
+        dataSource={rows}
+      />,
+    );
+    const cells = [
+      ...container.querySelectorAll(
+        ".ant-table-tbody tr.ant-table-row:first-child td",
+      ),
+    ];
+    expect(cells.map((c) => c.getAttribute("data-label"))).toEqual([
+      "Name",
+      "Breadth %",
+    ]);
+  });
+
   // On a phone each row is a card of label and value, so nothing needs a sideways scroll.
   it("turns rows into labelled cards on a phone, without a horizontal scroll", () => {
     setViewport(390);

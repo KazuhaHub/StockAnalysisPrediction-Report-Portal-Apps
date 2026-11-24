@@ -1,4 +1,4 @@
-import { useState, type Key } from "react";
+import { isValidElement, useState, type Key, type ReactNode } from "react";
 import { Button, Select, Table } from "antd";
 import type { TableColumnType, TableProps } from "antd";
 import { useCopy } from "../lib/copy";
@@ -20,9 +20,18 @@ const columnKey = <T,>(column: TableColumnType<T>): string | undefined => {
   return undefined;
 };
 
+// The visible text of a title written as markup (a tooltip span around the name).
+const textOf = (node: ReactNode): string => {
+  if (typeof node === "string" || typeof node === "number") return String(node);
+  if (Array.isArray(node)) return node.map(textOf).join("");
+  if (isValidElement<{ children?: ReactNode }>(node))
+    return textOf(node.props.children);
+  return "";
+};
+
 const columnLabel = <T,>(column: CardColumn<T>): string =>
   column.phoneLabel ??
-  (typeof column.title === "string" ? column.title : (columnKey(column) ?? ""));
+  (textOf(column.title as ReactNode).trim() || (columnKey(column) ?? ""));
 
 /**
  * antd's Table, which on a phone lays each row out as a card of label and

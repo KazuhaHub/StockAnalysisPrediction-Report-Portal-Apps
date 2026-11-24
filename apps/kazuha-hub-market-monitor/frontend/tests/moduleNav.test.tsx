@@ -52,7 +52,8 @@ test("choosing a tab navigates to its module", async () => {
         .getAttribute("aria-selected"),
     ).toBe("true"),
   );
-  expect(app.page().page.title).toBe(enUS.quantTitle);
+  // The host hears about the new page after the tab has switched.
+  await waitFor(() => expect(app.page()?.page.title).toBe(enUS.quantTitle));
 });
 
 // Tabs that do not fit their row scroll, with a fade at the side that has
