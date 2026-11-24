@@ -352,6 +352,9 @@ def snapshot(years=None, tag: str = "", keep: int | None = None,
 
     只快照**已经存在**的分区：新建分区没有旧数据可保护。
 
+    `MD_SNAPSHOT_COPY=1` 时改成复制（在平台里跑时由 mm_job 设）：硬链接是同一文件的
+    第二个链接，平台更新前的数据检查点拒收 nlink>1 的文件。
+
     `years=None` 才是"全部已存在分区"；显式传空列表是"没有分区要保护"，必须
     什么都不拍。这两者以前被 `if years` 混成一支——空列表走成 falsy，于是
     一次空写入会给全库拍 13 个分区的快照。2026-11-10 那 87 份快照里，78 份
@@ -377,10 +380,13 @@ def snapshot(years=None, tag: str = "", keep: int | None = None,
         d = os.path.join(SNAP, f"{stamp}#{n:02d}")
     os.makedirs(d, exist_ok=True)
     linked = copied = 0
+    copy_only = os.environ.get("MD_SNAPSHOT_COPY") == "1"
     for y in todo:
         src = os.path.join(BARS, f"{y}.parquet")
         dst = os.path.join(d, f"{y}.parquet")
         try:
+            if copy_only:
+                raise OSError("copy requested")
             os.link(src, dst)
             linked += 1
         except OSError:

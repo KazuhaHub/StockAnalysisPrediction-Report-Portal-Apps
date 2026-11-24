@@ -17,7 +17,7 @@
 #   ./backfill.sh --once 25    # 只跑 25 分钟的拉取就退出（给定时任务用）
 set -uo pipefail
 cd "$(dirname "$0")"
-PY=/opt/daily-tasks/venv/bin/python3
+PY="${PY:-/opt/daily-tasks/venv/bin/python3}"
 LOCK="$PWD/.backfill.lock"
 PAN=/opt/daily-tasks/workspace/panorama
 source ./locklib.sh

@@ -220,6 +220,18 @@ class T(unittest.TestCase):
         dst = os.path.join(md.SNAP, r["stamp"], "2024.parquet")
         self.assertEqual(os.stat(src).st_ino, os.stat(dst).st_ino)
 
+    def test_snapshot_copies_when_asked(self):
+        """MD_SNAPSHOT_COPY=1（平台里跑）：复制，不留第二个链接——平台的数据检查点拒收 nlink>1 的文件。"""
+        md.ingest([rec("600000", [("2024-01-02", 1, 2, 0.5, 1.5)])])
+        os.environ["MD_SNAPSHOT_COPY"] = "1"
+        self.addCleanup(os.environ.pop, "MD_SNAPSHOT_COPY", None)
+        r = md.snapshot(quiet=True)
+        self.assertEqual((r["linked"], r["copied"]), (0, 1))
+        src = os.path.join(md.BARS, "2024.parquet")
+        dst = os.path.join(md.SNAP, r["stamp"], "2024.parquet")
+        self.assertNotEqual(os.stat(src).st_ino, os.stat(dst).st_ino)
+        self.assertEqual(os.stat(src).st_nlink, 1)
+
     def test_snapshot_skips_years_that_do_not_exist(self):
         md.ingest([rec("600000", [("2024-01-02", 1, 2, 0.5, 1.5)])])
         r = md.snapshot(["2019", "2024"], quiet=True)

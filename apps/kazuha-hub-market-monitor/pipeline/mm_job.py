@@ -15,8 +15,12 @@ MM_OUTPUT_DIR (a fresh staging directory). It
    (docs/store-v2.md), which the service validates and installs.
 
 The pipeline scripts hard-code /opt/daily-tasks; the image links that path to
-the work directory (checked before every run), and the work directory's venv/
-links to the interpreter running this file.
+the work directory (checked before every run). They take their interpreter
+from $PY, which is the one running this file.
+
+The platform checkpoints the data directory before an update and refuses any
+symlink, socket, fifo or multiply-linked file in it, so this entry creates
+none there and removes the ones an earlier version or the pipeline left.
 
 Exit codes: the pipeline's own non-zero code, passed through; 2 usage; and,
 kept clear of the pipeline's own small codes, 91 output missing, 92 output
@@ -31,6 +35,7 @@ import math
 import os
 import shutil
 import socket
+import stat
 import subprocess
 import sys
 import time
@@ -103,7 +108,8 @@ NOT_COPIED = {"tests", "mm_job.py", "__pycache__"}
 
 def prepare_work(src, work):
     """Copy the pipeline code into the work directory, never deleting files
-    there, and point work/venv at the running interpreter's prefix."""
+    there, and leave nothing in it that the platform's data checkpoint
+    refuses."""
     for root, dirs, files in os.walk(src):
         rel = os.path.relpath(root, src)
         if rel == ".":
@@ -116,13 +122,67 @@ def prepare_work(src, work):
             s, t = os.path.join(root, name), os.path.join(target, name)
             if not os.path.exists(t) or not filecmp.cmp(s, t, shallow=False):
                 shutil.copy2(s, t)
-    venv = os.path.join(work, "venv")
-    if os.path.islink(venv) and os.path.realpath(venv) != os.path.realpath(sys.prefix):
-        os.remove(venv)
-    elif os.path.isdir(venv) and not os.path.islink(venv):
-        os.rename(venv, venv + ".replaced-%d" % int(time.time()))
-    if not os.path.lexists(venv):
-        os.symlink(sys.prefix, venv)
+    remove_venv_link(work)
+    unshare_hard_links(work)
+
+
+def remove_venv_link(work):
+    """Up to 0.1.0-beta.5, work/venv linked to the interpreter, and a real
+    directory found there was renamed to venv.replaced-<time>. Nothing runs
+    from either (jobs use $PY), and a venv holds symlinks, so remove them."""
+    for name in os.listdir(work):
+        if name != "venv" and not name.startswith("venv.replaced-"):
+            continue
+        path = os.path.join(work, name)
+        if os.path.islink(path) or not os.path.isdir(path):
+            os.remove(path)
+        else:
+            shutil.rmtree(path)
+        print(f"[mm_job] removed work/{name}", flush=True)
+
+
+UNSHARE_SUFFIX = ".mm-unshare"
+
+
+def unshare_hard_links(work):
+    """Give every regular file under work that has more than one link its own
+    copy, keeping its mtime. The pipeline's write-ahead snapshots used to
+    hard-link partitions (MD_SNAPSHOT_COPY now makes them copy); this clears
+    the ones left. Raises OSError if a copy fails, leaving no partial copy."""
+    n = 0
+    for root, dirs, files in os.walk(work):
+        for name in files:
+            path = os.path.join(root, name)
+            if name.endswith(UNSHARE_SUFFIX):
+                os.remove(path)  # a partial copy from an interrupted run
+                continue
+            st = os.lstat(path)
+            if not stat.S_ISREG(st.st_mode) or st.st_nlink < 2:
+                continue
+            tmp = path + UNSHARE_SUFFIX
+            try:
+                shutil.copy2(path, tmp)
+                os.replace(tmp, path)
+            except OSError:
+                if os.path.lexists(tmp):
+                    os.remove(tmp)
+                raise
+            n += 1
+    if n:
+        print(f"[mm_job] gave {n} hard-linked file(s) their own copy", flush=True)
+
+
+def report_unsafe(data_dir):
+    """Name what is left under data_dir that the platform's data checkpoint
+    refuses (a symlink, socket, fifo or device), so an update that fails on
+    it can be traced. Nothing this app writes is one of those."""
+    for root, dirs, files in os.walk(data_dir):
+        for name in dirs + files:
+            path = os.path.join(root, name)
+            mode = os.lstat(path).st_mode
+            if not (stat.S_ISDIR(mode) or stat.S_ISREG(mode)):
+                print(f"[mm_job] warning: {os.path.relpath(path, data_dir)} is not a regular file "
+                      "or directory; the platform cannot checkpoint this data", file=sys.stderr)
 
 
 def clear_stale_locks(work):
@@ -142,6 +202,9 @@ def job_env(work):
     # The pipeline's own HTML pages are not used (the app has its own
     # frontend) and need vendored JS the app does not ship.
     env["MM_NO_HTML"] = "1"
+    # Copy write-ahead snapshots: a hard link is a second link to the file,
+    # which the platform's data checkpoint refuses.
+    env["MD_SNAPSHOT_COPY"] = "1"
     # Trading days follow Beijing time; the scripts use local dates.
     env.setdefault("TZ", "Asia/Shanghai")
     env.update({
@@ -510,6 +573,7 @@ def run(job, src, data_dir, out_dir, prefix_link=PREFIX_LINK):
         print(f"[mm_job] {prefix_link} must link to {work}", file=sys.stderr)
         return EXIT_ENVIRONMENT
     prepare_work(src, work)
+    report_unsafe(data_dir)
     clear_stale_locks(work)
     cwd, command, _, needs_server = JOBS[job]
     command = [part.format(py=sys.executable) for part in command]
@@ -527,6 +591,10 @@ def run(job, src, data_dir, out_dir, prefix_link=PREFIX_LINK):
     finally:
         if server is not None:
             stop_server(server)
+        try:
+            unshare_hard_links(work)
+        except OSError as e:  # the next run's prepare_work retries, and fails loudly
+            print(f"[mm_job] could not unshare hard links: {e!r}", file=sys.stderr)
     if code != 0:
         print(f"[mm_job] {job}: pipeline exited {code}", file=sys.stderr)
     return publish(job, work, out_dir, code, started)

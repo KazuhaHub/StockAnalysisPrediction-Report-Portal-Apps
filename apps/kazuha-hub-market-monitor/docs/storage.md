@@ -28,9 +28,24 @@ staging directory and to the pipeline's work directory.
     ├── workspace/                           Panorama, sentiment and ETF inputs and history
     ├── margin_scan/                         margin-scan inputs and history
     ├── stock_server/                        local data server (started by the job entry)
-    ├── .mm-published/                       last snapshots handed to the service
-    └── venv -> the image's virtual environment
+    └── .mm-published/                       last snapshots handed to the service
 ```
+
+`/data` holds only directories and singly-linked regular files: the platform
+checkpoints it before an update and refuses symlinks, sockets, fifos and files
+with more than one link. Jobs run on the image's interpreter through `$PY`
+(there is no `work/venv`), the bar store's write-ahead snapshots are copies
+(`MD_SNAPSHOT_COPY=1`), and every beta.6 job removes `work/venv` and
+`work/venv.replaced-*` and unshares the hard links that 0.1.0-beta.5 and
+earlier left.
+
+That clean-up runs only inside a beta.6 job, and the update to beta.6 is
+checkpointed before one can run. Updating from beta.5 or earlier therefore
+needs the old version's data cleaned first: pause its schedule (its job entry
+re-creates `work/venv` on every run), remove `work/venv` and
+`work/venv.replaced-*`, give each hard-linked file under
+`work/MarketData/snapshots/` its own copy (or delete those snapshots), then
+update.
 
 `work/` holds state the jobs cannot rebuild cheaply (the bar store since 2014,
 Panorama fundamentals, the Shenzhen ETF share history, which the exchange does
