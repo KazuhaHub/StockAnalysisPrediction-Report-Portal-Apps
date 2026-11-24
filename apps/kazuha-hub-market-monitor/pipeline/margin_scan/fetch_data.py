@@ -273,16 +273,43 @@ def fetch_bars(codes, refresh=False, end_date=None):
 
 
 # ---------------------------------------------------------------- 两融账户
+ACCOUNT_RETRIES = 3
+ACCOUNT_BACKOFF = 5.0     # 秒，逐次翻倍
+
+
 def fetch_account():
+    """两融账户统计（平均维持担保比例等，东财 datacenter）。
+
+    这是页面上一张辅助卡片，不是扫描本身：东财对本机限流、断流
+    （ChunkedEncodingError）时重试几次，仍失败就沿用上一次落盘的数据并在日志里
+    说明它停在哪天（build_data 会把 guarantee_date 带进 payload）；只有从没
+    成功过、本地也没有时才失败。"""
     import akshare as ak
-    df = ak.stock_margin_account_info()
+    cache = DATA / "account.parquet"
+    last = None
+    for attempt in range(ACCOUNT_RETRIES):
+        try:
+            df = ak.stock_margin_account_info()
+            break
+        except Exception as e:
+            last = e
+            log("两融账户统计第 %d/%d 次失败：%s" % (attempt + 1, ACCOUNT_RETRIES, type(e).__name__))
+            if attempt + 1 < ACCOUNT_RETRIES:
+                time.sleep(ACCOUNT_BACKOFF * (2 ** attempt))
+    else:
+        if cache.exists():
+            df = pd.read_parquet(cache)
+            log("两融账户统计抓取失败（%s），沿用本地 account.parquet：最新 %s（可能不是最新交易日）"
+                % (type(last).__name__, df["date"].iloc[-1] if len(df) else "无"))
+            return df
+        raise last
     df = df.rename(columns={"日期": "date", "融资余额": "rz", "融券余额": "rq",
                             "融资买入额": "rz_buy", "融券卖出额": "rq_sell",
                             "担保物总价值": "collateral",
                             "平均维持担保比例": "ratio",
                             "有融资融券负债的投资者数量": "n_investor"})
     df["date"] = pd.to_datetime(df["date"]).dt.strftime("%Y-%m-%d")
-    df.to_parquet(DATA / "account.parquet", index=False)
+    df.to_parquet(cache, index=False)
     log("两融账户统计落盘：%d 行，最新 %s，平均维持担保比例 %s%%"
         % (len(df), df["date"].iloc[-1],
            df["ratio"].dropna().iloc[-1] if df["ratio"].notna().any() else "NA"))

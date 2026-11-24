@@ -440,6 +440,9 @@ jobs:
       - run: python3 tests/test_margin_bars.py
         env:
           MM_REQUIRE_PANDAS: '1'
+      - run: python3 tests/test_job_resilience.py
+        env:
+          MM_REQUIRE_PANDAS: '1'
   status:
     needs: workflow-lint
     if: ${{ !cancelled() && (github.event_name != 'pull_request' || (needs.workflow-lint.result == 'success' && needs.workflow-lint.outputs.status == 'true')) }}

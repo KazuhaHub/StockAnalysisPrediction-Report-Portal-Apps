@@ -28,9 +28,9 @@ END = _META.get("date_range", [START, None])[1] or pd.Timestamp.today().strftime
 print("[1/5] 加载行情面板 ...", flush=True)
 codes = md.codes()
 meta = json.load(open(md.META, encoding="utf-8"))["stocks"]
-close = md.panel("close", codes=codes, start=START, end=END).astype("float32")
-volume = md.panel("volume", codes=codes, start=START, end=END).astype("float32")
-amount = md.panel("amount", codes=codes, start=START, end=END).astype("float32")
+close = md.panel("close", codes=codes, start=START, end=END, dtype="float32")
+volume = md.panel("volume", codes=codes, start=START, end=END, dtype="float32")
+amount = md.panel("amount", codes=codes, start=START, end=END, dtype="float32")
 print(f"    close {close.shape}, {close.index[0].date()} ~ {close.index[-1].date()}", flush=True)
 
 # 板块映射，用于涨跌停阈值

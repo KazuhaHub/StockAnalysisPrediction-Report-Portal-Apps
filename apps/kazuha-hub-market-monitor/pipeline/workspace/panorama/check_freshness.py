@@ -1,10 +1,13 @@
 """数据新鲜度闸门：ASOF 是否等于「今天（或之前）最近的那个交易日」。
 
 ASOF 是从本地 K 线推导的，所以「ASOF == 最后一根 K 线」是同义反复，
-挡不住「今天是交易日但行情库昨晚更新失败」。这里向服务端要交易日历做真校验。
+挡不住「今天是交易日但行情库昨晚更新失败」。这里要一份交易日历做真校验：
+先用行情库自己的日历（MarketData/trading_day.py，走 QUOTE_API 的 HTTPS，
+marketdata 任务每晚靠它定终点），取不到再问本机数据服务。
 """
+import os
 import sys
-from datetime import date
+from datetime import date, timedelta
 
 import mcpc
 
@@ -12,7 +15,28 @@ from asof import asof_iso
 
 
 def last_trading_day(upto=None):
-    m = mcpc.MCP("http://localhost:8091/mcp").init()
+    errors = []
+    for label, source in (("_from_market_data", _from_market_data), ("_from_data_server", _from_data_server)):
+        try:
+            d = source(upto)
+            if d:
+                return d
+            errors.append("%s: empty" % label)
+        except SystemExit as e:
+            errors.append("%s: %s" % (label, e))
+        except Exception as e:
+            errors.append("%s: %s" % (label, type(e).__name__))
+    raise SystemExit("; ".join(errors))
+
+
+def _from_market_data(upto=None):
+    sys.path.insert(0, os.path.join(os.path.expanduser("~"), "MarketData"))
+    import trading_day
+    return trading_day.last_trading_day(upto)
+
+
+def _from_data_server(upto=None):
+    m = mcpc.MCP(mcpc.SERVER_URL).init()
     r = m.call("query_trading_calendar", {"action": "previous_day",
                                          "date": upto or date.today().isoformat()})
     for k in ("previous_trading_day", "date", "trade_date", "previous_day", "prev_date"):
@@ -25,6 +49,18 @@ def last_trading_day(upto=None):
             if d.get(k):
                 return str(d[k])[:10]
     raise SystemExit("交易日历返回无法解析：%s" % str(r)[:200])
+
+
+def expected_asof(asof, today=None):
+    """ASOF 应该等于的交易日：今天（含）之前最近的交易日；但今天本身是交易日、
+    而库里还没有今天的 K 线时（收盘前、或当晚 marketdata 还没跑），上一个交易日
+    也算新鲜。定时任务在次日凌晨跑，那时「今天」已经换了，这条放宽碰不到它。"""
+    today = today or date.today()
+    cur = last_trading_day(today.isoformat())
+    if asof == cur or cur != today.isoformat():
+        return cur
+    prev = last_trading_day((today - timedelta(days=1)).isoformat())
+    return asof if asof == prev else cur
 
 
 def coverage(asof: str):
@@ -54,7 +90,7 @@ if __name__ == "__main__":
     # publish rather than risk a report that looks new but carries old bars.
     # A deliberate backfill sets PANORAMA_ASOF, which skips this check.
     try:
-        expect = last_trading_day()
+        expect = expected_asof(asof)
     except SystemExit as e:
         print("STALE trading calendar unavailable (%s)" % e)
         sys.exit(2)

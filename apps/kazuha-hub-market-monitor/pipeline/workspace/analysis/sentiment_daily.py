@@ -40,7 +40,12 @@ if "--skip-build" not in sys.argv:
     if r.returncode != 0:
         print(r.stdout[-2000:])
         print(r.stderr[-2000:])
-        sys.exit("面板重建失败")
+        if r.returncode < 0:
+            # 被信号杀掉时子进程来不及写任何东西；SIGKILL 在容器里几乎总是内存超限
+            why = "被信号 %d 终止%s" % (-r.returncode, "（多半是内存超限被 OOM 杀掉）" if r.returncode == -9 else "")
+        else:
+            why = "退出码 %d" % r.returncode
+        sys.exit("面板重建失败：sentiment_build.py " + why)
     print("    ok")
 else:
     print("[1/3] 跳过重建，复用 panel.csv")

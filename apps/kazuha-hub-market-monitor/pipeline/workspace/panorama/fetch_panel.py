@@ -19,7 +19,7 @@ FIELDS = ",".join([
 
 
 def main():
-    m = mcpc.MCP("http://localhost:8091/mcp").init()
+    m = mcpc.MCP(mcpc.SERVER_URL).init()
     all_rows = []
     for rp in PERIODS:
         rows, off, total = [], 0, None
