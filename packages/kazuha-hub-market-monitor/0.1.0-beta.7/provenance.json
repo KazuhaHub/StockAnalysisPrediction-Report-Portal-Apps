@@ -1,0 +1,12 @@
+{
+  "app_id": "kazuha-hub-market-monitor",
+  "version": "0.1.0-beta.7",
+  "commit": "dc6cb385610d9cb86b26ad41234016cc4c2ce65d",
+  "run_url": "https://github.com/KazuhaHub/StockAnalysisPrediction-Report-Portal-Apps/actions/runs/45330094002",
+  "package_oci": {
+    "repository": "ghcr.io/kazuhahub/portal-apps/kazuha-hub-market-monitor",
+    "digest": "sha256:dbe3b5dd689c84086c55bb5ed9362bfe0f4ee85f4e0937f368f0ffe14447b687"
+  },
+  "package_sha256": "3407e18b77d206901499e2b754d71d87aafdae6cc48338667a6fa57211245d27",
+  "notes": "The margin job reads its daily bars from the app's own bar store, then Tencent and Sina, instead of eastmoney, which throttles the server; plain-http requests go over https. Interrupted runs show as interrupted. New proxy host: stock.finance.sina.com.cn."
+}
