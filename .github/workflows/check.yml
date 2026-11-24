@@ -446,6 +446,9 @@ jobs:
       - run: python3 -W ignore tests/test_etf_gaps.py
         env:
           MM_REQUIRE_PANDAS: '1'
+      - run: python3 tests/test_quant.py
+        env:
+          MM_REQUIRE_PANDAS: '1'
   status:
     needs: workflow-lint
     if: ${{ !cancelled() && (github.event_name != 'pull_request' || (needs.workflow-lint.result == 'success' && needs.workflow-lint.outputs.status == 'true')) }}

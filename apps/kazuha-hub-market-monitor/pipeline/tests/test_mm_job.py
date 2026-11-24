@@ -258,7 +258,7 @@ class Dispatch(unittest.TestCase):
         self.assertEqual(mm_job.main(["mm_job.py"]), 2)
 
     def test_every_service_job_is_known(self):
-        self.assertEqual(sorted(mm_job.JOBS), ["etf", "margin", "marketdata", "panorama", "sentiment"])
+        self.assertEqual(sorted(mm_job.JOBS), ["etf", "margin", "marketdata", "panorama", "quant", "sentiment"])
 
     def test_job_failure_writes_nothing(self):
         e = Env(self)

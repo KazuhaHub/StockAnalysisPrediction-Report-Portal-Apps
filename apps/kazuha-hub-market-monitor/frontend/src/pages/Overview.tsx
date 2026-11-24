@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { Alert, Button, Card, Empty, Space } from "antd";
+import { Alert, Button, Card, Col, Empty, Row, Space, Tag } from "antd";
 import { useAppNavigation } from "@portal-app/sdk/root-v2";
 import { Panel, Panels } from "../components/Panels";
 import { Dashboard, ROUTES } from "../components/Dashboard";
@@ -7,6 +7,7 @@ import { EChart } from "../components/EChart";
 import { KpiRow, type KpiItem } from "../components/Kpi";
 import { useVisual } from "../components/useVisual";
 import { useCopy } from "../lib/copy";
+import { TAG_COLOR, tagText } from "../lib/quant";
 import {
   arr,
   fill,
@@ -46,6 +47,21 @@ type RiskSummary = {
     current?: { last20?: Num; last_nf?: Num };
     health?: { label?: string; light?: string };
     nf_series?: { dates?: string[]; nf?: Num[] };
+  };
+  /** Optional: absent until the quant job has produced a snapshot. */
+  quant?: {
+    as_of?: string;
+    state?: string;
+    state_code?: string;
+    breadth?: Num;
+    ndr?: Num;
+    /** Positions are percents: 0, 25, 50 or 100. */
+    step_pos?: Num;
+    step_stage?: Num;
+    step_cap?: boolean | Num;
+    micro_state?: string;
+    micro_code?: string;
+    micro_pos?: Num;
   };
   inputs?: Record<string, string>;
 };
@@ -268,6 +284,15 @@ function OverviewBody({ r, asOf }: { r: RiskSummary; asOf: string }) {
         </div>
       )}
       <KpiRow items={kpis} cols={{ xs: 24, sm: 12, lg: 8, xl: 8, xxl: 4 }} />
+      {r.quant?.state && (
+        <QuantCard
+          q={r.quant}
+          ready={navigation.ready}
+          open={() => {
+            navigation.navigate("/quant");
+          }}
+        />
+      )}
       <Card
         size="small"
         title={copy.ov_cross}
@@ -318,5 +343,67 @@ function OverviewBody({ r, asOf }: { r: RiskSummary; asOf: string }) {
         </Panel>
       </Panels>
     </Space>
+  );
+}
+
+function QuantCard({
+  q,
+  ready,
+  open,
+}: {
+  q: NonNullable<RiskSummary["quant"]>;
+  ready: boolean;
+  open: () => void;
+}) {
+  const { copy } = useCopy();
+  const tag = (code: string | undefined) => (
+    <Tag color={TAG_COLOR[code ?? ""] ?? "default"}>
+      {tagText(copy, code ?? "neutral")}
+    </Tag>
+  );
+  return (
+    <Card
+      size="small"
+      title={copy.ov_quant}
+      extra={
+        <Space>
+          {q.as_of && <span className="mm-muted">{q.as_of}</span>}
+          <Button size="small" disabled={!ready} onClick={open}>
+            {copy.ov_quantOpen}
+          </Button>
+        </Space>
+      }
+    >
+      <Row gutter={[16, 12]}>
+        <Col xs={24} md={12}>
+          <div className="mm-muted">{copy.q_leadTitle}</div>
+          <div>
+            <b>{q.state}</b> {tag(q.state_code)}
+          </div>
+          <div className="mm-muted">
+            {fill(copy.ov_quantStats, {
+              b: fmt(q.breadth, 1),
+              n: fmt(q.ndr, 1),
+              stage: isNum(q.step_stage) ? q.step_stage : DASH,
+              pos: isNum(q.step_pos) ? q.step_pos : DASH,
+              cap: q.step_cap ? copy.ov_quantCap : "",
+            })}
+          </div>
+        </Col>
+        {q.micro_state && (
+          <Col xs={24} md={12}>
+            <div className="mm-muted">{copy.q_microTitle}</div>
+            <div>
+              <b>{q.micro_state}</b> {tag(q.micro_code)}
+            </div>
+            <div className="mm-muted">
+              {fill(copy.ov_quantMicro, {
+                pos: isNum(q.micro_pos) ? q.micro_pos : DASH,
+              })}
+            </div>
+          </Col>
+        )}
+      </Row>
+    </Card>
   );
 }

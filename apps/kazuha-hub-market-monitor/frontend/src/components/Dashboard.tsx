@@ -12,13 +12,14 @@ import { useSnapshot } from "../lib/hooks";
 
 export const ROUTES: {
   path: string;
-  key: "overview" | "margin" | "sentiment" | "etf" | "panorama";
+  key: "overview" | "margin" | "sentiment" | "etf" | "panorama" | "quant";
 }[] = [
   { path: "/", key: "overview" },
   { path: "/margin", key: "margin" },
   { path: "/sentiment", key: "sentiment" },
   { path: "/etf", key: "etf" },
   { path: "/panorama", key: "panorama" },
+  { path: "/quant", key: "quant" },
 ];
 
 export function ModuleNav() {

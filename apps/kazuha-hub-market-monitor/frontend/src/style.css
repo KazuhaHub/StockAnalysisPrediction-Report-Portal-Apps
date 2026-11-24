@@ -172,3 +172,141 @@
   justify-content: flex-end;
   margin-top: 12px;
 }
+
+/* Quant page (pages/Quant.tsx). Colours that mean something come from useVisual
+   inline; these rules only lay things out. */
+.mm-quant-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 16px;
+}
+
+.mm-hint-block {
+  margin-bottom: 8px;
+  line-height: 1.6;
+}
+
+.mm-note {
+  margin: 8px 0;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+
+.mm-why {
+  color: var(--ant-color-text-tertiary, rgba(128, 128, 128, 0.8));
+  font-size: 12px;
+}
+
+.mm-state .ant-statistic-content {
+  font-size: 20px;
+}
+
+.mm-state .ant-statistic-content-value {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.mm-gates {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px;
+}
+
+.mm-gate {
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid;
+  border-radius: 8px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.mm-gate-value {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.mm-steps {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
+  gap: 8px;
+}
+
+.mm-step {
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid;
+  border-radius: 8px;
+  line-height: 1.5;
+}
+
+.mm-step-title {
+  font-weight: 600;
+}
+
+.mm-step-value {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.mm-hist-filter {
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.mm-today td {
+  background: var(--ant-color-fill-quaternary, rgba(128, 128, 128, 0.08));
+}
+
+.mm-method {
+  margin-top: 4px;
+}
+
+.mm-spec h4 {
+  margin: 20px 0 8px;
+}
+
+.mm-spec h4:first-child {
+  margin-top: 0;
+}
+
+.mm-spec-note {
+  margin: 8px 0;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+
+.mm-spec-scroll {
+  margin: 8px 0;
+  overflow-x: auto;
+}
+
+.mm-spec table {
+  width: 100%;
+  min-width: 560px;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.mm-spec th,
+.mm-spec td {
+  padding: 6px 8px;
+  text-align: left;
+  vertical-align: top;
+  line-height: 1.6;
+  border-bottom: 1px solid rgba(128, 128, 128, 0.25);
+}
+
+.mm-spec th {
+  font-weight: 600;
+}
+
+.mm-spec .mm-spec-k {
+  font-weight: 600;
+}
+
+.mm-spec code {
+  font-size: 12px;
+}
