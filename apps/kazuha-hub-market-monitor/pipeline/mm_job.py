@@ -206,6 +206,10 @@ def job_env(work):
     # Copy write-ahead snapshots: a hard link is a second link to the file,
     # which the platform's data checkpoint refuses.
     env["MD_SNAPSHOT_COPY"] = "1"
+    # Arrow's default allocator keeps freed memory: reading the bar store's
+    # partitions one after another left sentiment's panel build near 1.6 GB
+    # (0.8 GB with the system allocator) under the container's 2 GiB.
+    env["ARROW_DEFAULT_MEMORY_POOL"] = "system"
     # Trading days follow Beijing time; the scripts use local dates.
     env.setdefault("TZ", "Asia/Shanghai")
     env.update({
@@ -221,6 +225,57 @@ def job_env(work):
         "LANG": "C.UTF-8", "LC_ALL": "C.UTF-8",
     })
     return env
+
+
+# Before a job's first request, wait until the platform's egress proxy lets a
+# reviewed host through: right after the service starts (a bootstrap run) the
+# forwarder answers 403 until its broker session is up. The probe host is the
+# quotes API, which every installation reviews. A proxy that never opens does
+# not stop the job; its own requests then fail and say why.
+PROXY_WAIT = 120
+PROXY_POLL = 2.0
+PROXY_PROBE = os.environ.get("MM_PROXY_PROBE", "quotes.internal.anchan.kazuhahub.com:443")
+
+
+def proxy_connect_ok(proxy_url, target, timeout=5):
+    """One CONNECT through proxy_url to target (host:port); True on a 2xx."""
+    from urllib.parse import urlsplit
+    p = urlsplit(proxy_url if "://" in proxy_url else "http://" + proxy_url)
+    try:
+        with socket.create_connection((p.hostname, p.port or 80), timeout) as sock:
+            head = "CONNECT %s HTTP/1.1\r\nHost: %s\r\n" % (target, target)
+            if p.username:
+                import base64
+                cred = "%s:%s" % (p.username, p.password or "")
+                head += "Proxy-Authorization: Basic %s\r\n" % base64.b64encode(cred.encode()).decode()
+            sock.sendall((head + "\r\n").encode())
+            line = sock.makefile("rb").readline(256).decode("latin-1").split()
+            return len(line) >= 2 and line[1].startswith("2")
+    except (OSError, ValueError):
+        return False
+
+
+def wait_for_proxy(env, wait=None, poll=None):
+    """Wait until the egress proxy passes a CONNECT to a reviewed host. Returns
+    True when it does (or no proxy is configured), False after the wait."""
+    proxy_url = env.get("HTTPS_PROXY") or env.get("https_proxy")
+    if not proxy_url:
+        return True
+    wait = PROXY_WAIT if wait is None else wait
+    poll = PROXY_POLL if poll is None else poll
+    deadline = time.time() + wait
+    tries = 0
+    while True:
+        tries += 1
+        if proxy_connect_ok(proxy_url, PROXY_PROBE):
+            if tries > 1:
+                print(f"[mm_job] egress proxy ready after {tries} tries", flush=True)
+            return True
+        if time.time() >= deadline:
+            print(f"[mm_job] egress proxy still refuses {PROXY_PROBE} after {wait}s; running anyway",
+                  file=sys.stderr, flush=True)
+            return False
+        time.sleep(poll)
 
 
 def server_port():
@@ -582,6 +637,7 @@ def run(job, src, data_dir, out_dir, prefix_link=PREFIX_LINK):
     cwd, command, _, needs_server = JOBS[job]
     command = [part.format(py=sys.executable) for part in command]
     env = job_env(work)
+    wait_for_proxy(env)
     server = None
     if needs_server:
         server = start_server(work, env)

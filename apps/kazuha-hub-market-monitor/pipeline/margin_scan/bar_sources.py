@@ -254,6 +254,16 @@ def collect(codes, old, target, limit, home=None):
     if md_bad:
         _log("  行情库与本地旧表对不上口（改用备用源）：%d 只" % md_bad)
     mix["missing"] = len(rest)
+    if rest:
+        kinds = {}
+        for c in rest:
+            k = ("基金" if c[0] in "15" else "北交所" if c[0] in "48" or c.startswith("92")
+                 else "科创板" if c.startswith("688") else "创业板" if c[0] == "3" else "主板")
+            kinds[k] = kinds.get(k, 0) + 1
+        known = set(old["code"]) if len(old) else set()
+        no_old = sum(1 for c in rest if c not in known)
+        _log("  未取到 %d 只：%s；其中本地旧表没有的 %d 只；样例 %s"
+             % (len(rest), "，".join("%s %d" % kv for kv in sorted(kinds.items())), no_old, rest[:10]))
     parts = [p for p in parts if len(p)]
     new = pd.concat(parts, ignore_index=True) if parts else pd.DataFrame(columns=COLS)
     return new, mix

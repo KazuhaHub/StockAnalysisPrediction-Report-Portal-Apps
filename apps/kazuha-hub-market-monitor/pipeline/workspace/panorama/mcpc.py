@@ -1,16 +1,23 @@
-"""Minimal MCP streamable-HTTP client for localhost:8091 (stock-server).
+"""Minimal MCP streamable-HTTP client for the local stock-server (SERVER_URL).
 
 不给外部包依赖，只用标准库 + requests（本机已有）。
 用法：
     from mcpc import MCP
-    m = MCP("http://localhost:8091/mcp")
+    m = MCP(SERVER_URL)
     m.init()
     r = m.call("query_financial_pit", {"action": "cross_section", "as_of": "20261113", "limit": 2000})
 """
 import json
+import os
 import time
 
 import requests
+
+# The job entry starts the data server on 127.0.0.1 and exports its URL
+# (STOCK_SERVER_URL). Not "localhost": resolving that name depends on the
+# container's hosts file, and when it goes to DNS instead the request fails
+# with a ConnectionError before reaching the server.
+SERVER_URL = os.environ.get("STOCK_SERVER_URL", "http://127.0.0.1:8091/mcp")
 
 
 class MCP:
@@ -89,5 +96,5 @@ class MCP:
 
 
 if __name__ == "__main__":
-    m = MCP("http://localhost:8091/mcp").init()
+    m = MCP(SERVER_URL).init()
     print(json.dumps(m.call("query_trading_calendar", {"action": "latest"}) if True else {}, ensure_ascii=False)[:400])

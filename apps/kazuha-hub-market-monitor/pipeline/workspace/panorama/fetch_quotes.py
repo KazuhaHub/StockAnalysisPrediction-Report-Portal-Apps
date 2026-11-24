@@ -13,7 +13,7 @@ def chunks(seq, n):
 
 
 def fetch(codes, size=200):
-    m = mcpc.MCP("http://localhost:8091/mcp").init()
+    m = mcpc.MCP(mcpc.SERVER_URL).init()
     out, bad = {}, []
     for grp in chunks(codes, size):
         try:

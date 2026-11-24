@@ -47,7 +47,7 @@ def paged(m, tool, base, key="items", page=2000, maxpage=10, sleep=0.3):
 
 
 def main():
-    m = mcpc.MCP("http://localhost:8091/mcp").init()
+    m = mcpc.MCP(mcpc.SERVER_URL).init()
     ASOF = asof_compact()
 
     # 1) 最新 PIT 横截面

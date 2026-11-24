@@ -175,12 +175,55 @@ def load(codes=None, start=None, end=None, columns=None, as_datetime=True) -> pd
     return df
 
 
-def panel(field: str = "close", codes=None, start=None, end=None) -> pd.DataFrame:
-    """宽表：index=日期, columns=代码, values=`field`。做截面因子最顺手。"""
-    df = load(codes=codes, start=start, end=end, columns=["code", "date", field])
-    if df.empty:
+def panel(field: str = "close", codes=None, start=None, end=None, dtype=None) -> pd.DataFrame:
+    """宽表：index=日期, columns=代码, values=`field`。做截面因子最顺手。
+
+    直接从 arrow 表按字典编码的下标填 numpy 数组，不经过「长表 → pivot」：
+    全库 5,000+ 只 × 12 年的长表在 pandas 里是两列 Python 字符串，单列就要
+    1–2 GB，2 GiB 内存的容器里会被 OOM 直接杀掉（没有任何报错输出）。
+    `dtype` 默认沿用该列的类型；传 "float32" 再省一半。同一 (date, code) 有
+    重复行时保留最后一行。"""
+    import pyarrow.compute as _pc
+    expr = None
+    if start:
+        expr = ds.field("date") >= str(start)
+    if end:
+        e = ds.field("date") <= str(end)
+        expr = e if expr is None else (expr & e)
+    if codes:
+        e = ds.field("code").isin([norm_code(c) for c in codes])
+        expr = e if expr is None else (expr & e)
+    files = sorted(glob.glob(os.path.join(BARS, "*.parquet")))
+    if not files:
+        raise FileNotFoundError(f"{BARS} 下没有 parquet 分区，先跑一次 `market_data.py import`")
+    # 逐个年度分区读：每次只有一个分区的字符串列在内存里，留下的只是两列
+    # int32 下标和数值列。
+    parts, out_dtype = [], np.dtype(dtype) if dtype else None
+    for path in files:
+        t = ds.dataset(path, format="parquet").to_table(columns=["code", "date", field], filter=expr)
+        if t.num_rows == 0:
+            continue
+        cd = _pc.dictionary_encode(t.column("code")).combine_chunks()
+        dd = _pc.dictionary_encode(t.column("date")).combine_chunks()
+        vals = t.column(field).to_numpy()
+        if out_dtype is None:
+            out_dtype = vals.dtype if vals.dtype.kind == "f" else np.dtype(np.float64)
+        parts.append((np.asarray(cd.dictionary.to_pylist(), dtype=object),
+                      np.asarray([str(x)[:10] for x in dd.dictionary.to_pylist()], dtype=object),
+                      cd.indices.to_numpy(zero_copy_only=False).astype(np.int32),
+                      dd.indices.to_numpy(zero_copy_only=False).astype(np.int32),
+                      vals.astype(out_dtype, copy=False)))
+        del t, cd, dd, vals
+    if not parts:
         return pd.DataFrame()
-    return df.pivot(index="date", columns="code", values=field).sort_index()
+    code_v = np.unique(np.concatenate([p[0] for p in parts]))
+    date_v = np.unique(np.concatenate([p[1] for p in parts]))
+    arr = np.full((len(date_v), len(code_v)), np.nan, dtype=out_dtype)
+    for cv, dv, ci, di, vals in parts:   # 后面的分区覆盖前面的：重复行保留最后一行
+        arr[np.searchsorted(date_v, dv)[di], np.searchsorted(code_v, cv)[ci]] = vals
+    del parts
+    return pd.DataFrame(arr, index=pd.DatetimeIndex(pd.to_datetime(date_v), name="date"),
+                        columns=pd.Index(code_v, name="code"))
 
 
 def bars_of(code: str, start=None, end=None) -> pd.DataFrame:
