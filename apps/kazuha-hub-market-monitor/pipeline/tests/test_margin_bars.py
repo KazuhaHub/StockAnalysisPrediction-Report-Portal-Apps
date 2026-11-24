@@ -142,9 +142,10 @@ class Tencent(unittest.TestCase):
                 [TARGET, "1", "11.00", "1", "1", "600.00", {}, "0.1", "66.00", ""]]
         star = [[TARGET, "1", "11.00", "1", "1", "60000.00", {}, "0.1", "66.00", ""]]
         with patch("requests.get", lambda url, params, **kw: self.kline(
-                params["param"][2:8], star if params["param"][2:8] == "688001" else rows)):
+                params["param"][2:8], star if params["param"][2:5] in ("688", "689") else rows)):
             self.assertEqual(bs.tx_daily("600000")[TARGET], (1.0, 11.0, 1.0, 1.0, 600.0, 660000.0))
             self.assertEqual(bs.tx_daily("688001")[TARGET][4], 600.0)
+            self.assertEqual(bs.tx_daily("689009")[TARGET][4], 600.0)
             self.assertEqual(bs._tx_market("510300"), "sh")
 
     def test_reference_day_close_and_amount_must_match(self):

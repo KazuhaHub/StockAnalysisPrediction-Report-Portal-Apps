@@ -15,7 +15,7 @@ stock_server 的 _attach_quote_normalization）：
 
 每只票取到的序列都要和本地旧表对一次口：重叠交易日上 新/旧 收盘价之比必须是
 同一个常数（无除权时≈1；期间有除权时旧表锚点过期，比值是另一个常数），且成交额
-一致（看全部重叠日）。对不上就不用这只票的库内数据，交给下一个来源。腾讯、新浪两个备用源沿用
+一致（看最近 20 个重叠日）。对不上就不用这只票的库内数据，交给下一个来源。腾讯、新浪两个备用源沿用
 analysis/fill_bars_tx.py、fill_bars_sina.py 原有的「参照日收盘对口」安全阀。
 """
 import glob
@@ -27,6 +27,10 @@ import pandas as pd
 
 COLS = ["code", "date", "open", "close", "high", "low", "volume", "amount"]
 TOL = 0.5            # 百分比
+# 对口用的重叠交易日数。只看最近一段：东财/腾讯的前复权是「减法」（每次除权减去
+# 分红），行情库换算出的是「比例」前复权，两者之比在一个除权段内会漂 0.3–0.8%，
+# 拿 150 天全窗口比会把半年内派过息的票成批拒掉；20 天内一般没有除权，比值恒定。
+OVERLAP = 20
 UA = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"}
 
 
@@ -79,8 +83,7 @@ def consistent(new, old, tol=TOL):
     if old is None or old.empty:
         return True
     m = new.merge(old, on="date", suffixes=("_n", "_o"))
-    # 对全部重叠日：通过后整段窗口都会被新数据覆盖，早些日子的复权断档也要拦住
-    m = m[(m["close_o"] > 0)]
+    m = m[(m["close_o"] > 0)].sort_values("date").tail(OVERLAP)
     if m.empty:
         return True
     r = m["close_n"] / m["close_o"]
@@ -108,11 +111,11 @@ def tx_daily(code, count=40):
     """腾讯 qfq 日线：{date: (open, close, high, low, volume 手, amount 元)}；失败返回 None。
 
     用 newfqkline（与 fqkline 同主机）：它多带成交额（第 9 列，万元）。成交量
-    主板/创业板/场内基金为手，科创板（688）为股，统一换成手。"""
+    主板/创业板/场内基金为手，科创板（688/689）为股，统一换成手。"""
     import requests
     mkt = _tx_market(code)
     url = "https://web.ifzq.gtimg.cn/appstock/app/newfqkline/get"
-    per_lot = 100.0 if code.startswith("688") else 1.0
+    per_lot = 100.0 if code.startswith(("688", "689")) else 1.0
     for a in range(3):
         try:
             r = requests.get(url, params={"param": "%s%s,day,,,%d,qfq" % (mkt, code, count)},
