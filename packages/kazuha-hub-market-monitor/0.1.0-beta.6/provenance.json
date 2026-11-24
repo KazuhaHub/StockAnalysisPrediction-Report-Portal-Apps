@@ -1,0 +1,12 @@
+{
+  "app_id": "kazuha-hub-market-monitor",
+  "version": "0.1.0-beta.6",
+  "commit": "1e534d13ba49eccea12f26b029cf905170c4a80f",
+  "run_url": "https://github.com/KazuhaHub/StockAnalysisPrediction-Report-Portal-Apps/actions/runs/45300154503",
+  "package_oci": {
+    "repository": "ghcr.io/kazuhahub/portal-apps/kazuha-hub-market-monitor",
+    "digest": "sha256:66cb77da74429cc929e0ee8e7e70f58da7c3b46254141dfc0e986ae912e861eb"
+  },
+  "package_sha256": "8feb2d20be4c5dcf35fb54dcf81eb43120b3c8c60ae95bdb55f2cb325a5fa0f7",
+  "notes": "Fixes updates that failed at the data snapshot: the app no longer keeps symlinks or hard-linked files in its data, and removes the ones earlier versions left. Updating from beta.5 or earlier needs the old data cleaned first (see docs/storage.md)."
+}

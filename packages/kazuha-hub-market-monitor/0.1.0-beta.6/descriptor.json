@@ -1,0 +1,167 @@
+{
+  "format": "portal.app/v2",
+  "id": "kazuha-hub-market-monitor",
+  "version": "0.1.0-beta.6",
+  "publisher": "kazuha-hub",
+  "compatibility": {
+    "platform_api": ">=2.0.0-0 <3.0.0-0",
+    "runner_protocol": ">=1.0.0-0 <2.0.0-0"
+  },
+  "presentation": {
+    "name_key": "title",
+    "description_key": "description",
+    "entry": "index.html",
+    "locales": [
+      "en-US",
+      "zh-CN",
+      "zh-TW"
+    ],
+    "routes": [
+      {
+        "id": "overview",
+        "path": "/",
+        "layout": "document"
+      },
+      {
+        "id": "margin",
+        "path": "/margin",
+        "layout": "document"
+      },
+      {
+        "id": "sentiment",
+        "path": "/sentiment",
+        "layout": "document"
+      },
+      {
+        "id": "etf",
+        "path": "/etf",
+        "layout": "document"
+      },
+      {
+        "id": "panorama",
+        "path": "/panorama",
+        "layout": "document"
+      }
+    ],
+    "admin_routes": [
+      {
+        "id": "admin",
+        "path": "/admin",
+        "layout": "document"
+      }
+    ],
+    "display": {
+      "icon": "dashboard",
+      "texts": [
+        {
+          "locale": "en-US",
+          "name": "Market Monitor",
+          "description": "Daily A-share margin, sentiment, ETF-flow and valuation dashboards"
+        },
+        {
+          "locale": "zh-CN",
+          "name": "市场监测",
+          "description": "A 股融资盘、情绪、ETF 资金与估值的每日看板"
+        },
+        {
+          "locale": "zh-TW",
+          "name": "市場監測",
+          "description": "A 股融資盤、情緒、ETF 資金與估值的每日看板"
+        }
+      ]
+    }
+  },
+  "frontend": {
+    "artifact": "frontend.zip",
+    "sha256": "721405db8750c3e973fe3a4f657ae59d6e2ef547738aa7a2dc62ab77d0ffed5c"
+  },
+  "backend": {
+    "kind": "oci",
+    "platforms": [
+      "linux/amd64"
+    ],
+    "protocol": "portal.backend/1",
+    "resources": {
+      "memory_mib": 2048,
+      "cpu_millis": 1000,
+      "pids": 128
+    },
+    "images": [
+      {
+        "platform": "linux/amd64",
+        "manifest_digest": "990cf73cf44db66a0004dcf2ae39aa5f2c796d4d990a17b3190e6dc28e2e99b7",
+        "config_digest": "c46bf5804a1c72b0582d7eec55314724eb99bd773e37ef1e9ee3d8be2428d4db",
+        "layers": [
+          {
+            "diff_id": "1d7b9dd8778ebc4d9bf2f64436dd358640718cb349f5640b33bebaea4ffd62c2",
+            "uncompressed_bytes": 77946880
+          },
+          {
+            "diff_id": "9ae7def604682355f0b9a3468566bbb06aaae177e47a961444995169178590d2",
+            "uncompressed_bytes": 8844288
+          },
+          {
+            "diff_id": "bd3e172fa0bc2e7382210f6ffe9292e1ce66a4962721cc583787fe726d705f53",
+            "uncompressed_bytes": 47776256
+          },
+          {
+            "diff_id": "3306b96cb7baf10267980832b85ae4056efdc2b3dd659fa42d77af2f850e778d",
+            "uncompressed_bytes": 5120
+          },
+          {
+            "diff_id": "6581ca500877f437ae9b3b245e94c373d988b6dc8a191663c725f26c14005fec",
+            "uncompressed_bytes": 667774976
+          },
+          {
+            "diff_id": "1abed63e3526991c6287574c5dcc7e1030f46769ebd855f96fdb40615db30f3f",
+            "uncompressed_bytes": 11344384
+          },
+          {
+            "diff_id": "1ef5bc367a8248672dc5fe9603e96023f824589106c299ea35ea22a5a6200f76",
+            "uncompressed_bytes": 2000384
+          },
+          {
+            "diff_id": "7092da32f32bd4d374807b387ddb56798265bc3f7a4dabc560339c50d9451160",
+            "uncompressed_bytes": 2048
+          }
+        ]
+      }
+    ]
+  },
+  "capabilities": {
+    "required": [
+      "background.run",
+      "tasks.schedule"
+    ],
+    "optional": [
+      "network.proxy"
+    ]
+  },
+  "network_proxy": {
+    "hosts": [
+      "*.eastmoney.com",
+      "*.push2.eastmoney.com",
+      "1.push2delay.eastmoney.com",
+      "82.push2delay.eastmoney.com",
+      "api.fund.eastmoney.com",
+      "finance.sina.com.cn",
+      "qt.gtimg.cn",
+      "query.sse.com.cn",
+      "quotes.internal.anchan.kazuhahub.com",
+      "vip.stock.finance.sina.com.cn",
+      "web.ifzq.gtimg.cn",
+      "www.szse.cn"
+    ]
+  },
+  "data": {
+    "schema": 2,
+    "readable_schemas": [
+      2
+    ],
+    "writes_on_startup": false,
+    "quota": {
+      "bytes": 6442450944,
+      "inodes": 100000
+    }
+  }
+}
