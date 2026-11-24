@@ -290,7 +290,7 @@ function SentimentBody({ s }: { s: SentimentSummary }) {
             <Empty description={copy.noData} />
           )}
         </Panel>
-        <Panel title={copy.sent_alerts}>
+        <Panel kind="detail" title={copy.sent_alerts}>
           {arr(s.alerts).length === 0 && <Empty description={copy.noData} />}
           {arr(s.alerts).map((a, i) => (
             <Alert

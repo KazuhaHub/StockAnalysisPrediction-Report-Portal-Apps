@@ -75,3 +75,17 @@ test("non-panel children render after the grid, outside any row", () => {
   expect(drawer.closest(".ant-row")).toBeNull();
   expect(container.querySelectorAll(".mm-panels > .ant-row")).toHaveLength(1);
 });
+
+test("panels grouped in a fragment are laid out like the others", () => {
+  const { container } = render(
+    <Panels>
+      <>
+        <Panel title="A">a</Panel>
+        <Panel title="B">b</Panel>
+      </>
+    </Panels>,
+  );
+  const rows = container.querySelectorAll(".mm-panels > .ant-row");
+  expect(rows).toHaveLength(1);
+  expect(rows[0].querySelectorAll(":scope > .ant-col")).toHaveLength(2);
+});

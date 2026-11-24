@@ -1,5 +1,6 @@
 import {
   Children,
+  Fragment,
   isValidElement,
   type ReactElement,
   type ReactNode,
@@ -8,8 +9,7 @@ import { Card, Col, Row } from "antd";
 import type { CardProps } from "antd";
 
 /**
- * The page layout every module page uses below its KPI row and main chart
- * (docs/frontend-layout.md):
+ * The page layout every module page uses below its KPI row and main chart:
  *
  * - "pair": a short panel of bounded height. Two share a row on desktop and
  *   stretch to the same height; one left alone takes the full width.
@@ -71,7 +71,14 @@ export function layoutPanels<T extends { kind: PanelKind }>(
 /** Lays out its <Panel> children. Anything else (a drawer, a modal) is
  * rendered after the grid as it is. */
 export function Panels({ children }: { children: ReactNode }) {
-  const all = Children.toArray(children);
+  // Fragments are flattened, so a page may group panels in <>...</>.
+  const flatten = (nodes: ReactNode): ReactNode[] =>
+    Children.toArray(nodes).flatMap((c) =>
+      isValidElement<{ children?: ReactNode }>(c) && c.type === Fragment
+        ? flatten(c.props.children)
+        : [c],
+    );
+  const all = flatten(children);
   const others = all.filter((c) => !(isValidElement(c) && c.type === Panel));
   const panels = all
     .filter(
