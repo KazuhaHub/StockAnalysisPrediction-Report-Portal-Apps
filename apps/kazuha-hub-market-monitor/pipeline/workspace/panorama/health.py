@@ -24,15 +24,14 @@ END = asof_iso()
 # ---------------- 价格
 meta = json.load(open(os.path.expanduser("~/MarketData/meta.json")))["stocks"]
 codes = sorted(meta.keys())
-bars = md.load(codes, start="2023-06-01", end=END)
-bars["date"] = pd.to_datetime(bars["date"])
-bars = bars[bars["volume"] > 0]
 sys.path.insert(0, D)
-from features import price_panels  # noqa: E402
+from features import store_panels  # noqa: E402
 
 # Traded prices for EP/BP; back-adjusted closes for momentum, volatility and
-# forward returns, so an ex-dividend day is not counted as a loss.
-px, adj = price_panels(bars)
+# forward returns, so an ex-dividend day is not counted as a loss. Read as
+# wide panels straight from the store: the long table of every code since
+# 2023-06 does not fit the app's 2 GiB container (build_master.py).
+px, adj, _ = store_panels(md, codes, "2023-06-01", END)
 ret = adj.pct_change()
 
 # ---------------- 财务（按公告日生效）

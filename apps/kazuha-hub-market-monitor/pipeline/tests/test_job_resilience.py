@@ -166,6 +166,51 @@ class MarketDataPanel(unittest.TestCase):
         self.assertTrue(self.md.panel("close", start="2030-01-01").empty)
 
 
+@unittest.skipIf(pd is None, "pandas not installed")
+class PanoramaPanels(unittest.TestCase):
+    """build_master's wide panels straight from the store must equal what the
+    long table gave (price_panels plus the amount pivot), without holding the
+    long table."""
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        bars = os.path.join(tmp.name, "bars")
+        os.makedirs(bars)
+        rows = []
+        for i, d in enumerate(pd.bdate_range("2025-12-25", periods=12).strftime("%Y-%m-%d")):
+            rows.append(("600000", d, 10.0 + i, 2.0, 0.0 if i == 3 else 100.0, 1e6 + i))
+            rows.append(("000001", d, 5.0, 1.0 + i / 10, 50.0, 2e5))
+            if i > 5:
+                rows.append(("300001", d, 7.0, 1.0, 0.0, 0.0))  # never traded
+        for year in ("2025", "2026"):
+            part = [r for r in rows if r[1][:4] == year]
+            cols = {k: [r[j] for r in part] for j, k in enumerate(
+                ["code", "date", "close", "factor", "volume", "amount"])}
+            cols.update(open=cols["close"], high=cols["close"], low=cols["close"],
+                        tradestatus=pa.array([1] * len(part), pa.int8()))
+            pq.write_table(pa.table(cols), os.path.join(bars, year + ".parquet"))
+        sys.path.insert(0, str(PIPELINE / "MarketData"))
+        sys.path.insert(0, str(PIPELINE / "workspace" / "panorama"))
+        import market_data
+        import features
+        self.md, self.features = market_data, features
+        p = patch.object(market_data, "BARS", bars)
+        p.start()
+        self.addCleanup(p.stop)
+
+    def test_matches_the_long_table(self):
+        codes = ["000001", "300001", "600000"]
+        long = self.md.load(codes, start="2025-12-26", end="2026-01-08")
+        traded = long[long["volume"] > 0].copy()
+        px0, adj0 = self.features.price_panels(traded)
+        amt0 = traded.pivot_table(index="date", columns="code", values="amount", aggfunc="sum")
+        px, adj, amt = self.features.store_panels(self.md, codes, "2025-12-26", "2026-01-08")
+        pd.testing.assert_frame_equal(adj, adj0, check_names=False, check_freq=False)
+        pd.testing.assert_frame_equal(px, px0, check_names=False, check_freq=False)
+        pd.testing.assert_frame_equal(amt, amt0, check_names=False, check_freq=False)
+
+
 class PanoramaCalendar(unittest.TestCase):
     def setUp(self):
         sys.path.insert(0, str(PIPELINE / "workspace" / "panorama"))

@@ -28,6 +28,32 @@ def price_panels(bars: pd.DataFrame):
     return real, adj
 
 
+def store_panels(md, codes, start, end):
+    """``(real, adj, amount)`` wide panels read straight from the bar store.
+
+    The same panels as ``price_panels`` on the long table (plus the traded
+    amount), without ever holding the long table: 5,800 codes over three
+    years as a long frame of Python strings got panorama's master step
+    killed in a 2 GiB container. Days without volume are suspensions and
+    are left empty; dates and codes with no traded bar at all are dropped,
+    as the pivot of the filtered long table did.
+    """
+    close = md.panel("close", codes=codes, start=start, end=end)
+    if close.empty:
+        empty = pd.DataFrame()
+        return empty, empty, empty
+    traded = md.panel("volume", codes=codes, start=start, end=end).reindex_like(close) > 0
+    rows, cols = traded.any(axis=1), traded.any(axis=0)
+    traded = traded.loc[rows, cols]
+    adj = close.loc[rows, cols].where(traded)
+    del close
+    factor = md.panel("factor", codes=codes, start=start, end=end).reindex_like(adj)
+    real = (adj / factor).where(traded)
+    del factor
+    amount = md.panel("amount", codes=codes, start=start, end=end).reindex_like(adj).where(traded)
+    return real, adj, amount
+
+
 def _last_valid(s: pd.Series):
     return s.dropna().iloc[-1] if s.notna().any() else np.nan
 
@@ -47,24 +73,34 @@ def trend_features(adj: pd.DataFrame) -> pd.DataFrame:
     feat["ret_12m"] = ret_n(252)
     feat["mom_12_1"] = adj.shift(21).pct_change(231).apply(_last_valid)
 
+    # Each intermediate panel is freed as soon as its features are taken: at
+    # 5,800 codes x 3 years every panel is about 40 MB, and holding them all
+    # at once (the moving averages, the alignment terms and the volatilities)
+    # doubled the step's peak memory.
     ma20 = adj.rolling(20).mean()
     ma60 = adj.rolling(60).mean()
+    align = (adj > ma20).astype(float) + (ma20 > ma60).astype(float)
+    del ma20
     ma120 = adj.rolling(120).mean()
+    align += (ma60 > ma120).astype(float)
+    del ma60
     ma250 = adj.rolling(250).mean()
-    align = ((adj > ma20).astype(float) + (ma20 > ma60).astype(float)
-             + (ma60 > ma120).astype(float) + (ma120 > ma250).astype(float))
+    align += (ma120 > ma250).astype(float)
+    del ma250
     feat["ma_align"] = align.apply(_last_valid)
+    del align
     last = adj.iloc[-1]
     feat["above_ma120"] = (last > ma120.iloc[-1]).astype(float).where(last.notna())
+    del ma120
     feat["dist_high"] = last / adj.rolling(250, min_periods=60).max().iloc[-1] - 1
 
     v20 = ret.rolling(20).std()
     v120 = ret.rolling(120).std()
-    v250 = ret.rolling(250).std()
     feat["vol20"] = v20.apply(_last_valid)
     feat["vol120"] = v120.apply(_last_valid)
     feat["vol_ratio"] = (v20 / v120).apply(_last_valid)
-    feat["vol_ann"] = v250.apply(_last_valid) * np.sqrt(252)
+    del v20, v120
+    feat["vol_ann"] = ret.rolling(250).std().apply(_last_valid) * np.sqrt(252)
     feat["max_ret_20"] = ret.rolling(20).max().apply(_last_valid)
 
     # Beta against the equal-weighted market of the same universe.
