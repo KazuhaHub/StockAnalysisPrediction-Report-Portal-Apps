@@ -5,6 +5,7 @@ import { Panel, Panels } from "../components/Panels";
 import { Dashboard, ROUTES } from "../components/Dashboard";
 import { EChart } from "../components/EChart";
 import { KpiRow, type KpiItem } from "../components/Kpi";
+import { shown } from "../lib/status";
 import { useVisual } from "../components/useVisual";
 import { useCopy } from "../lib/copy";
 import { TAG_COLOR, tagText } from "../lib/quant";
@@ -126,7 +127,7 @@ function OverviewBody({ r, asOf }: { r: RiskSummary; asOf: string }) {
       value:
         (isNum(e?.current?.last20) && e.current.last20 > 0 ? "+" : "") +
         formatYi(e?.current?.last20, locale),
-      color: v.sign(e?.current?.last20),
+      color: v.sign(shown(e?.current?.last20, 0)),
       note: `${copy.nav_etf} · ${copy.ov_etfNote}`,
       spark: { data: nf20, color: v.orange },
       tag: e?.health?.label

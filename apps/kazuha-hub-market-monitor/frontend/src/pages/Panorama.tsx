@@ -23,6 +23,7 @@ import { EChart } from "../components/EChart";
 import { KpiRow, type KpiItem } from "../components/Kpi";
 import { RowTable } from "../components/RowTable";
 import { Signed } from "../components/Signed";
+import { tagProps } from "../lib/status";
 import { useVisual, type Visual } from "../components/useVisual";
 import { useCopy, type Copy } from "../lib/copy";
 import { arr, fill, fmt, isNum, pct, DASH, type Num } from "../lib/format";
@@ -497,7 +498,11 @@ function PanoramaBody({
       dataIndex: "label",
       width: 110,
       render: (x: string) =>
-        x ? <Tag color={labelColor(x)}>{valueLabel(copy, x)}</Tag> : DASH,
+        x ? (
+          <Tag {...tagProps(labelColor(x))}>{valueLabel(copy, x)}</Tag>
+        ) : (
+          DASH
+        ),
     },
     {
       title: copy.pano_quad,
@@ -857,7 +862,7 @@ function PanoramaDrawer({
         <Space orientation="vertical" size="middle" style={{ width: "100%" }}>
           <Space wrap>
             {row.label && (
-              <Tag color={labelColor(row.label)}>
+              <Tag {...tagProps(labelColor(row.label))}>
                 {valueLabel(copy, row.label)}
               </Tag>
             )}

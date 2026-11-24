@@ -20,6 +20,7 @@ import { EChart } from "../components/EChart";
 import { KpiRow } from "../components/Kpi";
 import { RowTable } from "../components/RowTable";
 import { Signed } from "../components/Signed";
+import { tagProps } from "../lib/status";
 import { useVisual, type Visual } from "../components/useVisual";
 import { useCopy, type Copy } from "../lib/copy";
 import {
@@ -454,7 +455,7 @@ function MarginBody({
       "res_cnt",
       (x) =>
         isNum(x) && x >= 2 ? (
-          <Tag color="orange-inverse">{x}</Tag>
+          <Tag {...tagProps("orange-inverse")}>{x}</Tag>
         ) : x ? (
           x
         ) : (
@@ -469,14 +470,22 @@ function MarginBody({
       dataIndex: "state",
       width: 90,
       render: (x: string) =>
-        x ? <Tag color={stateColor(x)}>{valueLabel(copy, x)}</Tag> : DASH,
+        x ? (
+          <Tag {...tagProps(stateColor(x))}>{valueLabel(copy, x)}</Tag>
+        ) : (
+          DASH
+        ),
     },
     {
       title: copy.col_level,
       dataIndex: "level",
       width: 78,
       render: (x: string) =>
-        x ? <Tag color={levelColor(x)}>{valueLabel(copy, x)}</Tag> : DASH,
+        x ? (
+          <Tag {...tagProps(levelColor(x))}>{valueLabel(copy, x)}</Tag>
+        ) : (
+          DASH
+        ),
     },
     {
       title: copy.col_tags,
@@ -727,12 +736,12 @@ function MarginDrawer({
         <Space orientation="vertical" size="middle" style={{ width: "100%" }}>
           <Space wrap>
             {row.state && (
-              <Tag color={stateColor(row.state)}>
+              <Tag {...tagProps(stateColor(row.state))}>
                 {valueLabel(copy, row.state)}
               </Tag>
             )}
             {row.level && (
-              <Tag color={levelColor(row.level)}>
+              <Tag {...tagProps(levelColor(row.level))}>
                 {valueLabel(copy, row.level)}
               </Tag>
             )}
@@ -747,7 +756,7 @@ function MarginDrawer({
           )}
           {row.res_detail ? (
             <Alert
-              type="error"
+              type="warning"
               showIcon
               title={copy.drawer_resonance}
               description={row.res_detail}

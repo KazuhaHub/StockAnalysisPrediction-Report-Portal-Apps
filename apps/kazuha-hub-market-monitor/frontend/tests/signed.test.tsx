@@ -2,6 +2,9 @@ import { render } from "@testing-library/react";
 import { theme } from "antd";
 import { expect, test } from "vitest";
 import { Signed, SignedIn } from "../src/components/Signed";
+import { rich } from "../src/components/Rich";
+import { stateTone, sx } from "../src/lib/quant";
+import { shown, tagProps } from "../src/lib/status";
 
 const token = theme.getDesignToken();
 const colorOf = (el: Element | null) =>
@@ -53,4 +56,42 @@ test("the shown value decides sign and colour: 0.04 at one digit is a plain 0.0"
   const span = container.querySelector("span")!;
   expect(span.textContent).toBe("0.0");
   expect(colorOf(span)).toBe("");
+});
+
+test("sx marks a signed number for rich text, and rich colours it", () => {
+  expect(sx(1.2)).toBe("[[up:+1.2]]");
+  expect(sx(-0.5)).toBe("[[down:-0.5]]");
+  expect(sx(0)).toBe("0");
+  expect(sx(null)).toBe("—");
+  const { container } = render(
+    <p>{rich(`回撤 ${sx(-20)}% · **年化 ${sx(12.3)}%**`)}</p>,
+  );
+  const spans = container.querySelectorAll("span");
+  expect(container.textContent).toBe("回撤 -20% · 年化 +12.3%");
+  expect(colorOf(spans[0])).toBe(rgb(token.colorSuccess));
+  expect(colorOf(spans[1])).toBe(rgb(token.colorError));
+  expect(container.querySelector("b")?.textContent).toBe("年化 +12.3%");
+});
+
+test("each quant state has one tone for band, table and tag", () => {
+  expect(stateTone("熊市确认")).toBe("danger");
+  expect(stateTone("熊市确认（主跌延续）")).toBe("danger");
+  expect(stateTone("下跌中")).toBe("danger");
+  expect(stateTone("顶部警戒")).toBe("warning");
+  expect(stateTone("过热")).toBe("warning");
+  expect(stateTone("出清区")).toBe("info");
+  expect(stateTone("确认区")).toBe("success");
+  expect(stateTone("修复中")).toBe("success");
+  expect(stateTone("常规")).toBe("neutral");
+});
+
+test("the most severe status tag is solid; shown() rounds before the sign", () => {
+  expect(tagProps("orange-inverse")).toEqual({
+    color: "orange",
+    variant: "solid",
+  });
+  expect(tagProps("gold")).toEqual({ color: "gold" });
+  expect(shown(0.03, 1)).toBe(0);
+  expect(shown(-0.06, 1)).toBe(-0.1);
+  expect(shown(undefined, 1)).toBeNull();
 });

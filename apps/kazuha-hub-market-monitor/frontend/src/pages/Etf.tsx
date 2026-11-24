@@ -17,6 +17,7 @@ import { EChart } from "../components/EChart";
 import { KpiRow, type KpiItem } from "../components/Kpi";
 import { RowTable } from "../components/RowTable";
 import { Signed } from "../components/Signed";
+import { shown } from "../lib/status";
 import { useVisual } from "../components/useVisual";
 import { useCopy, type Copy } from "../lib/copy";
 import { useRowValues } from "../lib/hooks";
@@ -280,39 +281,39 @@ function EtfBody({
         ? {
             // Not one day's flow: say how many trading days it covers.
             value: `${signed(c.last_merged, 1)} ${copy.unit_yi}`,
-            color: v.sign(c.last_merged),
+            color: v.sign(shown(c.last_merged, 1)),
             note: fill(copy.etf_merged, { n: c.last_span }),
           }
         : {
             value: isNum(c.last_nf)
               ? `${signed(c.last_nf, 1)} ${copy.unit_yi}`
               : DASH,
-            color: v.sign(c.last_nf),
+            color: v.sign(shown(c.last_nf, 1)),
           }),
     },
     {
       key: "5",
       title: copy.etf_last5,
       value: isNum(c.last5) ? `${signed(c.last5, 0)} ${copy.unit_yi}` : DASH,
-      color: v.sign(c.last5),
+      color: v.sign(shown(c.last5, 0)),
     },
     {
       key: "20",
       title: copy.etf_last20,
       value: isNum(c.last20) ? `${signed(c.last20, 0)} ${copy.unit_yi}` : DASH,
-      color: v.sign(c.last20),
+      color: v.sign(shown(c.last20, 0)),
     },
     {
       key: "y",
       title: copy.etf_ytd,
       value: isNum(c.ytd) ? `${signed(c.ytd, 0)} ${copy.unit_yi}` : DASH,
-      color: v.sign(c.ytd),
+      color: v.sign(shown(c.ytd, 0)),
     },
     {
       key: "i",
       title: copy.etf_idx20,
       value: isNum(c.idx_20d) ? `${signed(c.idx_20d, 2)}%` : DASH,
-      color: v.sign(c.idx_20d),
+      color: v.sign(shown(c.idx_20d, 2)),
     },
     {
       key: "h",

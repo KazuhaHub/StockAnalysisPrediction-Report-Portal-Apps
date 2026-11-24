@@ -74,8 +74,9 @@ sign, so it is never red or green. `v.status` / `v.statusTag` in
   tags (`stateTone` in lib/quant.ts): 熊市/下跌 purple, 警戒/过热 amber, 出清
   cyan, 确认/修复 blue, 常规 gray. ETF 信号状态: 失效 gray, 观察 amber, 可用
   blue.
-- The most severe level is a solid tag (`orange-inverse`) or a strong-orange
-  border, a warning an outlined amber tag, so the two read apart.
+- The most severe level is a solid tag (`tagProps("orange-inverse")` in
+  lib/status.ts gives antd's `variant="solid"`) or a strong-orange border; a
+  warning is the default amber tag, so the two read apart.
 - Signed numbers inside running text use the rich-text markup
   `[[up:+1.2]]` / `[[down:-1.2]]` (`sx` in lib/quant.ts).
 - Valuation quadrants: 便宜好公司 blue, 优质但贵 amber, 价值陷阱 purple, 又贵又差

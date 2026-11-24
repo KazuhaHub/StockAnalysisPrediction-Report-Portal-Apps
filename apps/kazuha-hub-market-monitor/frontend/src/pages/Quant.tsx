@@ -16,6 +16,7 @@ import { KpiRow, type KpiItem } from "../components/Kpi";
 import { Panel, Panels } from "../components/Panels";
 import { rich } from "../components/Rich";
 import { Signed, SignedIn } from "../components/Signed";
+import { shown } from "../lib/status";
 import { useVisual } from "../components/useVisual";
 import { useCopy, type Copy } from "../lib/copy";
 import { arr, fill, fmt, isNum, signed, DASH, type Num } from "../lib/format";
@@ -194,28 +195,28 @@ function QuantBody({ d }: { d: QuantSummary }) {
       key: "ndr",
       title: copy.q_ndr,
       value: `${signed(d.ndr, 1)}%`,
-      color: v.sign(d.ndr),
+      color: v.sign(shown(d.ndr, 1)),
       note: fill(copy.q_pctile, { v: nv(d.npct) }),
     },
     {
       key: "dd",
       title: copy.q_dd250,
       value: `${signed(d.dd250, 1)}%`,
-      color: v.sign(d.dd250),
+      color: v.sign(shown(d.dd250, 1)),
       note: <SignedIn template={copy.q_dd60} value={d.dd60} />,
     },
     {
       key: "rep",
       title: copy.q_rep20,
       value: `${signed(d.rep20, 1)}pp`,
-      color: v.sign(d.rep20),
+      color: v.sign(shown(d.rep20, 1)),
       note: copy.q_repThr,
     },
     {
       key: "def",
       title: copy.q_def60,
       value: `${signed(d.r60def, 1)}%`,
-      color: v.sign(d.r60def),
+      color: v.sign(shown(d.r60def, 1)),
       note: <SignedIn template={copy.q_leadSame} value={d.r60lead} />,
     },
   ];
@@ -247,21 +248,21 @@ function QuantBody({ d }: { d: QuantSummary }) {
       key: "d60",
       title: copy.q_mDist60,
       value: `${signed(d.md60, 1)}%`,
-      color: v.sign(d.md60),
+      color: v.sign(shown(d.md60, 1)),
       note: <SignedIn template={copy.q_mDd250} value={d.mdd250} />,
     },
     {
       key: "rs",
       title: copy.q_mRs,
       value: `${signed(d.mrs, 1)}pp`,
-      color: v.sign(d.mrs),
+      color: v.sign(shown(d.mrs, 1)),
       note: <SignedIn template={copy.q_mRsNote} value={d.mrsm} />,
     },
     {
       key: "r60",
       title: copy.q_mR60,
       value: `${signed(d.mr60, 1)}%`,
-      color: v.sign(d.mr60),
+      color: v.sign(shown(d.mr60, 1)),
       note: <SignedIn template={copy.q_leadSame} value={d.r60lead} />,
     },
   ];
@@ -500,7 +501,8 @@ function QuantBody({ d }: { d: QuantSummary }) {
         symbolRotate: st?.rot ?? s.rot,
         // Sizes differ so two signals on one day stay visible (M2 nests in M1).
         symbolSize: st?.size ?? 12,
-        z: 12,
+        // Smaller markers on top, so a same-day pair stays visible.
+        z: 30 - (st?.size ?? 12),
         labelLayout: { hideOverlap: true },
         itemStyle: st?.hollow
           ? { color: v.surface, borderColor: color, borderWidth: 2 }

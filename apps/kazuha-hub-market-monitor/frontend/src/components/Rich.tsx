@@ -6,6 +6,8 @@ const TOKEN =
   /(\*\*[\s\S]+?\*\*|`[^`]+`|~~[\s\S]+?~~|\[\[(?:ok|warn|no|up|down):[\s\S]+?\]\])/;
 // Validation flags are statuses, never red or green (docs/charts.md).
 const FLAG = { ok: "processing", warn: "warning", no: "orange" } as const;
+// "no" (failed) is the most severe: a solid tag, so it reads apart from amber.
+const SOLID = new Set(["no"]);
 
 /** A signed number inside rich text: red up, green down (docs/charts.md). */
 function SignText({ dir, text }: { dir: "up" | "down"; text: string }) {
@@ -37,7 +39,11 @@ export function rich(text: string): ReactNode {
     const flag = /^\[\[(ok|warn|no):([\s\S]+)\]\]$/.exec(part);
     if (flag)
       return (
-        <Tag key={i} color={FLAG[flag[1] as keyof typeof FLAG]}>
+        <Tag
+          key={i}
+          color={FLAG[flag[1] as keyof typeof FLAG]}
+          variant={SOLID.has(flag[1]) ? "solid" : undefined}
+        >
           {flag[2]}
         </Tag>
       );
