@@ -157,7 +157,9 @@ func NewRunner(dataDir string, specs []JobSpec, store *Store) (*Runner, error) {
 			return nil, err
 		}
 		retry := Run{ID: id, Job: run.Job, TaskID: run.TaskID, OccurrenceID: run.OccurrenceID,
-			Status: "queued", Attempt: run.Attempt + 1, QueuedAt: r.stamp()}
+			// The original queue time: bootstraps and manual runs are placed
+			// on their day by it (Scheduler.runTime).
+			Status: "queued", Attempt: run.Attempt + 1, QueuedAt: run.QueuedAt}
 		r.appendLog(id, "attempt %d, retrying run %s, which was interrupted", retry.Attempt, run.ID)
 		retries = append(retries, retry)
 		r.queue <- id

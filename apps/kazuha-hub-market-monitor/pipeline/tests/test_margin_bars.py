@@ -82,6 +82,18 @@ class MarketDataSource(unittest.TestCase):
         got = bs.from_marketdata(["600000"], TARGET, 2, self.md)
         self.assertEqual(list(got["date"]), ["2026-11-20", TARGET])
 
+    def test_a_zero_volume_bar_counts_as_suspended(self):
+        # The store backfills tradestatus to 1, so a suspended day shows up
+        # only as a bar without volume.
+        md_store(self.md, [("600000", "2026-11-20", 10.0, 1.0, 100, 1000.0, 1),
+                           ("600000", TARGET, 10.0, 1.0, 0, 0.0, 1)])
+        self.assertTrue(bs.from_marketdata(["600000"], TARGET, 150, self.md).empty)
+
+    def test_duplicate_store_rows_do_not_break_the_read(self):
+        md_store(self.md, [("600000", TARGET, 10.0, 1.0, 100, 1000.0, 1),
+                           ("600000", TARGET, 10.0, 1.0, 100, 1000.0, 1)])
+        self.assertEqual(len(bs.from_marketdata(["600000"], TARGET, 150, self.md)), 1)
+
     def test_a_missing_store_gives_nothing(self):
         self.assertTrue(bs.from_marketdata(["600000"], TARGET, 150, os.path.join(self.md, "none")).empty)
 
@@ -106,6 +118,45 @@ class Consistency(unittest.TestCase):
 
     def test_no_overlap_agrees(self):
         self.assertTrue(bs.consistent(self.series([10, 10, 10, 10]), self.series([])))
+
+
+class FakeResponse:
+    def __init__(self, payload):
+        self.payload = payload
+
+    def json(self):
+        return self.payload
+
+
+@unittest.skipIf(pd is None, "pandas not installed")
+class Tencent(unittest.TestCase):
+    """newfqkline rows: date, open, close, high, low, volume, {}, turnover,
+    amount (10k yuan); volume is in lots, except STAR Market shares."""
+
+    def kline(self, code, rows):
+        mkt = bs._tx_market(code)
+        return FakeResponse({"data": {mkt + code: {"qfqday": rows}}})
+
+    def test_reads_amount_and_lots(self):
+        rows = [["2026-11-20", "1", "10.00", "1", "1", "500.00", {}, "0.1", "50.00", ""],
+                [TARGET, "1", "11.00", "1", "1", "600.00", {}, "0.1", "66.00", ""]]
+        star = [[TARGET, "1", "11.00", "1", "1", "60000.00", {}, "0.1", "66.00", ""]]
+        with patch("requests.get", lambda url, params, **kw: self.kline(
+                params["param"][2:8], star if params["param"][2:8] == "688001" else rows)):
+            self.assertEqual(bs.tx_daily("600000")[TARGET], (1.0, 11.0, 1.0, 1.0, 600.0, 660000.0))
+            self.assertEqual(bs.tx_daily("688001")[TARGET][4], 600.0)
+            self.assertEqual(bs._tx_market("510300"), "sh")
+
+    def test_reference_day_close_and_amount_must_match(self):
+        prevd = pd.DataFrame({"close": [10.0, 10.0, 10.0], "amount": [5e5, 5e5, 9e9]},
+                             index=["600000", "600001", "600002"])
+        good = {"2026-11-20": (1, 10.0, 1, 1, 5, 5e5), TARGET: (1, 11.0, 1, 1, 6, 6e5)}
+        reanchored = {"2026-11-20": (1, 9.0, 1, 1, 5, 5e5), TARGET: (1, 11.0, 1, 1, 6, 6e5)}
+        data = {"600000": good, "600001": reanchored, "600002": good}
+        with patch.object(bs, "tx_daily", lambda c: data[c]):
+            recs, bad = bs.from_tx(["600000", "600001", "600002", "600003"], TARGET, "2026-11-20", prevd)
+        self.assertEqual(recs, [("600000", TARGET, 1, 11.0, 1, 1, 6, 6e5)])
+        self.assertEqual(bad, 2)
 
 
 @unittest.skipIf(pd is None, "pandas not installed")

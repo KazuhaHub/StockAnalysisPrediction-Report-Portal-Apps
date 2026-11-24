@@ -15,7 +15,7 @@ stock_server 的 _attach_quote_normalization）：
 
 每只票取到的序列都要和本地旧表对一次口：重叠交易日上 新/旧 收盘价之比必须是
 同一个常数（无除权时≈1；期间有除权时旧表锚点过期，比值是另一个常数），且成交额
-一致。对不上就不用这只票的库内数据，交给下一个来源。腾讯、新浪两个备用源沿用
+一致（看全部重叠日）。对不上就不用这只票的库内数据，交给下一个来源。腾讯、新浪两个备用源沿用
 analysis/fill_bars_tx.py、fill_bars_sina.py 原有的「参照日收盘对口」安全阀。
 """
 import glob
@@ -27,7 +27,6 @@ import pandas as pd
 
 COLS = ["code", "date", "open", "close", "high", "low", "volume", "amount"]
 TOL = 0.5            # 百分比
-OVERLAP = 20         # 对口用的重叠交易日数
 UA = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"}
 
 
@@ -55,7 +54,10 @@ def from_marketdata(codes, target, limit, home=None):
     df = ds.dataset(files, format="parquet").to_table(filter=expr).to_pandas()
     if df.empty:
         return pd.DataFrame(columns=COLS)
-    df = df[(df["tradestatus"] == 1) & (df["factor"] > 0)]
+    # 停牌日不进表（东财日线不含停牌日）：行情库写入时 tradestatus 会被兜底成 1，
+    # 所以再看成交量/成交额。重复的 (code, date) 只留一行。
+    df = df[(df["tradestatus"] == 1) & (df["factor"] > 0) & (df["volume"] > 0) & (df["amount"] > 0)]
+    df = df.drop_duplicates(["code", "date"], keep="last")
     anchor = df[df["date"] == target].set_index("code")["factor"]
     df = df[df["code"].isin(anchor.index)]
     if df.empty:
@@ -77,7 +79,8 @@ def consistent(new, old, tol=TOL):
     if old is None or old.empty:
         return True
     m = new.merge(old, on="date", suffixes=("_n", "_o"))
-    m = m[(m["close_o"] > 0)].sort_values("date").tail(OVERLAP)
+    # 对全部重叠日：通过后整段窗口都会被新数据覆盖，早些日子的复权断档也要拦住
+    m = m[(m["close_o"] > 0)]
     if m.empty:
         return True
     r = m["close_n"] / m["close_o"]
@@ -102,10 +105,14 @@ def _tx_market(code):
 
 
 def tx_daily(code, count=40):
-    """腾讯 qfq 日线：{date: (open, close, high, low, volume 手)}；失败返回 None。"""
+    """腾讯 qfq 日线：{date: (open, close, high, low, volume 手, amount 元)}；失败返回 None。
+
+    用 newfqkline（与 fqkline 同主机）：它多带成交额（第 9 列，万元）。成交量
+    主板/创业板/场内基金为手，科创板（688）为股，统一换成手。"""
     import requests
     mkt = _tx_market(code)
-    url = "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get"
+    url = "https://web.ifzq.gtimg.cn/appstock/app/newfqkline/get"
+    per_lot = 100.0 if code.startswith("688") else 1.0
     for a in range(3):
         try:
             r = requests.get(url, params={"param": "%s%s,day,,,%d,qfq" % (mkt, code, count)},
@@ -114,16 +121,19 @@ def tx_daily(code, count=40):
             k = d.get("qfqday") or d.get("day") or []
             if not k:
                 return None
-            return {x[0]: (float(x[1]), float(x[2]), float(x[3]), float(x[4]), float(x[5])) for x in k}
+            return {x[0]: (float(x[1]), float(x[2]), float(x[3]), float(x[4]),
+                           float(x[5]) / per_lot, float(x[8]) * 10000.0)
+                    for x in k if len(x) > 8}
         except Exception:
             time.sleep(0.2 * (a + 1))
     return None
 
 
-def from_tx(codes, target, prev, prev_close, workers=6, tol=TOL):
-    """腾讯补 target 当天；参照日 prev 的收盘必须与本地一致（偏差 ≤ tol%）。
-    返回 (recs, 拒绝数)。腾讯日线无成交额，amount 记 0。"""
+def from_tx(codes, target, prev, prevd, workers=6, tol=TOL):
+    """腾讯补 target 当天；参照日 prev 的收盘与成交额都必须与本地一致（偏差 ≤ tol%）。
+    prevd: DataFrame(index=code, columns=[close, amount])。返回 (recs, 拒绝数)。"""
     recs, bad = [], 0
+    codes = [c for c in codes if c in prevd.index]
     if not codes:
         return recs, bad
     with ThreadPoolExecutor(max_workers=workers) as ex:
@@ -131,15 +141,19 @@ def from_tx(codes, target, prev, prev_close, workers=6, tol=TOL):
         for f in as_completed(futs):
             c = futs[f]
             m = f.result()
-            if not m or target not in m:
+            if not m or target not in m or prev not in m:
                 continue
-            ref = m.get(prev, (None, None))[1]
-            local = prev_close.get(c)
-            if not ref or not local or abs(ref / local - 1) * 100 > tol:
+            ref = m[prev]
+            local_close, local_amt = prevd.loc[c, "close"], prevd.loc[c, "amount"]
+            dclose = abs(ref[1] / local_close - 1) * 100 if local_close else 100.0
+            damt = abs(ref[5] / local_amt - 1) * 100 if local_amt and ref[5] else 0.0
+            if max(dclose, damt) > tol:
                 bad += 1
                 continue
-            o, cl, hi, lo, vol = m[target]
-            recs.append((c, target, o, cl, hi, lo, vol, 0.0))
+            o, cl, hi, lo, vol, amt = m[target]
+            if not amt:
+                continue
+            recs.append((c, target, o, cl, hi, lo, vol, amt))
     return recs, bad
 
 
@@ -222,7 +236,7 @@ def collect(codes, old, target, limit, home=None):
     if rest and prev_dates:
         prev = prev_dates[-1]
         prevd = old[old["date"] == prev].drop_duplicates("code", keep="last").set_index("code")[["close", "amount"]]
-        tx, tx_bad = from_tx(rest, target, prev, prevd["close"].to_dict())
+        tx, tx_bad = from_tx(rest, target, prev, prevd)
         mix["tx"] = len(tx)
         parts.append(pd.DataFrame(tx, columns=COLS))
         done = {r[0] for r in tx}

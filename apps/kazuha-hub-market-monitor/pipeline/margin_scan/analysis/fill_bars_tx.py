@@ -28,8 +28,8 @@ old = pd.read_parquet(cache)
 have = set(old[old["date"] == TARGET]["code"].unique())
 prev_dates = sorted(d for d in old["date"].unique() if d < TARGET)
 PREV = prev_dates[-1]
-prev = old[old["date"] == PREV].set_index("code")["close"].to_dict()
-miss = sorted(set(prev) - have)
+prev = old[old["date"] == PREV].drop_duplicates("code", keep="last").set_index("code")[["close", "amount"]]
+miss = sorted(set(prev.index) - have)
 log("目标日 %s 已有 %d 只；参照日 %s %d 只；待补 %d 只（%d 并发，容差 %.2f%%）"
     % (TARGET, len(have), PREV, len(prev), len(miss), WORKERS, TOL))
 
