@@ -58,7 +58,10 @@ func TestDescriptorDeclaresTheForwardProxy(t *testing.T) {
 	// N.push2delay.eastmoney.com: the push2 quote nodes redirect there from
 	// production, and the proxy refuses an undeclared redirect target.
 	for _, want := range []string{"*.eastmoney.com", "*.push2.eastmoney.com", "1.push2delay.eastmoney.com",
-		"82.push2delay.eastmoney.com", "qt.gtimg.cn"} {
+		"82.push2delay.eastmoney.com", "qt.gtimg.cn",
+		// margin's bar fallbacks: Tencent, then Sina (stock_zh_a_daily also
+		// reads the share counts from stock.finance.sina.com.cn).
+		"web.ifzq.gtimg.cn", "finance.sina.com.cn", "stock.finance.sina.com.cn"} {
 		if !slices.Contains(hosts, want) {
 			t.Errorf("missing %s", want)
 		}

@@ -279,21 +279,75 @@ func TestRunnerRequeuesUnfinishedRunsAfterRestart(t *testing.T) {
 	}
 }
 
+// newestOf returns the newest indexed run of a task ID.
+func newestOf(t *testing.T, r *Runner, taskID string) Run {
+	t.Helper()
+	run, ok := r.byTaskID(taskID)
+	if !ok {
+		t.Fatalf("no run of %s", taskID)
+	}
+	return run
+}
+
+// A run cut short while running (a stop, a quiesce, a generation switch)
+// is recorded as interrupted, and its retry is a new run under the same
+// task, so the jobs list never shows a stale "running".
+func TestARunCutShortIsInterruptedAndRetriedAsANewRun(t *testing.T) {
+	data, scripts := t.TempDir(), t.TempDir()
+	spec := fakeJob(t, scripts, "margin", string(testSnapshot("margin", "2026-11-18")), 0)
+	r, _ := NewRunner(data, []JobSpec{spec}, NewStore(data))
+	first, _, _ := r.Submit("margin", "t1", "run:1")
+	r.update(first.ID, func(run *Run) { run.Status, run.StartedAt = "running", r.stamp() })
+	r2, err := NewRunner(data, []JobSpec{spec}, NewStore(data))
+	if err != nil {
+		t.Fatal(err)
+	}
+	old, _ := r2.get(first.ID)
+	if old.Status != "interrupted" || old.Error != "interrupted" || old.FinishedAt == "" {
+		t.Fatalf("cut-short run: %+v", old)
+	}
+	retry := newestOf(t, r2, "t1")
+	if retry.ID == first.ID || retry.Status != "queued" || retry.Attempt != 2 || retry.OccurrenceID != "run:1" {
+		t.Fatalf("retry: %+v", retry)
+	}
+	if views := r2.Runs(); len(views) != 2 || views[0].ID != retry.ID {
+		t.Fatalf("runs list: %+v", views)
+	}
+	stop := r2.Start()
+	defer stop()
+	if done := waitRun(t, r2, retry.ID); done.Status != "succeeded" {
+		t.Fatalf("retry %+v", done)
+	}
+	if again, dup, err := r2.Submit("margin", "t1", "run:1"); err != nil || !dup || again.ID != retry.ID {
+		t.Fatalf("redelivery after restart: %+v %v %v", again, dup, err)
+	}
+	if run, _ := r2.get(first.ID); run.Status != "interrupted" {
+		t.Fatalf("interrupted run changed: %+v", run)
+	}
+}
+
 func TestRunnerGivesUpAfterRepeatedRestarts(t *testing.T) {
 	data, scripts := t.TempDir(), t.TempDir()
 	spec := fakeJob(t, scripts, "margin", "", 0)
 	r, _ := NewRunner(data, []JobSpec{spec}, NewStore(data))
-	queued, _, _ := r.Submit("margin", "t1", "run:1")
-	// Each restart interrupts the run while it is running.
+	r.Submit("margin", "t1", "run:1")
+	// Each restart interrupts the newest attempt while it is running.
 	for i := 0; i < maxAttempts; i++ {
-		r.update(queued.ID, func(run *Run) { run.Status = "running" })
+		cur := newestOf(t, r, "t1")
+		r.update(cur.ID, func(run *Run) { run.Status = "running" })
 		var err error
 		if r, err = NewRunner(data, []JobSpec{spec}, NewStore(data)); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if run, _ := r.get(queued.ID); run.Status != "interrupted" || run.Error != "interrupted" {
-		t.Fatalf("after %d interrupted attempts: %+v", maxAttempts, run)
+	runs := r.runsOf("margin")
+	if len(runs) != maxAttempts {
+		t.Fatalf("want %d attempts, got %d", maxAttempts, len(runs))
+	}
+	for _, run := range runs {
+		if run.Status != "interrupted" || run.Error != "interrupted" {
+			t.Fatalf("after %d interrupted attempts: %+v", maxAttempts, run)
+		}
 	}
 }
 
@@ -356,7 +410,7 @@ func TestShutdownNeverFailsQueuedRuns(t *testing.T) {
 	}
 }
 
-func TestRequeuedAttemptsKeepEarlierLogs(t *testing.T) {
+func TestRetriedAttemptsKeepEarlierLogs(t *testing.T) {
 	data, scripts := t.TempDir(), t.TempDir()
 	spec := fakeJob(t, scripts, "margin", "", 0)
 	r, _ := NewRunner(data, []JobSpec{spec}, NewStore(data))
@@ -369,9 +423,14 @@ func TestRequeuedAttemptsKeepEarlierLogs(t *testing.T) {
 	r2, _ := NewRunner(data, []JobSpec{spec}, NewStore(data))
 	stop := r2.Start()
 	defer stop()
-	waitRun(t, r2, run.ID)
-	log, _ := os.ReadFile(logPath)
-	if !strings.Contains(string(log), "first attempt output") || !strings.Contains(string(log), "attempt 2") {
-		t.Fatalf("log %q", log)
+	retry := newestOf(t, r2, "t1")
+	waitRun(t, r2, retry.ID)
+	first, _ := os.ReadFile(logPath)
+	if !strings.Contains(string(first), "first attempt output") || !strings.Contains(string(first), "interrupted") {
+		t.Fatalf("first log %q", first)
+	}
+	second, _ := os.ReadFile(filepath.Join(data, "runs", retry.ID+".log"))
+	if !strings.Contains(string(second), "attempt 2") || !strings.Contains(string(second), run.ID) {
+		t.Fatalf("retry log %q", second)
 	}
 }

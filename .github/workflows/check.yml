@@ -320,12 +320,15 @@ jobs:
       # the image's exact version (pipeline/requirements.lock) and the history
       # tests must run: MM_REQUIRE_PYARROW makes the test module fail instead
       # of skipping them when it cannot be imported.
-      - run: python3 -m pip install 'requests>=2.31,<3' pyarrow==21.0.0
+      - run: python3 -m pip install 'requests>=2.31,<3' pyarrow==21.0.0 pandas==2.2.3
         working-directory: .
       - run: python3 tests/test_mm_job.py
         env:
           MM_REQUIRE_PYARROW: '1'
       - run: python3 tests/test_pipeline_scripts.py
+      - run: python3 tests/test_margin_bars.py
+        env:
+          MM_REQUIRE_PANDAS: '1'
   status:
     runs-on: ubuntu-latest
     steps:

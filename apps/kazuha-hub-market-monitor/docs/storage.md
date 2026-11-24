@@ -100,11 +100,14 @@ A run is `queued`, `running`, `succeeded`, `failed` or `interrupted`; a failed
 run's `error` is a short code (`exit_status`, `timeout`, `output_invalid`, …)
 and the reason is in its log. Viewers see runs without the platform task ID.
 
-Jobs are idempotent per as-of date, so a run that was queued or running when
-the service stopped is queued again at the next start. Only a run that was
-actually running uses up an attempt; after 3 interrupted attempts it is marked
-`interrupted`. A platform task ID maps to exactly one run: a redelivery
-with the same job and occurrence returns that run, and a different job or
+Jobs are idempotent per as-of date, so a run cut short when the service
+stopped (a restart, a quiesce, a generation switch) is retried at the next
+start. A run that was still queued is queued again as it is. A run that was
+running is marked `interrupted`, so the list never shows it running, and is
+retried as a new run with the next attempt number under the same task; after
+3 interrupted attempts no retry is made. A platform task ID maps to its newest
+run: a redelivery with the same job and occurrence returns that run, and a
+different job or
 occurrence under the same task ID is refused. Duplicate detection covers the
 200 runs kept in the index.
 
@@ -112,7 +115,7 @@ occurrence under the same task ID is refused. Duplicate detection covers the
 
 - **Backup/restore:** the platform checkpoints and restores the whole `/data`
   mount. Snapshots and history files are self-describing and need no migration
-  within formats `snapshot/1` and `history/1`; runs restored as `queued` or `running` are queued again on start,
+  within formats `snapshot/1` and `history/1`; runs restored as `queued` are queued again on start and runs restored as `running` are marked `interrupted` and retried,
   within the same attempt limit.
 - **Data format changes:** a new snapshot format gets a new `format` string
   and a reader for both; an existing format is never rewritten in place.
