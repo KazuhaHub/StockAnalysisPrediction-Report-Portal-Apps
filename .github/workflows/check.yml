@@ -313,6 +313,12 @@ jobs:
       - run: npm ci
       # Typecheck and the plugin standard of every frontend run once, in frontend-standard.
       - run: npm test --workspace=apps/kazuha-hub-market-monitor/frontend
+      # Every tab at phone and desktop widths, light and dark: no sideways scroll, no chart legend
+      # over its plot, tables as cards, tabs reachable. Starts the dev server and Chrome itself.
+      - name: Layout check
+        run: node apps/kazuha-hub-market-monitor/frontend/dev/layout-check.mjs
+        env:
+          CHROME: google-chrome
       - run: python3 scripts/build-app-v2.py kazuha-hub-market-monitor --output "$RUNNER_TEMP/market-monitor-candidate"
       # The preview harness (frontend/dev) must never reach the package. The
       # bundle is minified, so check the source graph and the zip contents.

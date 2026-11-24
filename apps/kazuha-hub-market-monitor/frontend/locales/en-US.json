@@ -800,5 +800,11 @@
   "qm_t8_8_2": "~~\"A fresh page with old content\" is the worst failure mode; better to show the previous version than to pretend it is today~~",
   "qm_n8": "Automatic trigger: a scheduled job runs once from Tuesday to Saturday (after the price-store increment); the data-side increment runs only Monday to Friday, so **Friday's closing bar is not stored until Monday**, and pages built on Saturday and Sunday usually show one trading day behind.",
   "q_tagOver": "Hot",
-  "q_tagOut": "Out"
+  "q_tagOut": "Out",
+  "table_sortBy": "Sort by",
+  "table_sortDefault": "Default order",
+  "table_sortAsc": "Ascending",
+  "table_sortDesc": "Descending",
+  "chart_range": "Range",
+  "margin_scanView": "Column view"
 }

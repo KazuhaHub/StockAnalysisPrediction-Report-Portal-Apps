@@ -1,5 +1,6 @@
 import { useMemo } from "react";
-import { Alert, Empty, Progress, Space, Table } from "antd";
+import { Alert, Empty, Progress, Space } from "antd";
+import { CardTable } from "../components/CardTable";
 import { Panel, Panels } from "../components/Panels";
 import { Dashboard } from "../components/Dashboard";
 import { EChart } from "../components/EChart";
@@ -331,7 +332,7 @@ function SentimentBody({ s }: { s: SentimentSummary }) {
           )}
         </Panel>
         <Panel kind="detail" title={copy.sent_extreme}>
-          <Table
+          <CardTable
             size="small"
             pagination={false}
             rowKey="name"

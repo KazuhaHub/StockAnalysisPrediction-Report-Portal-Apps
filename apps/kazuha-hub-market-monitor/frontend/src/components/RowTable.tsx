@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { Alert, Table } from "antd";
+import { Alert } from "antd";
+import { CardTable } from "./CardTable";
 import type { TableColumnsType, TableProps } from "antd";
 import { useCopy } from "../lib/copy";
 import { fill } from "../lib/format";
@@ -147,7 +148,7 @@ export function RowTable<R extends { code: string }>({
           style={{ marginBottom: 8 }}
         />
       )}
-      <Table<R>
+      <CardTable<R>
         size="small"
         rowKey="code"
         loading={loading}

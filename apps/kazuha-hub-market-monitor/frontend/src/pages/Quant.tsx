@@ -1,15 +1,7 @@
 import { useMemo, useState, type ReactNode } from "react";
-import {
-  Card,
-  Checkbox,
-  Collapse,
-  Empty,
-  Space,
-  Statistic,
-  Table,
-  Tag,
-} from "antd";
+import { Card, Checkbox, Collapse, Empty, Space, Statistic, Tag } from "antd";
 import type { TableColumnsType } from "antd";
+import { CardTable } from "../components/CardTable";
 import { Dashboard } from "../components/Dashboard";
 import { EChart, type ChartOption } from "../components/EChart";
 import { KpiRow, type KpiItem } from "../components/Kpi";
@@ -946,7 +938,7 @@ function QuantBody({ d }: { d: QuantSummary }) {
 
   // ---- tables ----
   const logTable = (rows: [string, string, string][]) => (
-    <Table
+    <CardTable
       size="small"
       pagination={false}
       rowKey={(r) => r.join("|")}
@@ -1162,7 +1154,7 @@ function QuantBody({ d }: { d: QuantSummary }) {
             <span className="mm-muted">{copy.q_runsHint}</span>
           </div>
           {arr(mon.runs).length ? (
-            <Table
+            <CardTable
               size="small"
               pagination={false}
               rowKey={(r) => `${r.date}|${r.at}`}
@@ -1269,7 +1261,7 @@ function QuantBody({ d }: { d: QuantSummary }) {
               })}
             </span>
           </div>
-          <Table<HistRow>
+          <CardTable<HistRow>
             size="small"
             rowKey="date"
             dataSource={histData}
@@ -1297,7 +1289,7 @@ function QuantBody({ d }: { d: QuantSummary }) {
         <Panel kind="detail" title={copy.q_baseTitle}>
           <Hint>{copy.q_baseHint}</Hint>
           <div className="mm-note">{rich(baseNote)}</div>
-          <Table<BaseRow>
+          <CardTable<BaseRow>
             size="small"
             pagination={false}
             rowKey="name"

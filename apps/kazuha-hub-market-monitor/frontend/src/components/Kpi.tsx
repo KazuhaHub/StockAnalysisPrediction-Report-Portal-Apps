@@ -60,10 +60,12 @@ export function KpiRow({
     xxl?: number;
   };
 }) {
+  // Two to a row on a phone, whatever the page asks for at desktop widths.
+  const columns = { ...cols, xs: 12 };
   return (
     <Row gutter={[12, 12]}>
       {items.map((item) => (
-        <Col key={item.key} {...cols}>
+        <Col key={item.key} {...columns}>
           <Card size="small" className="mm-kpi" style={{ height: "100%" }}>
             <Statistic
               title={item.title}
