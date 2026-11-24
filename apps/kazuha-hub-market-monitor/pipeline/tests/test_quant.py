@@ -32,7 +32,7 @@ class Panels(unittest.TestCase):
         os.makedirs(bars)
         rows = []
         for i, d in enumerate(pd.bdate_range("2014-05-26", periods=14).strftime("%Y-%m-%d")):
-            rows.append(("600000", d, 10.0 + i, 0.0 if i == 4 else 100.0, 1e6 + i))
+            rows.append(("600000", d, 10.0 + i, 0.0 if i in (4, 9) else 100.0, 1e6 + i))  # 9: in the window
             rows.append(("000001", d, 5.5, 50.0, 2e5))
             rows.append(("830001", d, 7.0, 10.0, 1e4))     # Beijing exchange: dropped
             rows.append(("920001", d, 7.0, 10.0, 1e4))     # Beijing exchange: dropped
@@ -64,6 +64,7 @@ class Panels(unittest.TestCase):
         pd.testing.assert_frame_equal(close, close0, check_names=False, check_freq=False)
         pd.testing.assert_frame_equal(amount, amount0, check_names=False, check_freq=False)
         self.assertEqual(list(close.columns), ["000001", "600000"])
+        self.assertTrue(close["600000"].isna().any())   # the untraded bar inside the window
 
 
 class Snapshot(unittest.TestCase):

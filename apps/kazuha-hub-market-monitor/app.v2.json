@@ -38,11 +38,11 @@
         "path": "/panorama",
         "layout": "document"
       },
-        {
-          "id": "quant",
-          "path": "/quant",
-          "layout": "document"
-        }
+      {
+        "id": "quant",
+        "path": "/quant",
+        "layout": "document"
+      }
     ],
     "admin_routes": [
       {
@@ -57,17 +57,17 @@
         {
           "locale": "en-US",
           "name": "Market Monitor",
-          "description": "Daily A-share margin, sentiment, ETF-flow and valuation dashboards"
+          "description": "Daily A-share margin, sentiment, ETF-flow, valuation and quant-state dashboards"
         },
         {
           "locale": "zh-CN",
           "name": "市场监测",
-          "description": "A 股融资盘、情绪、ETF 资金与估值的每日看板"
+          "description": "A 股融资盘、情绪、ETF 资金、估值与量化状态的每日看板"
         },
         {
           "locale": "zh-TW",
           "name": "市場監測",
-          "description": "A 股融資盤、情緒、ETF 資金與估值的每日看板"
+          "description": "A 股融資盤、情緒、ETF 資金、估值與量化狀態的每日看板"
         }
       ]
     }
