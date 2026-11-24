@@ -1,0 +1,12 @@
+{
+  "app_id": "kazuha-hub-market-monitor",
+  "version": "0.1.0-beta.12",
+  "commit": "72644bf4231043682397c6cc53700237c5f12bcd",
+  "run_url": "https://github.com/KazuhaHub/StockAnalysisPrediction-Report-Portal-Apps/actions/runs/45395972912",
+  "package_oci": {
+    "repository": "ghcr.io/kazuhahub/portal-apps/kazuha-hub-market-monitor",
+    "digest": "sha256:009486f6d8548d7a00030bb9b977aa2eaa044f6c73c2c38d9f835d041db5d6bd"
+  },
+  "package_sha256": "c7f283204b8d850c04cbb39f49028da0653e607c429ab5d0b531a07a068bec8d",
+  "notes": "New \u91cf\u5316\u72b6\u6001 tab: the tech main-line and micro-cap state monitor, its ladders, signals and base rates, built nightly from the app's bar store. Shenzhen ETF shares can now be fetched (new proxy host fund.szse.cn)."
+}
