@@ -1,0 +1,1 @@
+{"format":"portal.app.signature/1-dev.1","algorithm":"Ed25519","publisher":"kazuha-hub","key_id":"kazuha-hub-2026-11","descriptor_sha256":"b618e1ab030cedc33c66aadeadcd57b05111f4c44a903e1f8b764929f9b8cd4f","signature":"XPpXSDmnPBedj0bqAqkkxZ2HVPZ8_Gbi5GFeN1zrWv3xyCFtP8G6cPFqG_2QsTAftIoZroZxg3B6X3_hbl6xCA"}

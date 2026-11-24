@@ -1,0 +1,12 @@
+{
+  "app_id": "kazuha-hub-market-monitor",
+  "version": "0.1.0-beta.10",
+  "commit": "8313430ffdab366cfd43915cae155a917cda3bb0",
+  "run_url": "https://github.com/KazuhaHub/StockAnalysisPrediction-Report-Portal-Apps/actions/runs/45351192454",
+  "package_oci": {
+    "repository": "ghcr.io/kazuhahub/portal-apps/kazuha-hub-market-monitor",
+    "digest": "sha256:4419d0b87e4869c951d1174a866251b3a4a3052e2fee37a339e62c961e2526d5"
+  },
+  "package_sha256": "6c7a7a103da92af85e751f527d58fbd471f8f59ecc151a7118613534f66c7cf0",
+  "notes": "Panorama's master and health steps read their price panels straight from the bar store and fit in the app's memory."
+}
