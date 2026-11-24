@@ -13,10 +13,7 @@ fetch_bars 无法补数；腾讯 web.ifzq.gtimg.cn 的 qfq 日线正常。抽样
 import os
 import sys
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
-
 import pandas as pd
-import requests
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from fetch_data import DATA, log  # noqa: E402
@@ -40,54 +37,12 @@ if not miss:
     log("无需补齐")
     sys.exit(0)
 
-UA = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"}
-
-
-def _px(code):
-    mkt = "sh" if code[0] == "6" else ("bj" if code[0] in "48" else "sz")
-    url = "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get"
-    for a in range(3):
-        try:
-            r = requests.get(url, params={"param": "%s%s,day,,,40,qfq" % (mkt, code)},
-                             timeout=8, headers=UA)
-            j = r.json()
-            d = j.get("data", {}).get(mkt + code, {})
-            k = d.get("qfqday") or d.get("day") or []
-            if not k:
-                return None
-            return {x[0]: (float(x[1]), float(x[2]), float(x[3]), float(x[4]),
-                           float(x[5])) for x in k}
-        except Exception:
-            time.sleep(0.2 * (a + 1))
-    return None
-
+import bar_sources  # noqa: E402
 
 t0 = time.time()
-recs, bad, none = [], [], []
-done = 0
-with ThreadPoolExecutor(max_workers=WORKERS) as ex:
-    futs = {ex.submit(_px, c): c for c in miss}
-    for f in as_completed(futs):
-        c = futs[f]
-        m = f.result()
-        done += 1
-        if not m:
-            none.append(c)
-        else:
-            ref_tx = m.get(PREV, (None, None))[1]
-            if ref_tx and abs(ref_tx / prev[c] - 1) * 100 > TOL:
-                bad.append((c, prev[c], ref_tx))
-            elif TARGET in m:
-                o, cl, hi, lo, vol = m[TARGET]
-                recs.append((c, TARGET, o, cl, hi, lo, vol * 100, 0.0))
-        if done % 500 == 0 or done == len(miss):
-            log("  进度 %d/%d  取得 %d  拒绝 %d  无数据 %d  %.0fs"
-                % (done, len(miss), len(recs), len(bad), len(none), time.time() - t0))
-
-log("汇总：取得 %d，拒绝(复权不一致) %d，源无目标日 %d"
-    % (len(recs), len(bad), len(none)))
-if bad:
-    log("  拒绝样例：%s" % bad[:5])
+recs, nbad = bar_sources.from_tx(miss, TARGET, PREV, prev, workers=WORKERS, tol=TOL)
+log("汇总：取得 %d，拒绝(复权不一致) %d，未取到 %d，%.0fs"
+    % (len(recs), nbad, len(miss) - len(recs) - nbad, time.time() - t0))
 if not recs:
     log("无有效数据，不写盘")
     sys.exit(2)

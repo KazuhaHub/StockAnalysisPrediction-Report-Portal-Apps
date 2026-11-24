@@ -1,7 +1,7 @@
 {
   "format": "portal.app/v2",
   "id": "kazuha-hub-market-monitor",
-  "version": "0.1.0-beta.6",
+  "version": "0.1.0-beta.7",
   "publisher": "kazuha-hub",
   "compatibility": {
     "platform_api": ">=2.0.0-0 <3.0.0-0",
@@ -97,6 +97,7 @@
       "qt.gtimg.cn",
       "query.sse.com.cn",
       "quotes.internal.anchan.kazuhahub.com",
+      "stock.finance.sina.com.cn",
       "vip.stock.finance.sina.com.cn",
       "web.ifzq.gtimg.cn",
       "www.szse.cn"

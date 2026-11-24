@@ -26,8 +26,9 @@ import (
 // of snapshots and history.
 //
 // Jobs are idempotent per as-of date (a re-run replaces that date's
-// snapshot), so a run cut short by a restart is queued again. Only runs that
-// were running count against maxAttempts.
+// snapshot), so a run cut short by a restart is retried: a run that was still
+// queued is queued again, and one that was running is marked interrupted and
+// retried as a new run under the same task, up to maxAttempts attempts.
 
 const (
 	runsFormat  = "market-monitor.runs/1"
@@ -125,27 +126,45 @@ func NewRunner(dataDir string, specs []JobSpec, store *Store) (*Runner, error) {
 		}
 		r.runs = f.Runs
 	}
-	// Settle runs that were cut short: queue them again, oldest first, or
-	// give up after maxAttempts.
+	// Settle runs that were cut short, oldest first. A run still waiting is
+	// queued again as it is. A run that was running is recorded as
+	// interrupted (the jobs list must not show it running), and its retry is
+	// a new run under the same task identity, until maxAttempts.
 	changed := false
+	var retries []Run
 	for i := len(r.runs) - 1; i >= 0; i-- {
 		run := &r.runs[i]
 		if run.Status != "queued" && run.Status != "running" {
 			continue
 		}
 		changed = true
-		// Only a run that was actually running used up an attempt; one that
-		// was still waiting keeps its attempt number.
-		wasRunning := run.Status == "running"
-		if _, known := r.specs[run.Job]; !known || (wasRunning && run.Attempt >= maxAttempts) || len(r.queue) == cap(r.queue) {
-			run.Status, run.Error, run.FinishedAt = "interrupted", "interrupted", r.stamp()
+		_, known := r.specs[run.Job]
+		if run.Status == "queued" {
+			if !known || len(r.queue) == cap(r.queue) {
+				run.Status, run.Error, run.FinishedAt = "interrupted", "interrupted", r.stamp()
+				continue
+			}
+			r.queue <- run.ID
 			continue
 		}
-		if wasRunning {
-			run.Attempt++
+		run.Status, run.Error, run.FinishedAt = "interrupted", "interrupted", r.stamp()
+		r.appendLog(run.ID, "interrupted: the service stopped while attempt %d was running", run.Attempt)
+		if !known || run.Attempt >= maxAttempts || len(r.queue) == cap(r.queue) {
+			continue
 		}
-		run.Status, run.StartedAt = "queued", ""
-		r.queue <- run.ID
+		id, err := newRunID(r.now())
+		if err != nil {
+			return nil, err
+		}
+		retry := Run{ID: id, Job: run.Job, TaskID: run.TaskID, OccurrenceID: run.OccurrenceID,
+			Status: "queued", Attempt: run.Attempt + 1, QueuedAt: r.stamp()}
+		r.appendLog(id, "attempt %d, retrying run %s, which was interrupted", retry.Attempt, run.ID)
+		retries = append(retries, retry)
+		r.queue <- id
+	}
+	// Newest first: the retries were made oldest first.
+	for _, retry := range retries {
+		r.runs = append([]Run{retry}, r.runs...)
 	}
 	if changed {
 		if err := r.persistLocked(); err != nil {
@@ -154,6 +173,24 @@ func NewRunner(dataDir string, specs []JobSpec, store *Store) (*Runner, error) {
 	}
 	_ = os.RemoveAll(filepath.Join(dataDir, "staging"))
 	return r, nil
+}
+
+func newRunID(now time.Time) (string, error) {
+	var id [8]byte
+	if _, err := rand.Read(id[:]); err != nil {
+		return "", err
+	}
+	return now.Format("20060102T150405Z") + "-" + hex.EncodeToString(id[:]), nil
+}
+
+// appendLog adds a line to a run's log, best effort.
+func (r *Runner) appendLog(id, format string, args ...any) {
+	f, err := os.OpenFile(filepath.Join(r.dataDir, "runs", id+".log"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600)
+	if err != nil {
+		return
+	}
+	fmt.Fprintf(f, "\n[market-monitor] "+format+"\n", args...)
+	f.Close()
 }
 
 func (r *Runner) indexPath() string { return filepath.Join(r.dataDir, "runs", "index.json") }
@@ -205,12 +242,12 @@ func (r *Runner) submit(job, taskID, occurrenceID string, ifIdle bool) (Run, boo
 	if len(r.queue) == cap(r.queue) {
 		return Run{}, false, errQueueFull
 	}
-	var id [8]byte
-	if _, err := rand.Read(id[:]); err != nil {
+	id, err := newRunID(r.now())
+	if err != nil {
 		return Run{}, false, err
 	}
 	run := Run{
-		ID:  r.now().Format("20060102T150405Z") + "-" + hex.EncodeToString(id[:]),
+		ID:  id,
 		Job: job, TaskID: taskID, OccurrenceID: occurrenceID,
 		Status: "queued", Attempt: 1, QueuedAt: r.stamp(),
 	}
@@ -344,7 +381,7 @@ func (r *Runner) execute(ctx context.Context, id string) {
 	spec := r.specs[run.Job]
 	r.update(id, func(run *Run) { run.Status, run.StartedAt = "running", r.stamp() })
 	staging := filepath.Join(r.dataDir, "staging", id)
-	// Append, so a requeued attempt keeps the earlier attempts' output.
+	// Append: the log may already hold the line that names the interrupted attempt.
 	logFile, logErr := os.OpenFile(filepath.Join(r.dataDir, "runs", id+".log"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600)
 	note := func(format string, args ...any) {
 		if logErr == nil {

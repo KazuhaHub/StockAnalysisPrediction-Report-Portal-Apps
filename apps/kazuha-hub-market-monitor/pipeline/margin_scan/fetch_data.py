@@ -6,7 +6,8 @@
 数据源：
   1. 沪深交易所两融个股明细（akshare stock_margin_detail_sse / _szse）  日频，T+1 披露
   2. 全市场快照（akshare stock_zh_a_spot_em）  仅 name 表/兜底，低频校准用 --refresh-spot
-  3. 个股前复权日线（东财 push2his kline）                                OHLC + 成交额
+  3. 个股前复权日线：本地 MarketData 行情库（marketdata 任务维护）→ 腾讯 → 新浪
+     （bar_sources.py）。东财 push2his 对本机出口限流/拒连，日更不再请求它。
   4. 两融账户统计（akshare stock_margin_account_info）                   平均维持担保比例
 
 流通市值不再来自每日快照：data/float_shares.parquet 存流通股本底表，
@@ -184,7 +185,9 @@ def _secid(code):
 
 
 def _fetch_bars_one(code, retry=2, end_date=None):
-    """end_date=YYYYMMDD：K 线截止到两融最新基准日。
+    """东财 push2his 单票日线，只留给 analysis/ 下的手动补数脚本；日更走 bar_sources。
+
+    end_date=YYYYMMDD：K 线截止到两融最新基准日。
 
     不设 end 时，盘中运行会拿到「当日未完成 K 线」（close 是实时价），
     会让 build_data 的 close_last 变成盘中价、fcap 推算全错。
@@ -227,22 +230,16 @@ def fetch_bars(codes, refresh=False, end_date=None):
     log("日线：需要 %d 只，已缓存 %d，待抓 %d（refresh=%s end=%s）"
         % (len(codes), len(have), len(todo), refresh, end_date or "20500101"))
 
-    recs = []
-    if todo:
-        with ThreadPoolExecutor(max_workers=WORKERS_BARS) as ex:
-            futs = {ex.submit(_fetch_bars_one, c, end_date=end_date): c for c in todo}
-            done = 0
-            for f in as_completed(futs):
-                r = f.result()
-                done += 1
-                if r:
-                    recs.extend(r)
-                if done % 300 == 0 or done == len(todo):
-                    log("  日线进度 %d/%d" % (done, len(todo)))
-    cols = ["code", "date", "open", "close", "high", "low", "volume", "amount"]
-    new = pd.DataFrame(recs, columns=cols) if recs else pd.DataFrame(columns=cols)
-
     target = ("%s-%s-%s" % (end_date[:4], end_date[4:6], end_date[6:8])) if end_date else None
+    cols = ["code", "date", "open", "close", "high", "low", "volume", "amount"]
+    new = pd.DataFrame(columns=cols)
+    if todo and target:
+        import bar_sources
+        new, mix = bar_sources.collect(todo, old, target, BAR_LIMIT, bar_sources.md_home())
+        log("  日线来源：MarketData %d，腾讯 %d，新浪 %d，未取到 %d"
+            % (mix["marketdata"], mix["tx"], mix["sina"], mix["missing"]))
+    elif todo:
+        log("  没有截止日，无法取日线")
     if target:
         new = new[new["date"] <= target]
         old = old[old["date"] <= target]

@@ -47,6 +47,7 @@ EXIT_NOT_REFRESHED = 92
 EXIT_ENVIRONMENT = 93
 HERE = os.path.dirname(os.path.abspath(__file__))
 PREFIX_LINK = "/opt/daily-tasks"
+SITE_DIR = os.path.join(HERE, "pysite")
 
 # job -> (working directory relative to the work dir, command, module, needs the data server)
 JOBS = {
@@ -103,7 +104,7 @@ SERVER_WAIT = 60
 PUBLISHED = ".mm-published"
 
 # Top-level entries of the source that are not pipeline code.
-NOT_COPIED = {"tests", "mm_job.py", "__pycache__"}
+NOT_COPIED = {"tests", "mm_job.py", "pysite", "__pycache__"}
 
 
 def prepare_work(src, work):
@@ -212,6 +213,9 @@ def job_env(work):
         "MD_HOME": os.path.join(work, "MarketData"),
         "WS_ROOT": os.path.join(work, "workspace"),
         "PY": sys.executable,
+        # pysite/sitecustomize.py sends plain-HTTP requests to remote hosts over
+        # https: only HTTPS_PROXY is set, so plain HTTP would not be proxied.
+        "PYTHONPATH": os.pathsep.join(p for p in (SITE_DIR, env.get("PYTHONPATH", "")) if p),
         "PATH": os.path.dirname(sys.executable) + os.pathsep + env.get("PATH", "/usr/bin:/bin"),
         "PYTHONIOENCODING": "utf-8", "PYTHONUNBUFFERED": "1",
         "LANG": "C.UTF-8", "LC_ALL": "C.UTF-8",

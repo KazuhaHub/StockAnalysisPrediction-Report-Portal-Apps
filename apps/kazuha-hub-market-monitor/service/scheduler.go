@@ -34,7 +34,10 @@ import (
 // same day does not repeat it and a failed bootstrap is not resubmitted that
 // day; it is tried again only on the first tick after a process start on a
 // later day. The marketdata job has no output module; it bootstraps when
-// sentiment or panorama, which read the bars it keeps, has no snapshot.
+// sentiment, panorama or margin, which read the bars it keeps, has no
+// snapshot. On the timetable marketdata (21:00) runs before the next
+// morning's margin (09:00), and the single worker runs a margin queued while
+// marketdata is still running after it.
 // Marketdata is queued first, then the caught-up occurrences, then the other
 // bootstraps in timetable order (sentiment, panorama, etf, margin); the runner
 // works the queue one job at a time in that order. A bootstrap the runner
@@ -76,8 +79,8 @@ func DefaultSlots() []Slot {
 }
 
 // bootstrapJobs lists the jobs in dependency order, with the module each one
-// produces. Marketdata updates the bar store that sentiment and panorama
-// read, so it goes first; etf and margin fetch their own inputs.
+// produces. Marketdata updates the bar store that sentiment, panorama and
+// margin read, so it goes first; etf fetches its own inputs.
 var bootstrapJobs = []struct{ job, module string }{
 	{"marketdata", ""},
 	{"sentiment", "sentiment"},
@@ -87,7 +90,7 @@ var bootstrapJobs = []struct{ job, module string }{
 }
 
 // barConsumers are the modules whose jobs read what marketdata produces.
-var barConsumers = []string{"sentiment", "panorama"}
+var barConsumers = []string{"sentiment", "panorama", "margin"}
 
 type pendingBoot struct{ job, day string }
 

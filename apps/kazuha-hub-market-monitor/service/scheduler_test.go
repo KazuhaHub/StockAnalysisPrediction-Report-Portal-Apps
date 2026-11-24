@@ -281,13 +281,22 @@ func TestBootstrapSkipsJobsThatHaveSnapshots(t *testing.T) {
 	if got := submitted(s2.Tick()); got != "marketdata,sentiment,margin" {
 		t.Fatalf("partial store: %q", got)
 	}
-	// Only margin missing: margin and etf read no bars, so no marketdata.
+	// Only margin missing: margin reads its daily bars from the bar store,
+	// so marketdata goes first.
 	s3, r3 := emptyStoreSchedulerFor(t, &now)
 	for _, m := range []string{"sentiment", "panorama", "etf"} {
 		installTest(t, r3.store, m, "2026-11-13")
 	}
-	if got := submitted(s3.Tick()); got != "margin" {
+	if got := submitted(s3.Tick()); got != "marketdata,margin" {
 		t.Fatalf("margin only: %q", got)
+	}
+	// Only etf missing: etf reads no bars, so no marketdata.
+	s4, r4 := emptyStoreSchedulerFor(t, &now)
+	for _, m := range []string{"sentiment", "panorama", "margin"} {
+		installTest(t, r4.store, m, "2026-11-13")
+	}
+	if got := submitted(s4.Tick()); got != "etf" {
+		t.Fatalf("etf only: %q", got)
 	}
 }
 
