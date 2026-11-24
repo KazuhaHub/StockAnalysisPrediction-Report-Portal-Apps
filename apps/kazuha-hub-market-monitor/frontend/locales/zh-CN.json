@@ -116,6 +116,8 @@
   "etf_idx20": "上证 20 日",
   "etf_signal": "信号状态",
   "etf_flowTitle": "沪市宽基 ETF 日度净流入与上证综指",
+  "etf_merged": "合并 {n} 个交易日",
+  "etf_flowNote": "仅含沪市 ETF：深交所只披露当期份额，缺的日子无法补齐。虚线框柱是缺份额的几个交易日合在一起的变化，不计入单日统计（事件、连续流入、β）。",
   "etf_flowAxis": "净流入（亿）",
   "etf_indexAxis": "上证",
   "etf_flow": "宽基净流入",

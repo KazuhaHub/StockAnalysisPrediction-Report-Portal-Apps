@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""净流入计算：份额变化 × 单位净值，落 parquet 长表（date, code, flow）。
+"""净流入计算：份额变化 × 单位净值，落 parquet 长表（date, code, flow, span）。
 
 口径（与交易所披露一致，已用 510300 在 2026-11-12 验证）：
     净流入(T) = [份额(T) - 份额(T-1)] × 单位净值(T)
@@ -45,32 +45,70 @@ def load_inputs():
     return sh, nv, u
 
 
+def trading_calendar(nv):
+    """交易日历：上证指数日线的日期（只含交易日，不受份额缺口影响）；指数还没
+    到的最新几天用净值日期补上。净值不单独做日历：个别基金会在非交易日
+    （半年末、年末）公布净值，混进来会让跨过它的变化都变成合并值。"""
+    nav_days = pd.DatetimeIndex(sorted(set(pd.to_datetime(nv["date"]))))
+    idx = os.path.join(DATA, "index.parquet")
+    if not os.path.exists(idx):
+        return nav_days
+    days = pd.DatetimeIndex(sorted(set(pd.to_datetime(pd.read_parquet(idx, columns=["date"])["date"]))))
+    if len(days):
+        days = days.append(nav_days[nav_days > days.max()])
+    return days
+
+
+def compute_flows(sh, nv, cal):
+    """逐只按「相邻两次份额观测」算净流入，并记下这段变化跨了几个交易日。
+
+    净流入(t) = [份额(t) − 份额(上次观测)] × 净值(t)。
+    span = 上次观测到 t 之间的交易日数（含 t）：1 是真正的单日；>1 是合并值——
+    中间的日子没有份额（应用没跑、源站没披露、深市只有快照），这段变化只能整体
+    记在 t 上，不能当成 t 一天的流入。没有观测的日子不填 0、不补值。
+    返回长表 (date, code, flow 亿元, span)。
+    """
+    pos = pd.Series(range(len(cal)), index=cal)
+    nav = nv.pivot_table(index="date", columns="code", values="nav", aggfunc="last")
+    nav = nav.reindex(cal).ffill()
+    rows = []
+    for code, g in sh.sort_values("date").groupby("code"):
+        if code not in nav.columns:
+            continue
+        g = g.drop_duplicates("date", keep="last")
+        g = g[g["date"].isin(cal)]
+        if len(g) < 2:
+            continue
+        d = g["date"].to_numpy()
+        p = pos.reindex(g["date"]).to_numpy()
+        diff = g["shares"].diff().to_numpy()[1:]
+        span = (p[1:] - p[:-1]).astype(int)
+        price = nav[code].reindex(g["date"]).to_numpy()[1:]
+        rows.append(pd.DataFrame({"date": d[1:], "code": code,
+                                  "flow": (diff * price / 1e8).round(4), "span": span}))
+    if not rows:
+        return pd.DataFrame({"date": pd.Series(dtype="datetime64[ns]"), "code": [], "flow": [], "span": []})
+    return pd.concat(rows, ignore_index=True)
+
+
 def compute():
     sh, nv, uni = load_inputs()
-    dates = sorted(set(sh["date"]) & set(nv["date"]))
-    cal = pd.DatetimeIndex(dates)
+    cal = trading_calendar(nv)
+    cal = cal[cal >= sh["date"].min()]
     print("[flow] 份额 %d 行 / 净值 %d 行 / 交易日 %d（%s ~ %s）"
           % (len(sh), len(nv), len(cal), cal.min().date(), cal.max().date()))
 
-    share = sh.pivot_table(index="date", columns="code", values="shares", aggfunc="last")
-    nav = nv.pivot_table(index="date", columns="code", values="nav", aggfunc="last")
-    share = share.reindex(cal).ffill()   # 未披露日沿用前值（份额未变 → 零流入）
-    nav = nav.reindex(cal).ffill()
-
-    codes = [c for c in share.columns if c in nav.columns]
-    share, nav = share[codes], nav[codes]
-
-    d = share.diff()
-    flow = (d * nav / 1e8).round(4)      # 亿元
-    # 首日无前值 → diff 为 NaN，保留 NaN 而不是填 0：
-    # 填 0 会让「只有单个快照的代码」（如刚累积第一天的深市）在首行伪造出一个 0 值，
-    # 反而把它真实的日期挤掉。
-
-    long = flow.stack().rename("flow").reset_index()
-    long.columns = ["date", "code", "flow"]
+    long = compute_flows(sh, nv, cal)
+    merged = long[long["span"] > 1]
+    if len(merged):
+        print("[flow] 合并值 %d 条（中间缺份额，跨 2~%d 个交易日），不计入单日统计"
+              % (len(merged), int(merged["span"].max())))
     long = long.merge(uni, left_on="code", right_on="基金代码", how="left")
-    long[["date", "code", "flow", "cat", "name", "ex"]].to_parquet(FLOW, index=False)
+    long[["date", "code", "flow", "span", "cat", "name", "ex"]].to_parquet(FLOW, index=False)
 
+    # 分类合计是按日相加的，窗口求和（近 20 日、年初至今）依然精确
+    flow = long.pivot_table(index="date", columns="code", values="flow", aggfunc="sum")
+    codes = list(flow.columns)
     bycat = flow.T.groupby(uni.set_index("基金代码").loc[codes, "cat"]).sum().T
     bycat = bycat.reindex(columns=[c for c in CATS if c in bycat.columns])
     bycat.index.name = "date"

@@ -1,6 +1,7 @@
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { expect, test, vi } from "vitest";
 import { mount } from "./harness";
+import { fill } from "../src/lib/format";
 import { backend, summaries, marginRows } from "./fixtures";
 import enUS from "../locales/en-US.json";
 import zhCN from "../locales/zh-CN.json";
@@ -245,4 +246,38 @@ test("the dev mock mirrors the service: mechanism predicates, closed names, marg
 test("heatmap strategy labels stay level on a wide screen and turn on a narrow one so they never overlap", () => {
   expect(heatStrategyLabel(false)).toMatchObject({ interval: 0, rotate: 0 });
   expect(heatStrategyLabel(true)).toMatchObject({ interval: 0, rotate: 45 });
+});
+
+test("an ETF day without its own share data is drawn outlined and labelled as merged", async () => {
+  const etf = summaries.etf as Record<string, unknown>;
+  const merged = {
+    ...etf,
+    current: {
+      ...(etf.current as object),
+      last_date: "2026-11-23",
+      last_nf: null,
+      last_span: 5,
+      last_merged: 1387.5,
+    },
+    series: {
+      dates: ["2026-11-16", "2026-11-17", "2026-11-23"],
+      nf: [12, null, 1387.5],
+      nf_span: [1, null, 5],
+      nf_ma20: [null, null, null],
+      idx: [3500, 3510, 3520],
+    },
+  };
+  await mount(backend({ summary: { etf: merged } }), { path: "/etf" });
+  expect(await screen.findByText(fill(enUS.etf_merged, { n: 5 }))).toBeTruthy();
+  expect(screen.getByText(enUS.etf_flowNote)).toBeTruthy();
+  const option = chartOption(enUS.etf_flowTitle);
+  const bars = option.series[0].data as {
+    value: number | null;
+    itemStyle: { color: string; borderType?: string };
+  }[];
+  expect(bars[0].itemStyle.color).not.toBe("transparent");
+  expect(bars[2].itemStyle).toMatchObject({
+    color: "transparent",
+    borderType: "dashed",
+  });
 });

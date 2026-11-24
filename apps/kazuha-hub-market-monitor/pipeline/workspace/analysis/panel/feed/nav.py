@@ -121,10 +121,14 @@ def daily():
     """日更：只补最近一段。"""
     old = _load()
     codes = universe()
+    last = old.groupby("code")["date"].max() if not old.empty else pd.Series(dtype="datetime64[ns]")
     buf = []
     for i, c in enumerate(codes, 1):
         try:
-            df = fetch(c, max_pages=1)   # 20 条够覆盖约 4 周，日更只补尾部
+            # 一页 20 条（约 4 周）；应用停过几周时多翻几页，把缺口补上
+            seen = last.get(c)
+            gap_days = (pd.Timestamp.today() - seen).days if seen is not None and pd.notna(seen) else 28
+            df = fetch(c, max_pages=min(6, 1 + gap_days // 28))
             if not df.empty:
                 buf.append(df)
         except Exception as e:

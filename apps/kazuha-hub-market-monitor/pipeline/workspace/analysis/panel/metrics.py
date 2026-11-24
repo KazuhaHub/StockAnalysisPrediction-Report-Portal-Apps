@@ -53,14 +53,47 @@ def load():
     amt["code"] = amt["code"].astype(str)
 
     sh = set(flow.loc[flow["ex"] == "SH", "code"])
-    nf = flow[flow["code"].isin(sh)].groupby("date")["flow"].sum()
+    nf, span = sse_daily(flow[flow["code"].isin(sh)])
     amt_s = amt[amt["code"].isin(sh)].groupby("date")["amount"].sum()
 
     px = px.set_index("date").sort_index()
     md = mg.set_index("date").sort_index()
 
-    dates = nf.index.intersection(px.index).intersection(amt_s.index).sort_values()
-    return flow, bycat, nf.reindex(dates), amt_s.reindex(dates), px.loc[dates], md, dates
+    # 交易日以指数与成交额为准，从份额有数据的第一天起：份额缺口的日子留在序列里
+    # （值为空），而不是被跳过——跳过会让「近 5 日」「连续 N 日」数错天数。
+    # 截止到最后一个有沪市份额的交易日：沪市份额 T+1 才披露，收盘后（或盘中）
+    # 跑时指数与成交额已有今天，份额还没有——那一天不是缺口，是还没到。
+    dates = px.index.intersection(amt_s.index).sort_values()
+    if len(nf):
+        dates = dates[(dates >= nf.index.min()) & (dates <= nf.index.max())]
+    return (flow, bycat, nf.reindex(dates), span.reindex(dates), amt_s.reindex(dates),
+            px.loc[dates], md, dates)
+
+
+def sse_daily(sse_flow):
+    """沪市宽基逐日合计与该日的跨度。一天的流入金额里多半来自跨了多个交易日
+    的变化（那几天整体缺份额）时，这天的合计是合并值，span 取这些基金的最大
+    跨度；按金额而不是只数算，一只大基金缺一天也会让这天成为合并值，而一只
+    小基金某天没出现在交易所名单里（停牌等）不会。"""
+    if "span" not in sse_flow.columns:          # 旧版 flow.parquet：全当单日
+        sse_flow = sse_flow.assign(span=1)
+    g = sse_flow.groupby("date")
+    multi = sse_flow["span"] > 1
+    weight = sse_flow["flow"].abs()
+    share = (weight.where(multi, 0).groupby(sse_flow["date"]).sum()
+             / weight.groupby(sse_flow["date"]).sum().replace(0, np.nan)).fillna(multi.groupby(sse_flow["date"]).mean())
+    widest = sse_flow["span"].where(multi).groupby(sse_flow["date"]).max()
+    span = widest.where(share > 0.5, 1).fillna(1).astype(int)
+    return g["flow"].sum(), span
+
+
+def num(x, nd):
+    """JSON 里的数：非有限值写 null（NaN 不是合法 JSON）。"""
+    try:
+        x = float(x)
+    except (TypeError, ValueError):
+        return None
+    return round(x, nd) if np.isfinite(x) else None
 
 
 def cluster_t(vals, positions, base, gap=CLUSTER_GAP):
@@ -108,15 +141,21 @@ def event_stats(px, mask, h, gap=CLUSTER_GAP):
 
 
 def main():
-    flow, bycat, nf, amt, px, md, dates = load()
+    flow, bycat, nf_all, span, amt, px, md, dates = load()
     ret = px["close"].pct_change() * 100
+    # 单日口径只用真正的单日：合并值（span>1）和缺口日（空）不进事件、β、游程、
+    # 阈值与分位统计；窗口求和（近 5/20/60 日、年初至今）用 nf_all，依然精确。
+    merged = span.fillna(1) > 1
+    nf = nf_all.where(~merged)
 
     M = {"asof": str(dates[-1].date()),
          "built_at": pd.Timestamp.now().strftime("%Y-%m-%d %H:%M:%S"),
          "n_days": int(len(dates)),
          "scope": {"universe": "沪市宽基 ETF", "n_codes": int(flow["code"].nunique()),
                    "start": str(dates[0].date()),
-                   "note": "深市份额交易所不提供历史回溯，自 2026-11-14 起逐日累积"},
+                   "note": "逐日净流入只含沪市：深市份额交易所不提供历史回溯，只有逐日快照，"
+                           "缺快照的日子无法补齐，深市只计入分类与单只的窗口合计",
+                   "merged_days": int(merged.sum())},
          "thresh": THRESH}
 
     # ---------- 1. 年度信号体检 ----------
@@ -206,12 +245,15 @@ def main():
     neg_run = neg.groupby((neg != neg.shift()).cumsum()).cumsum().iloc[-1]
     M["current"] = {"streak_pos": int(pos.groupby((pos != pos.shift()).cumsum()).cumsum().iloc[-1]),
                     "streak_neg": int(neg_run),
-                    "last_nf": round(float(nf.iloc[-1]), 1),
+                    "last_nf": num(nf.iloc[-1], 1),
                     "last_date": str(nf.index[-1].date()),
-                    "last5": round(float(nf.iloc[-5:].sum()), 0),
-                    "last20": round(float(nf.iloc[-20:].sum()), 0),
-                    "last60": round(float(nf.iloc[-60:].sum()), 0),
-                    "ytd": round(float(nf[nf.index >= "2026-01-01"].sum()), 0),
+                    # 最新一天若是合并值：单日数不成立，给出合并值与跨度，页面照实写
+                    "last_span": int(span.fillna(1).iloc[-1]),
+                    "last_merged": num(nf_all.iloc[-1], 1) if merged.iloc[-1] else None,
+                    "last5": round(float(nf_all.iloc[-5:].sum()), 0),
+                    "last20": round(float(nf_all.iloc[-20:].sum()), 0),
+                    "last60": round(float(nf_all.iloc[-60:].sum()), 0),
+                    "ytd": round(float(nf_all[nf_all.index >= "2026-01-01"].sum()), 0),
                     "amount_last": round(float(amt.iloc[-1]), 0),
                     "idx_last": round(float(px["close"].iloc[-1]), 2),
                     "idx_20d": round(float(px["close"].iloc[-1] / px["close"].iloc[-21] - 1) * 100, 2)}
@@ -229,7 +271,7 @@ def main():
         s2 = -1
     else:
         s2 = 0
-    s3 = 1 if nf.iloc[-5:].sum() > 0 else -1
+    s3 = 1 if nf_all.iloc[-5:].sum() > 0 else -1
     score = s1 + s2 + s3
     light, label = ("green", "可用") if score >= 2 else (("amber", "观察") if score >= 0 else ("red", "失效"))
     M["health"] = {
@@ -241,7 +283,7 @@ def main():
              "note": "近 %d 日 >%d 亿事件后 5 日超额，t(超额)=%s，n=%s"
                      % (ROLL_WIN, THRESH, t5, st5["n"] if st5 else 0),
              "s": s2},
-            {"k": "买盘在否", "v": "近5日 %+.0f 亿" % nf.iloc[-5:].sum(),
+            {"k": "买盘在否", "v": "近5日 %+.0f 亿" % nf_all.iloc[-5:].sum(),
              "note": "最近 5 个交易日沪市宽基合计净流入", "s": s3}],
         "beta120": b_now, "excess5_120d": ex5, "t_excess5_120d": t5,
         "n_120d": st5["n"] if st5 else 0}
@@ -316,14 +358,16 @@ def main():
     # ---------- 5. 序列 ----------
     M["series"] = {
         "dates": [str(d.date()) for d in nf.index],
-        "nf": [round(float(x), 1) for x in nf],
-        "amt": [round(float(x), 1) for x in amt],
-        "idx": [round(float(x), 2) for x in px["close"]],
+        # nf 含合并值（画成另一种柱），nf_span 是它跨的交易日数；缺口日为 null
+        "nf": [num(x, 1) for x in nf_all],
+        "nf_span": [int(x) if np.isfinite(x) else None for x in span.astype(float)],
+        "amt": [num(x, 1) for x in amt],
+        "idx": [num(x, 2) for x in px["close"]],
         "ret": [None if not np.isfinite(x) else round(float(x), 2) for x in ret],
         "amt_ma20": [None if not np.isfinite(x) else round(float(x), 1)
                      for x in amt.rolling(20).mean()],
         "nf_ma20": [None if not np.isfinite(x) else round(float(x), 1)
-                    for x in nf.rolling(20).mean()],
+                    for x in nf.rolling(20, min_periods=15).mean()],
     }
 
     # ---------- 6. 分类资金 ----------
@@ -333,9 +377,9 @@ def main():
         "dates": [str(d.date()) for d in bycat.index],
         "cats": keep,
         "colors": {c: CAT_COLORS.get(c, "#888") for c in keep},
-        "series": {c: [round(float(x), 1) for x in bycat[c]] for c in keep},
-        "total": [round(float(x), 1) for x in bycat[keep].sum(axis=1)],
-        "cum": [round(float(x), 0) for x in bycat[keep].sum(axis=1).cumsum()],
+        "series": {c: [num(x, 1) for x in bycat[c]] for c in keep},
+        "total": [num(x, 1) for x in bycat[keep].sum(axis=1)],
+        "cum": [num(x, 0) for x in bycat[keep].sum(axis=1).cumsum()],
         "cats_empty": [c for c in CAT_COLORS if c not in keep],
     }
 
@@ -374,7 +418,7 @@ def main():
     top5 = [f["code"] for f in funds[:5]]
     cump = piv[top5][piv.index >= "2026-01-01"].cumsum()
     M["cum_dates"] = [str(d.date()) for d in cump.index]
-    M["cum_series"] = {c: [round(float(x), 1) for x in cump[c]] for c in top5}
+    M["cum_series"] = {c: [num(x, 1) for x in cump[c]] for c in top5}
     M["cum_names"] = {c: str(names.loc[c, "name"]) if c in names.index else c for c in top5}
     M["cum_from"] = "2026-01-01"
 
