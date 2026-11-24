@@ -116,6 +116,8 @@
   "etf_idx20": "上證 20 日",
   "etf_signal": "訊號狀態",
   "etf_flowTitle": "滬市寬基 ETF 日度淨流入與上證綜指",
+  "etf_merged": "合併 {n} 個交易日",
+  "etf_flowNote": "僅含滬市 ETF：深交所只揭露當期份額，缺的日子無法補齊。虛線框柱是缺份額的幾個交易日合在一起的變化，不計入單日統計（事件、連續流入、β）。",
   "etf_flowAxis": "淨流入（億）",
   "etf_indexAxis": "上證",
   "etf_flow": "寬基淨流入",

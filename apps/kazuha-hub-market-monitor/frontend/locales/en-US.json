@@ -116,6 +116,8 @@
   "etf_idx20": "Index 20 days",
   "etf_signal": "Signal state",
   "etf_flowTitle": "Daily net inflow of Shanghai broad-index ETFs and the index",
+  "etf_merged": "Merged {n} trading days",
+  "etf_flowNote": "Shanghai-listed ETFs only: Shenzhen publishes current shares only, so its daily flows cannot be filled in. Outlined bars merge several trading days without share data; they are left out of single-day statistics (events, streaks, β).",
   "etf_flowAxis": "Net inflow (×100M)",
   "etf_indexAxis": "Index",
   "etf_flow": "Broad-index net inflow",

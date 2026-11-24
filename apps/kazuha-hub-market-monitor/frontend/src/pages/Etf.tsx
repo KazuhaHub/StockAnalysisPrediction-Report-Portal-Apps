@@ -19,6 +19,7 @@ import { RowTable } from "../components/RowTable";
 import { useVisual } from "../components/useVisual";
 import { useCopy, type Copy } from "../lib/copy";
 import { useRowValues } from "../lib/hooks";
+import { escapeHtml } from "../lib/html";
 import { arr, fill, fmt, isNum, signed, DASH, type Num } from "../lib/format";
 
 const DATA_DATE_KEYS = ["share", "nav", "amount", "index", "margin"] as const;
@@ -35,6 +36,9 @@ type EtfSummary = {
   current?: {
     last_date?: string;
     last_nf?: Num;
+    /** Trading days the latest value spans; above 1 it is a merged value. */
+    last_span?: Num;
+    last_merged?: Num;
     last5?: Num;
     last20?: Num;
     ytd?: Num;
@@ -46,7 +50,15 @@ type EtfSummary = {
     items?: { k: string; v?: string; note?: string; s?: Num }[];
   };
   runs_top?: { start: string; end: string; days?: Num; sum?: Num }[];
-  series?: { dates?: string[]; nf?: Num[]; nf_ma20?: Num[]; idx?: Num[] };
+  series?: {
+    dates?: string[];
+    nf?: Num[];
+    /** Trading days each value spans: above 1 the day has no share data of
+     * its own and carries the whole change since the last observation. */
+    nf_span?: Num[];
+    nf_ma20?: Num[];
+    idx?: Num[];
+  };
   broad?: { dates?: string[]; cats?: string[]; series?: Record<string, Num[]> };
   data_health?: Record<string, string | null>;
 };
@@ -104,8 +116,40 @@ function EtfBody({
   const flowOption = useMemo(() => {
     const dates = arr(s.dates);
     const a = Math.max(0, dates.length - range);
+    const spans = arr(s.nf_span).slice(a);
+    const merged = (i: number) => {
+      const n = spans[i];
+      return isNum(n) && n > 1 ? n : 0;
+    };
     return {
-      tooltip: { trigger: "axis" },
+      tooltip: {
+        trigger: "axis",
+        formatter: (
+          params: {
+            dataIndex: number;
+            seriesIndex: number;
+            axisValueLabel: string;
+            marker: string;
+            seriesName: string;
+            value: unknown;
+          }[],
+        ) => {
+          const list = Array.isArray(params) ? params : [params];
+          if (!list.length) return "";
+          const lines = list.map((p) => {
+            const raw =
+              p.value && typeof p.value === "object"
+                ? (p.value as { value?: unknown }).value
+                : p.value;
+            const text = isNum(raw as Num) ? fmt(raw as Num, 1) : DASH;
+            const n = p.seriesIndex === 0 ? merged(p.dataIndex) : 0;
+            return `${p.marker}${escapeHtml(p.seriesName)}: ${text}${
+              n ? ` (${escapeHtml(fill(copy.etf_merged, { n }))})` : ""
+            }`;
+          });
+          return [escapeHtml(list[0].axisValueLabel), ...lines].join("<br/>");
+        },
+      },
       legend: { top: 0 },
       grid: { left: 50, right: 56, top: 36, bottom: 30 },
       xAxis: { type: "category", data: dates.slice(a) },
@@ -124,10 +168,21 @@ function EtfBody({
           type: "bar",
           data: arr(s.nf)
             .slice(a)
-            .map((x) => ({
-              value: x,
-              itemStyle: { color: isNum(x) && x < 0 ? v.down : v.up },
-            })),
+            .map((x, i) => {
+              const color = isNum(x) && x < 0 ? v.down : v.up;
+              // A merged value is outlined, not filled: it is not one day's flow.
+              return merged(i)
+                ? {
+                    value: x,
+                    itemStyle: {
+                      color: "transparent",
+                      borderColor: color,
+                      borderWidth: 1.5,
+                      borderType: "dashed",
+                    },
+                  }
+                : { value: x, itemStyle: { color } };
+            }),
         },
         {
           name: copy.etf_ma20,
@@ -197,10 +252,22 @@ function EtfBody({
     {
       key: "nf",
       title: fill(copy.etf_latest, { date: c.last_date ?? DASH }),
-      value: isNum(c.last_nf)
-        ? `${signed(c.last_nf, 1)} ${copy.unit_yi}`
-        : DASH,
-      color: isNum(c.last_nf) ? (c.last_nf >= 0 ? v.up : v.down) : undefined,
+      ...(isNum(c.last_merged) && isNum(c.last_span) && c.last_span > 1
+        ? {
+            // Not one day's flow: say how many trading days it covers.
+            value: `${signed(c.last_merged, 1)} ${copy.unit_yi}`,
+            note: fill(copy.etf_merged, { n: c.last_span }),
+          }
+        : {
+            value: isNum(c.last_nf)
+              ? `${signed(c.last_nf, 1)} ${copy.unit_yi}`
+              : DASH,
+            color: isNum(c.last_nf)
+              ? c.last_nf >= 0
+                ? v.up
+                : v.down
+              : undefined,
+          }),
     },
     {
       key: "5",
@@ -293,7 +360,14 @@ function EtfBody({
         }
       >
         {arr(s.dates).length ? (
-          <EChart label={copy.etf_flowTitle} option={flowOption} height={340} />
+          <>
+            <EChart
+              label={copy.etf_flowTitle}
+              option={flowOption}
+              height={340}
+            />
+            <div className="mm-muted">{copy.etf_flowNote}</div>
+          </>
         ) : (
           <Empty description={copy.noData} />
         )}

@@ -175,6 +175,54 @@ def backfill(start="2024-01-02"):
     status()
 
 
+GAP_LOOKBACK_DAYS = 120   # 回补缺口的回看窗口（自然日，约 80 个交易日）
+
+
+def known_trade_days():
+    """本地已有的交易日历：指数日线与净值库的日期并集（两者都只有交易日）。
+    取不到时退回新浪交易日历。"""
+    days = set()
+    for name in ("index.parquet", "nav.parquet"):
+        path = os.path.join(HERE, "..", "data", name)
+        if os.path.exists(path):
+            days |= set(pd.to_datetime(pd.read_parquet(path, columns=["date"])["date"]).dt.date)
+    return sorted(days)
+
+
+def fill_gaps(old, upto, calendar=None, lookback=GAP_LOOKBACK_DAYS, fetch=None):
+    """补齐沪市份额的缺口：回看窗口内、库里最早沪市日期之后、upto（含）之前的
+    交易日，凡沪市没有份额的都按日回补（fund_etf_scale_sse 支持任意历史日期）。
+    只抓缺的日子，所以重复运行不会重复请求；某天源站仍取不到就留着，下次再试。
+    返回 (新库, 补上的日期列表)。"""
+    fetch = fetch or fetch_sse
+    sh_dates = set(old.loc[old["ex"] == "SH", "date"].dt.date)
+    if not sh_dates or upto is None:
+        return old, []
+    start = max(min(sh_dates), upto - dt.timedelta(days=lookback))
+    calendar = known_trade_days() if calendar is None else calendar
+    if not calendar:
+        calendar = trade_days(start, upto)
+    todo = [d for d in calendar if start <= d <= upto and d not in sh_dates]
+    if not todo:
+        return old, []
+    uni = universe()
+    codes = set(uni.loc[uni["ex"] == "SH", "基金代码"])
+    got, filled = [], []
+    for d in todo:
+        df = fetch(d)
+        if df is not None:
+            df = df[df["code"].isin(codes)]
+            if not df.empty:
+                got.append(df)
+                filled.append(d)
+        time.sleep(THROTTLE)
+    print("[shares] 沪市缺口 %d 个交易日，补上 %d 个%s"
+          % (len(todo), len(filled), "：" + "、".join(str(d) for d in filled) if filled else ""))
+    if got:
+        old = _append(old, pd.concat(got, ignore_index=True))
+    return old, filled
+
+
 def daily():
     """日更：抓当日两市。上交所若未披露（T 日盘后）会自动跳过沪市。"""
     old = _load()
@@ -222,7 +270,14 @@ def daily():
     if got:
         old = _append(old, pd.concat(got, ignore_index=True))
         print("[shares] 库内 %d 行，最新 %s" % (len(old), old["date"].max().date()))
-    return 0 if got else 1
+    # 应用没跑的日子会在沪市份额里留下缺口：缺口两端的份额差会被当成一天的
+    # 净流入（2026-11-23 的 +1387 亿就是 11-16→11-23 五个交易日合在一起）。
+    try:
+        old, filled = fill_gaps(old, sh_date)
+    except Exception as e:
+        filled = []
+        print("[shares] 缺口回补失败：%s" % e, file=sys.stderr)
+    return 0 if got or filled else 1
 
 
 def status():
