@@ -1,0 +1,7 @@
+# Settings for the secret scan in .github/workflows/check.yml (the "workflow-lint" job).
+# The default rule set stays on and nothing is allowed by rule: a false positive is listed by
+# fingerprint in .gitleaksignore, so a new finding anywhere, docs included, fails the scan.
+title = "report portal apps gitleaks"
+
+[extend]
+useDefault = true

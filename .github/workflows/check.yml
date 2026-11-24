@@ -1,19 +1,102 @@
 name: check
+# A pull request runs the jobs its files need (scripts/ci_changes.py, evaluated by workflow-lint) and
+# skips the slow ones that unit tests already cover: the Status browser suite, the cross-compiled
+# Status artifacts and govulncheck. A push to main and a manual run always run every job, because
+# the release gates (scripts/release-gate.py, scripts/status-publish.py) need a successful main push
+# run of this file in which no job was skipped. Only pushes to main run on a push: a branch with a
+# pull request is checked once, by the pull request.
 on:
   push:
+    branches: [main]
   pull_request:
+  workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  # A newer push to a pull request supersedes the older run. Main and manual runs are never cancelled and never
+  # replaced while queued (a group keeps one pending run and drops the older one), so they are grouped by commit:
+  # the release gates look for the main push run of exactly the commit they release.
+  group: check-${{ github.event_name }}-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   workflow-lint:
+    # Also decides which of the other jobs a pull request needs (the outputs below), so it stays fast. On a pull
+    # request the others start only when this job succeeded: a red lint or secret scan launches nothing else.
+    # Main and manual runs start them whatever this job does, so one failure does not hide the others.
     runs-on: ubuntu-latest
+    outputs:
+      platform: ${{ steps.scope.outputs.platform }}
+      templates: ${{ steps.scope.outputs.templates }}
+      protocol: ${{ steps.scope.outputs.protocol }}
+      proxy: ${{ steps.scope.outputs.proxy }}
+      sd: ${{ steps.scope.outputs.sd }}
+      mm_frontend: ${{ steps.scope.outputs.mm_frontend }}
+      mm_service: ${{ steps.scope.outputs.mm_service }}
+      mm_image: ${{ steps.scope.outputs.mm_image }}
+      mm_pipeline: ${{ steps.scope.outputs.mm_pipeline }}
+      status: ${{ steps.scope.outputs.status }}
+      status_browser: ${{ steps.scope.outputs.status_browser }}
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
         with:
-          go-version-file: apps/status/service/go.mod
-          cache: false
-      - run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+          fetch-depth: 0
+          persist-credentials: false
+      # The files a pull request changes are those of its merge commit against its first parent (the
+      # base branch). Any other event runs everything. A failure here fails the job, so no job is
+      # skipped by a broken detector.
+      - name: Which jobs this change needs
+        id: scope
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" = pull_request ]; then
+            git diff --name-only --no-renames HEAD^1 HEAD | python3 -B scripts/ci_changes.py | tee -a "$GITHUB_OUTPUT"
+          else
+            python3 -B scripts/ci_changes.py --all | tee -a "$GITHUB_OUTPUT"
+          fi
+      # Secret scan of what this change adds, not of the history: a pull request's own commits
+      # (HEAD^1 is the base branch in the merge commit), a push's new commits, or the last 50 commits
+      # of a manual run or of a push whose previous tip is gone (a force push). `git log -p` shows no
+      # diff for a merge commit, so --diff-merges=first-parent makes it show the merge against its
+      # first parent: a line added only by a conflict resolution is scanned like any other. The release binary is pinned and checked against the checksum published
+      # with v8.30.1. .gitleaks.toml keeps the default rules and allows nothing; a known false
+      # positive is listed by fingerprint in .gitleaksignore, so a finding anywhere, docs included,
+      # fails. A finding names the file and line; the secret itself is redacted.
+      - name: Secret scan
+        env:
+          GITLEAKS_VERSION: '8.30.1'
+          GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+          EVENT_NAME: ${{ github.event_name }}
+          PUSH_BEFORE: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+          tool="$RUNNER_TEMP/gitleaks"
+          mkdir "$tool"
+          archive="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          curl -fsSL -o "$tool/$archive" "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/$archive"
+          echo "$GITLEAKS_SHA256  $tool/$archive" | sha256sum -c -
+          tar -xzf "$tool/$archive" -C "$tool" gitleaks
+          case "$EVENT_NAME" in
+            pull_request) range='HEAD^1..HEAD' ;;
+            push) if git cat-file -e "$PUSH_BEFORE^{commit}" 2>/dev/null; then range="$PUSH_BEFORE..HEAD"; else range='-n 50'; fi ;;
+            *) range='-n 50' ;;
+          esac
+          "$tool/gitleaks" git --no-banner --redact=100 --config .gitleaks.toml --log-opts "--diff-merges=first-parent $range" .
+      # The release binary, checked against the checksum published with v1.7.12: cheaper than
+      # compiling it with `go run` on every run, and this job gates every other one.
+      - name: Workflow lint
+        env:
+          ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
+        run: |
+          set -euo pipefail
+          tool="$RUNNER_TEMP/actionlint"
+          mkdir "$tool"
+          archive=actionlint_1.7.12_linux_amd64.tar.gz
+          curl -fsSL -o "$tool/$archive" "https://github.com/rhysd/actionlint/releases/download/v1.7.12/$archive"
+          echo "$ACTIONLINT_SHA256  $tool/$archive" | sha256sum -c -
+          tar -xzf "$tool/$archive" -C "$tool" actionlint
+          "$tool/actionlint"
   licence:
     # The licence gate of the platform policy (Portal doc 167 section 8): the production npm graph of every
     # first-party workspace and the Go modules linked into the status, scheduled-digest and market-monitor services, judged against
@@ -108,6 +191,8 @@ jobs:
             ${{ runner.temp }}/licence-report.json
           retention-days: 30
   frontend-standard:
+    needs: workflow-lint
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || (needs.workflow-lint.result == 'success' && needs.workflow-lint.outputs.platform == 'true')) }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -119,13 +204,17 @@ jobs:
       - run: python3 scripts/plugin-standard.py
       - run: npm run typecheck
       - run: npm run test:sdk
-      # The backend template's Go service is vetted and tested here (no image is built).
+      # The backend template's Go service is vetted and tested here (no image is built). A pull request runs
+      # these when the template, the protocol or proxy module or the shared scripts changed (area templates).
       - uses: actions/setup-go@v5
+        if: ${{ github.event_name != 'pull_request' || needs.workflow-lint.outputs.templates == 'true' }}
         with:
           go-version-file: packages/extensionprotocol/go.mod
           cache: false
       - run: python3 scripts/test-app-template.py
+        if: ${{ github.event_name != 'pull_request' || needs.workflow-lint.outputs.templates == 'true' }}
       - run: python3 scripts/test-app-root-v2.py
+        if: ${{ github.event_name != 'pull_request' || needs.workflow-lint.outputs.templates == 'true' }}
       - run: npm test --workspace=portal-symbols-demo
       - run: npm run test:status-ui
       - run: python3 scripts/build-app-frontend.py demo-symbols
@@ -147,6 +236,8 @@ jobs:
           # Authenticated API calls avoid the shared-runner anonymous rate limit.
           GITHUB_TOKEN: ${{ github.token }}
   protocol:
+    needs: workflow-lint
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || (needs.workflow-lint.result == 'success' && needs.workflow-lint.outputs.protocol == 'true')) }}
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -158,9 +249,14 @@ jobs:
           go-version-file: packages/extensionprotocol/go.mod
           cache: false
       - run: go vet ./...
-      - run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
+      # Main and manual runs only: an advisory published today fails every open pull request whatever it changes.
+      - name: govulncheck
+        if: ${{ github.event_name != 'pull_request' }}
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
       - run: go test -race ./...
   proxy:
+    needs: workflow-lint
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || (needs.workflow-lint.result == 'success' && needs.workflow-lint.outputs.proxy == 'true')) }}
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -174,6 +270,8 @@ jobs:
       - run: go vet ./...
       - run: go test -race ./...
   scheduled-digest:
+    needs: workflow-lint
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || (needs.workflow-lint.result == 'success' && needs.workflow-lint.outputs.sd == 'true')) }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -192,14 +290,17 @@ jobs:
         working-directory: apps/scheduled-digest/service
       - run: go test -race ./...
         working-directory: apps/scheduled-digest/service
-      - run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
+      # Typecheck and the plugin standard of every frontend run once, in frontend-standard.
+      - name: govulncheck
+        if: ${{ github.event_name != 'pull_request' }}
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
         working-directory: apps/scheduled-digest/service
-      - run: npm run typecheck --workspace=apps/scheduled-digest/frontend
       - run: npm test --workspace=apps/scheduled-digest/frontend
-      - run: python3 scripts/plugin-standard.py
       - run: python3 scripts/build-app-v2.py scheduled-digest --output "$RUNNER_TEMP/scheduled-digest-candidate"
       - run: docker build -f apps/scheduled-digest/service/Dockerfile -t scheduled-digest-development .
   market-monitor-frontend:
+    needs: workflow-lint
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || (needs.workflow-lint.result == 'success' && needs.workflow-lint.outputs.mm_frontend == 'true')) }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -210,9 +311,8 @@ jobs:
         with:
           python-version: '3.13'
       - run: npm ci
-      - run: npm run typecheck --workspace=apps/kazuha-hub-market-monitor/frontend
+      # Typecheck and the plugin standard of every frontend run once, in frontend-standard.
       - run: npm test --workspace=apps/kazuha-hub-market-monitor/frontend
-      - run: python3 scripts/plugin-standard.py
       - run: python3 scripts/build-app-v2.py kazuha-hub-market-monitor --output "$RUNNER_TEMP/market-monitor-candidate"
       # The preview harness (frontend/dev) must never reach the package. The
       # bundle is minified, so check the source graph and the zip contents.
@@ -240,6 +340,8 @@ jobs:
           fi
 
   market-monitor:
+    needs: workflow-lint
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || (needs.workflow-lint.result == 'success' && needs.workflow-lint.outputs.mm_service == 'true')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     defaults:
@@ -255,12 +357,19 @@ jobs:
       # registry failure is reported as that, not as a vet or test failure.
       - run: go mod download
       - run: go vet ./...
-      - run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
+      # Main and manual runs only: an advisory published today fails every open pull request whatever it changes.
+      - name: govulncheck
+        if: ${{ github.event_name != 'pull_request' }}
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
       - run: go test -race ./...
+      # The image build and its checks take most of this job. A pull request runs them when something the
+      # image is made of changes (scripts/ci_changes.py, area mm_image); the Go tests above cover the rest.
       - name: Backend image
+        if: ${{ github.event_name != 'pull_request' || needs.workflow-lint.outputs.mm_image == 'true' }}
         run: docker build --platform linux/amd64 -f apps/kazuha-hub-market-monitor/service/Dockerfile -t market-monitor-development .
         working-directory: .
       - name: Image imports and package size
+        if: ${{ github.event_name != 'pull_request' || needs.workflow-lint.outputs.mm_image == 'true' }}
         working-directory: .
         run: |
           # Under the runner's restrictions: imports must not write outside /data.
@@ -306,6 +415,8 @@ jobs:
           echo "compressed image: $((size / 1048576)) MiB (package limit 384 MiB)"
           test "$size" -lt $((350 * 1048576))
   market-monitor-pipeline:
+    needs: workflow-lint
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || (needs.workflow-lint.result == 'success' && needs.workflow-lint.outputs.mm_pipeline == 'true')) }}
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -330,6 +441,8 @@ jobs:
         env:
           MM_REQUIRE_PANDAS: '1'
   status:
+    needs: workflow-lint
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || (needs.workflow-lint.result == 'success' && needs.workflow-lint.outputs.status == 'true')) }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -352,11 +465,17 @@ jobs:
         working-directory: apps/status/service
       - run: go vet ./...
         working-directory: apps/status/service
-      - run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
+      - name: govulncheck
+        if: ${{ github.event_name != 'pull_request' }}
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
         working-directory: apps/status/service
       - run: go test -race ./...
         working-directory: apps/status/service
   status-browser:
+    # The real-Portal browser suite (a released Portal binary and Playwright, ~3.5 min): main, manual, and a pull
+    # request that changes the suite itself. The Status service and frontend unit tests cover the logic on pull requests.
+    needs: workflow-lint
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || (needs.workflow-lint.result == 'success' && needs.workflow-lint.outputs.status_browser == 'true')) }}
     runs-on: ubuntu-latest
     env:
       GOWORK: 'off'
@@ -421,6 +540,8 @@ jobs:
           path: apps/status/tests/test-results/
           retention-days: 7
   status-container:
+    needs: workflow-lint
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || (needs.workflow-lint.result == 'success' && needs.workflow-lint.outputs.status == 'true')) }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -445,6 +566,9 @@ jobs:
           cmp "$context/linux-amd64/status" "$RUNNER_TEMP/prebuilt-status"
       - run: python3 scripts/status-container-smoke.py
   status-artifacts:
+    # Six cross-compiles of the release build: main and manual only. release-status.yml builds the same six
+    # again, and the status job builds and tests the native target on every pull request.
+    if: ${{ github.event_name != 'pull_request' }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false

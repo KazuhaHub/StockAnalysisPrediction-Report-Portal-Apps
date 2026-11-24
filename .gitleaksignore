@@ -1,0 +1,2 @@
+# Known false positives, by fingerprint (commit:file:rule:line); never secret values.
+# The full history is clean, so this starts empty.
