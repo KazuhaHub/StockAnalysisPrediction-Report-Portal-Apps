@@ -171,15 +171,12 @@ for c in _extra:
 import market_data as md
 
 codes = sorted(m["symbol"].tolist())
-bars = md.load(codes, start=START, end=ASOF)
-bars["date"] = pd.to_datetime(bars["date"])
-bars["price"] = bars["close"] / bars["factor"]        # 真实价
-bars = bars[bars["volume"] > 0].copy()
-
+# Wide panels straight from the store: the long table of every code since
+# START, pivoted, got this step OOM-killed in the app's 2 GiB container.
 # Returns, momentum, moving averages and volatility use back-adjusted closes;
 # traded prices are kept only for price levels (valuation, turnover).
-from features import price_panels, trend_features
-px, adj = price_panels(bars)
+from features import store_panels, trend_features
+px, adj, amt = store_panels(md, codes, START, ASOF)
 ret = adj.pct_change()
 
 def last_valid(s):
@@ -189,17 +186,19 @@ feat = dict(trend_features(adj))
 feat["price_loc"] = px.apply(last_valid)
 
 # 换手代理：成交额 / 市值（市值用当期价×股本近似，做相对排序够用）
-to = (bars.assign(turn=bars["amount"] / (bars["price"] * 1.0)))
-turn = to.pivot_table(index="date", columns="code", values="turn", aggfunc="sum")
 # 真实换手需要股本，这里用「成交额/价格」=成交股数，再除以总股本
+turn = amt / px
 sh = m.set_index("symbol")["shares_outstanding"]
 turn_ratio = turn.div(sh.reindex(turn.columns), axis=1)
+del turn
 feat["turnover_20"] = turn_ratio.rolling(20).mean().apply(last_valid)
 feat["turnover_chg"] = (turn_ratio.rolling(20).mean() / turn_ratio.rolling(120).mean()).apply(last_valid)
+del turn_ratio
 
 # 流动性：Amihud
-amih = (ret.abs() / (to.pivot_table(index="date", columns="code", values="amount", aggfunc="sum") / 1e8))
+amih = ret.abs() / (amt / 1e8)
 feat["amihud"] = amih.rolling(60).mean().apply(last_valid)
+del amih, amt
 
 pf = pd.DataFrame(feat)
 pf.index.name = "symbol"
