@@ -1,4 +1,5 @@
 import { type Handler, ok, noData, notFound } from "./harness";
+import quantSummary from "./quant-summary.json";
 
 export const marginRows = Array.from({ length: 45 }, (_, i) => ({
   code: String(600000 + i),
@@ -17,6 +18,7 @@ export const marginRows = Array.from({ length: 45 }, (_, i) => ({
 const histDates = Array.from({ length: 60 }, (_, i) => `d${i}`);
 
 export const summaries: Record<string, unknown> = {
+  quant: quantSummary,
   risk: {
     margin: {
       as_of: "2026-11-16",

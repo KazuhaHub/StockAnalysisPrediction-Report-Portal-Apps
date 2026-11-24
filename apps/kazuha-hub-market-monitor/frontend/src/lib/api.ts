@@ -1,7 +1,13 @@
 import { useCallback } from "react";
 import { useAppBackend } from "@portal-app/sdk/root-v2";
 
-export type ModuleId = "risk" | "margin" | "sentiment" | "etf" | "panorama";
+export type ModuleId =
+  | "risk"
+  | "margin"
+  | "sentiment"
+  | "etf"
+  | "panorama"
+  | "quant";
 
 export type ApiResult<T> =
   | { status: "ok"; data: T }

@@ -4,6 +4,7 @@ import { EtfPage } from "./pages/Etf";
 import { MarginPage } from "./pages/Margin";
 import { OverviewPage } from "./pages/Overview";
 import { PanoramaPage } from "./pages/Panorama";
+import { QuantPage } from "./pages/Quant";
 import { SentimentPage } from "./pages/Sentiment";
 import "./style.css";
 
@@ -21,6 +22,8 @@ export function Application() {
       return <EtfPage />;
     case "/panorama":
       return <PanoramaPage />;
+    case "/quant":
+      return <QuantPage />;
     default:
       return <OverviewPage />;
   }

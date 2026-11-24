@@ -6,7 +6,14 @@
 import { readdirSync, readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 
-export const MODULES = ["risk", "margin", "sentiment", "etf", "panorama"];
+export const MODULES = [
+  "risk",
+  "margin",
+  "sentiment",
+  "etf",
+  "panorama",
+  "quant",
+];
 export const MAX_PAGE_SIZE = 200;
 export const MAX_RESPONSE = 1 << 20;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -172,6 +179,7 @@ const SAMPLE_JOBS = {
   margin: [slot(WEEKDAYS, 9), slot(WEEKDAYS, 9, 50, true)],
   marketdata: [slot(WEEKDAYS, 21), slot(WEEKDAYS, 23, 30, true)],
   panorama: [slot(DAY_AFTER, 0, 50)],
+  quant: [slot(DAY_AFTER, 1), slot(DAY_AFTER, 3, 0, true)],
   sentiment: [slot(DAY_AFTER, 0, 40)],
 };
 

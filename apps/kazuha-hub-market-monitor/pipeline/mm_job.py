@@ -56,8 +56,9 @@ JOBS = {
     "panorama": ("workspace/panorama", ["bash", "daily_update.sh"], "panorama", True),
     "etf": ("workspace/analysis/panel", ["bash", "refresh.sh"], "etf", False),
     "margin": ("margin_scan", ["bash", "update.sh"], "margin", False),
+    "quant": ("quant", ["{py}", "build_quant.py"], "quant", False),
 }
-RISK_INPUTS = ("margin", "sentiment", "etf")
+RISK_INPUTS = ("margin", "sentiment", "etf", "quant")
 
 # History file columns per module (market-monitor.history/1), in file order.
 # Types are explicit: "s" is a string column, "d" a double column. A schema
@@ -85,6 +86,7 @@ OUTPUTS = {
     "sentiment": "workspace/analysis/out/sentiment/monitor.json",
     "etf": "workspace/analysis/panel/data/metrics.json",
     "panorama": "workspace/panorama/data/site_payload.json",
+    "quant": "quant/out/quant.json",
 }
 
 # Jobs run one at a time, so any of these present when a job starts was left
@@ -454,8 +456,14 @@ def convert_panorama(p, site=None):
     return snapshot("panorama", p["meta"]["asof"], summary, rows)
 
 
+def convert_quant(d):
+    """The quant generator's data object is the summary as it is; it has no
+    per-stock rows."""
+    return snapshot("quant", d["asof"], d)
+
+
 CONVERTERS = {"margin": convert_margin, "sentiment": convert_sentiment,
-              "etf": convert_etf, "panorama": convert_panorama}
+              "etf": convert_etf, "panorama": convert_panorama, "quant": convert_quant}
 
 
 def last(values):
@@ -481,6 +489,14 @@ def risk_part(module, doc):
         return {
             "as_of": doc["as_of"], "headline": s.get("headline"), "breadth": dims.get("广度"), "dims": dims,
             "breadth_series": {"dates": traj.get("dates") or [], "values": (traj.get("series") or {}).get("广度") or []},
+        }
+    if module == "quant":
+        step, mstep = s.get("step") or {}, s.get("mstep") or {}
+        return {
+            "as_of": doc["as_of"], "state": s.get("state"), "state_code": s.get("stateCode"),
+            "breadth": s.get("b"), "ndr": s.get("ndr"),
+            "step_pos": step.get("pos"), "step_stage": step.get("stage"), "step_cap": step.get("capr") or None,
+            "micro_state": s.get("mstate"), "micro_code": s.get("mcode"), "micro_pos": mstep.get("pos"),
         }
     series = s.get("series") or {}
     return {

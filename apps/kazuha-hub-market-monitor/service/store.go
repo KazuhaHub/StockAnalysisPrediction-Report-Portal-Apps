@@ -41,7 +41,7 @@ const (
 )
 
 var modules = map[string]bool{
-	"risk": true, "margin": true, "sentiment": true, "etf": true, "panorama": true,
+	"risk": true, "margin": true, "sentiment": true, "etf": true, "panorama": true, "quant": true,
 }
 
 var (

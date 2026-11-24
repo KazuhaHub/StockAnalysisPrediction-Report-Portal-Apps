@@ -48,6 +48,7 @@ func jobSpecs() []JobSpec {
 		spec("panorama", 2*time.Hour),
 		spec("etf", 90*time.Minute),
 		spec("margin", 2*time.Hour),
+		spec("quant", time.Hour),
 	}
 }
 

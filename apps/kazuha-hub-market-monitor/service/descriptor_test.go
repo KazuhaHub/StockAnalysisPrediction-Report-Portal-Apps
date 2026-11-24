@@ -61,7 +61,9 @@ func TestDescriptorDeclaresTheForwardProxy(t *testing.T) {
 		"82.push2delay.eastmoney.com", "qt.gtimg.cn",
 		// margin's bar fallbacks: Tencent, then Sina (stock_zh_a_daily also
 		// reads the share counts from stock.finance.sina.com.cn).
-		"web.ifzq.gtimg.cn", "finance.sina.com.cn", "stock.finance.sina.com.cn"} {
+		"web.ifzq.gtimg.cn", "finance.sina.com.cn", "stock.finance.sina.com.cn",
+		// The Shenzhen ETF share snapshot (ak.fund_etf_scale_szse).
+		"fund.szse.cn"} {
 		if !slices.Contains(hosts, want) {
 			t.Errorf("missing %s", want)
 		}

@@ -54,7 +54,7 @@ code and the hand-curated reference tables (`universe.csv`, `code_name.csv`,
 `div_seed.csv`) are copied from the image on every run; a new installation
 still needs a one-time data seed for the rest (see the README).
 
-Modules: `risk`, `margin`, `sentiment`, `etf`, `panorama`.
+Modules: `risk`, `margin`, `sentiment`, `etf`, `panorama`, `quant`.
 
 ## Snapshot document
 

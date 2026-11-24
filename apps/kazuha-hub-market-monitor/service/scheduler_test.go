@@ -27,7 +27,7 @@ func at(day time.Weekday, hh, mm int) time.Time {
 func schedulerFor(t *testing.T, now *time.Time) (*Scheduler, *Runner) {
 	t.Helper()
 	s, r := emptyStoreSchedulerFor(t, now)
-	for _, module := range []string{"sentiment", "panorama", "etf", "margin"} {
+	for _, module := range []string{"sentiment", "panorama", "etf", "margin", "quant"} {
 		installTest(t, r.store, module, "2026-11-13")
 	}
 	return s, r
@@ -38,7 +38,7 @@ func emptyStoreSchedulerFor(t *testing.T, now *time.Time) (*Scheduler, *Runner) 
 	t.Helper()
 	data := t.TempDir()
 	var specs []JobSpec
-	for _, job := range []string{"marketdata", "sentiment", "panorama", "etf", "margin"} {
+	for _, job := range []string{"marketdata", "sentiment", "panorama", "etf", "margin", "quant"} {
 		specs = append(specs, JobSpec{Name: job, Command: []string{"/bin/true"}, Timeout: time.Minute})
 	}
 	r, err := NewRunner(data, specs, NewStore(data))
@@ -97,7 +97,7 @@ func TestSchedulerCatchesUpTheLastMissedSlotsOnStart(t *testing.T) {
 	now := at(time.Tuesday, 10, 0)
 	s, _ := schedulerFor(t, &now)
 	got := submitted(s.Tick())
-	if got != "marketdata,sentiment,panorama,etf,margin" {
+	if got != "marketdata,sentiment,panorama,quant,etf,margin" {
 		t.Fatalf("catch-up: %q", got)
 	}
 }
@@ -171,6 +171,8 @@ func TestDefaultSlotsMatchThePipelineTimers(t *testing.T) {
 		"marketdata FriMonThuTueWed 21:00",
 		"marketdata FriMonThuTueWed 23:30",
 		"panorama FriSatThuTueWed 00:50",
+		"quant FriSatThuTueWed 01:00",
+		"quant FriSatThuTueWed 03:00",
 		"sentiment FriSatThuTueWed 00:40",
 	}
 	if strings.Join(got, "\n") != strings.Join(want, "\n") {
@@ -234,7 +236,7 @@ func TestCatchUpDoesNotRerunADecidedFallback(t *testing.T) {
 	}
 }
 
-const bootstrapOrder = "marketdata,sentiment,panorama,etf,margin"
+const bootstrapOrder = "marketdata,sentiment,panorama,etf,margin,quant"
 
 func TestBootstrapSubmitsEachJobOfAnEmptyStoreInDependencyOrder(t *testing.T) {
 	// Sunday: no slot is within the catch-up window, so only bootstraps run.
@@ -278,13 +280,21 @@ func TestBootstrapSkipsJobsThatHaveSnapshots(t *testing.T) {
 	s2, r := emptyStoreSchedulerFor(t, &now)
 	installTest(t, r.store, "panorama", "2026-11-13")
 	installTest(t, r.store, "etf", "2026-11-13")
-	if got := submitted(s2.Tick()); got != "marketdata,sentiment,margin" {
+	if got := submitted(s2.Tick()); got != "marketdata,sentiment,margin,quant" {
 		t.Fatalf("partial store: %q", got)
+	}
+	// Only quant missing: quant reads the bar store too.
+	s5, r5 := emptyStoreSchedulerFor(t, &now)
+	for _, m := range []string{"sentiment", "panorama", "etf", "margin"} {
+		installTest(t, r5.store, m, "2026-11-13")
+	}
+	if got := submitted(s5.Tick()); got != "marketdata,quant" {
+		t.Fatalf("quant only: %q", got)
 	}
 	// Only margin missing: margin reads its daily bars from the bar store,
 	// so marketdata goes first.
 	s3, r3 := emptyStoreSchedulerFor(t, &now)
-	for _, m := range []string{"sentiment", "panorama", "etf"} {
+	for _, m := range []string{"sentiment", "panorama", "etf", "quant"} {
 		installTest(t, r3.store, m, "2026-11-13")
 	}
 	if got := submitted(s3.Tick()); got != "marketdata,margin" {
@@ -292,7 +302,7 @@ func TestBootstrapSkipsJobsThatHaveSnapshots(t *testing.T) {
 	}
 	// Only etf missing: etf reads no bars, so no marketdata.
 	s4, r4 := emptyStoreSchedulerFor(t, &now)
-	for _, m := range []string{"sentiment", "panorama", "margin"} {
+	for _, m := range []string{"sentiment", "panorama", "margin", "quant"} {
 		installTest(t, r4.store, m, "2026-11-13")
 	}
 	if got := submitted(s4.Tick()); got != "etf" {
@@ -303,7 +313,7 @@ func TestBootstrapSkipsJobsThatHaveSnapshots(t *testing.T) {
 func TestBootstrapIsNotRepeatedAfterARestartTheSameDay(t *testing.T) {
 	now := at(time.Sunday, 10, 0)
 	s, r := emptyStoreSchedulerFor(t, &now)
-	if got := s.Tick(); len(got) != 5 {
+	if got := s.Tick(); len(got) != 6 {
 		t.Fatalf("first: %s", submitted(got))
 	}
 	// Still queued: nothing to add.
@@ -356,7 +366,7 @@ func TestBootstrapSkipsAJobWithAQueuedOrRunningRun(t *testing.T) {
 			r.update(run.ID, func(run *Run) { run.Status = "running" })
 		}
 	}
-	if got := submitted(s.Tick()); got != "marketdata,sentiment,panorama" {
+	if got := submitted(s.Tick()); got != "marketdata,sentiment,panorama,quant" {
 		t.Fatalf("with etf queued and margin running: %q", got)
 	}
 }
@@ -367,7 +377,7 @@ func TestBootstrapSkipsAJobThatCaughtUpAScheduledRun(t *testing.T) {
 	now := at(time.Tuesday, 10, 0)
 	s, _ := emptyStoreSchedulerFor(t, &now)
 	got := s.Tick()
-	if submitted(got) != bootstrapOrder {
+	if submitted(got) != "marketdata,sentiment,panorama,quant,etf,margin" {
 		t.Fatalf("catch-up only: %q", submitted(got))
 	}
 	for _, run := range got {
@@ -383,7 +393,7 @@ func TestBootstrapSkipsAJobThatCaughtUpAScheduledRun(t *testing.T) {
 	for _, run := range s2.Tick() {
 		ids = append(ids, run.Job+":"+strings.SplitN(run.TaskID, "/", 2)[0])
 	}
-	want := "marketdata:bootstrap,margin:schedule,sentiment:bootstrap,panorama:bootstrap,etf:bootstrap"
+	want := "marketdata:bootstrap,margin:schedule,sentiment:bootstrap,panorama:bootstrap,etf:bootstrap,quant:bootstrap"
 	if strings.Join(ids, ",") != want {
 		t.Fatalf("monday: %v", ids)
 	}
@@ -397,7 +407,7 @@ func TestBootstrapRunsBeforeTheCaughtUpJobsThatReadItsData(t *testing.T) {
 	for _, m := range []string{"sentiment", "etf", "margin"} {
 		installTest(t, r.store, m, "2026-11-13")
 	}
-	if got := submitted(s.Tick()); got != "marketdata,margin,panorama" {
+	if got := submitted(s.Tick()); got != "marketdata,margin,panorama,quant" {
 		t.Fatalf("order: %q", got)
 	}
 }
@@ -422,7 +432,7 @@ func TestBootstrapRetriesWhenTheQueueIsFull(t *testing.T) {
 	now = now.Add(30 * time.Second)
 	// etf is missing from the retry: the filler runs made it "active" when
 	// the bootstrap was decided, and that decision stands.
-	if got := submitted(s.Tick()); got != "marketdata,sentiment,panorama,margin" {
+	if got := submitted(s.Tick()); got != "marketdata,sentiment,panorama,margin,quant" {
 		t.Fatalf("after drain: %q", got)
 	}
 }
@@ -491,7 +501,7 @@ func TestBootstrapRerunsMarketdataAfterAFailedPrimaryAndALostFallback(t *testing
 	s, r := emptyStoreSchedulerFor(t, &now)
 	failedOccurrence(t, r, "marketdata", at(time.Monday, 21, 0))
 	got := s.Tick()
-	if submitted(got) != "marketdata,margin,sentiment,panorama,etf" {
+	if submitted(got) != "marketdata,margin,sentiment,panorama,etf,quant" {
 		t.Fatalf("order: %q", submitted(got))
 	}
 	if got[0].TaskID != "bootstrap/marketdata/2026-11-16" {
@@ -521,7 +531,7 @@ func TestRefusedBootstrapKeepsItsDayAndIsRecheckedBeforeRetry(t *testing.T) {
 	}
 	now = at(time.Sunday, 23, 59).Add(2 * time.Minute) // past midnight
 	got := s.Tick()
-	if submitted(got) != "marketdata,panorama" {
+	if submitted(got) != "marketdata,panorama,quant" {
 		t.Fatalf("retry: %q", submitted(got))
 	}
 	for _, run := range got {

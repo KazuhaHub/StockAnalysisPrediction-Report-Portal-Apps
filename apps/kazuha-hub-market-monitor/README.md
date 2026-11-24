@@ -95,7 +95,7 @@ socket:
 (its `tasks/background` route is not reachable from a networkless container),
 so the service keeps the pipeline's timetable itself, in Beijing time: marketdata Mon–Fri 21:00 with a 23:30 fallback; sentiment
 00:40, panorama 00:50 and ETF 08:00 Tue–Sat; margin Mon–Fri 09:00 with a 09:50
-fallback. A fallback runs only when no run of the job queued earlier that day
+fallback; quant Tue–Sat 01:00 with a 03:00 fallback, after the night's marketdata. A fallback runs only when no run of the job queued earlier that day
 (scheduled or manual) succeeded or is pending. Each occurrence is one run with task ID
 `schedule/<job>/<YYYY-MM-DDTHH:MM>`, so ticks and restarts never repeat it; on
 start, each slot's latest occurrence in the past 20 hours runs once if it never

@@ -34,12 +34,12 @@ import (
 // same day does not repeat it and a failed bootstrap is not resubmitted that
 // day; it is tried again only on the first tick after a process start on a
 // later day. The marketdata job has no output module; it bootstraps when
-// sentiment, panorama or margin, which read the bars it keeps, has no
+// sentiment, panorama, margin or quant, which read the bars it keeps, has no
 // snapshot. On the timetable marketdata (21:00) runs before the next
 // morning's margin (09:00), and the single worker runs a margin queued while
 // marketdata is still running after it.
 // Marketdata is queued first, then the caught-up occurrences, then the other
-// bootstraps in timetable order (sentiment, panorama, etf, margin); the runner
+// bootstraps in timetable order (sentiment, panorama, etf, margin, quant); the runner
 // works the queue one job at a time in that order. A bootstrap the runner
 // could not accept is retried on later ticks under the day it was decided on,
 // after checking again that the snapshot is still missing and no run of the
@@ -75,6 +75,10 @@ func DefaultSlots() []Slot {
 		{Job: "etf", Days: dayAfter, Hour: 8},
 		{Job: "margin", Days: weekdays, Hour: 9},
 		{Job: "margin", Days: weekdays, Hour: 9, Minute: 50, Fallback: true},
+		// After the night's marketdata run (21:00, fallback 23:30), which can
+		// take three hours; the single worker runs it after marketdata anyway.
+		{Job: "quant", Days: dayAfter, Hour: 1},
+		{Job: "quant", Days: dayAfter, Hour: 3, Fallback: true},
 	}
 }
 
@@ -87,10 +91,11 @@ var bootstrapJobs = []struct{ job, module string }{
 	{"panorama", "panorama"},
 	{"etf", "etf"},
 	{"margin", "margin"},
+	{"quant", "quant"},
 }
 
 // barConsumers are the modules whose jobs read what marketdata produces.
-var barConsumers = []string{"sentiment", "panorama", "margin"}
+var barConsumers = []string{"sentiment", "panorama", "margin", "quant"}
 
 type pendingBoot struct{ job, day string }
 
