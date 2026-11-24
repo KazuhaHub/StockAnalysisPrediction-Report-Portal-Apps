@@ -5,6 +5,7 @@ import { Panel, Panels } from "../components/Panels";
 import { Dashboard, ROUTES } from "../components/Dashboard";
 import { EChart } from "../components/EChart";
 import { KpiRow, type KpiItem } from "../components/Kpi";
+import { shown } from "../lib/status";
 import { useVisual } from "../components/useVisual";
 import { useCopy } from "../lib/copy";
 import { TAG_COLOR, tagText } from "../lib/quant";
@@ -116,24 +117,23 @@ function OverviewBody({ r, asOf }: { r: RiskSummary; asOf: string }) {
       spark: { data: arr(s?.breadth_series?.values), color: v.primary },
       tag:
         isNum(s?.breadth) && s.breadth < 20
-          ? { text: copy.ov_cold, color: "error" }
+          ? { text: copy.ov_cold, color: "processing" }
           : undefined,
     },
     {
       key: "etf",
       title: copy.ov_etf20,
-      value: formatYi(e?.current?.last20, locale),
+      // A net flow: signed, red inflow, green outflow.
+      value:
+        (isNum(e?.current?.last20) && e.current.last20 > 0 ? "+" : "") +
+        formatYi(e?.current?.last20, locale),
+      color: v.sign(shown(e?.current?.last20, 0)),
       note: `${copy.nav_etf} · ${copy.ov_etfNote}`,
       spark: { data: nf20, color: v.orange },
       tag: e?.health?.label
         ? {
             text: e.health.label,
-            color:
-              e.health.light === "red"
-                ? "error"
-                : e.health.light === "green"
-                  ? "success"
-                  : "warning",
+            color: v.statusTag[e.health.light ?? ""] ?? "default",
           }
         : undefined,
     },
@@ -171,15 +171,26 @@ function OverviewBody({ r, asOf }: { r: RiskSummary; asOf: string }) {
           name: copy.ov_etf20,
           type: "bar",
           yAxisIndex: 1,
-          data: dates.map((d) => flow.get(d) ?? null),
-          itemStyle: { color: v.orange, opacity: 0.5 },
+          // Net flows: red inflow, green outflow; secondary (right axis), so light.
+          data: dates.map((d) => {
+            const x = flow.get(d) ?? null;
+            return {
+              value: x,
+              itemStyle: {
+                color: isNum(x) && x < 0 ? v.down : v.up,
+                opacity: 0.45,
+              },
+            };
+          }),
+          itemStyle: { color: v.series[4], opacity: 0.45 },
         },
         {
           name: copy.ov_breadth,
           type: "line",
           showSymbol: false,
           data: arr(s?.breadth_series?.values),
-          lineStyle: { width: 2 },
+          lineStyle: { width: 2, color: v.primary },
+          itemStyle: { color: v.primary },
         },
       ],
     };
@@ -255,7 +266,7 @@ function OverviewBody({ r, asOf }: { r: RiskSummary; asOf: string }) {
         {
           type: "bar",
           data: mech.map(([, n]) => (isNum(n) ? n : null)),
-          itemStyle: { color: v.danger, opacity: 0.7 },
+          itemStyle: { color: v.primary, opacity: 0.8 },
           label: { show: true, position: "right" },
         },
       ],

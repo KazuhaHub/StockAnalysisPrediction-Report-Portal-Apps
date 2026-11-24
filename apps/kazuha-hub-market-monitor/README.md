@@ -13,6 +13,11 @@ digest is a placeholder in the source, replaced when the
 
 ## `frontend/` — dashboards
 
+Charts and signed numbers follow the A-share terminal colour conventions in
+[docs/charts.md](docs/charts.md) (red up, green down; series never red or
+green; terminal moving-average colours). New charts take their colours from
+`useVisual` and `Signed`, never hard-coded.
+
 React + Ant Design on `@portal-app/sdk/root-v2`, charts with ECharts (only
 the chart types used are bundled). Every page reads the backend through
 `useAppBackend`: summary for the dashboard, server-paged rows for the margin,

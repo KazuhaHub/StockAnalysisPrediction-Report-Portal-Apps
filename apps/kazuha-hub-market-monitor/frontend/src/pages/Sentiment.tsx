@@ -4,6 +4,8 @@ import { Panel, Panels } from "../components/Panels";
 import { Dashboard } from "../components/Dashboard";
 import { EChart } from "../components/EChart";
 import { KpiRow, type KpiItem } from "../components/Kpi";
+import { sx } from "../lib/quant";
+import { rich } from "../components/Rich";
 import { useVisual } from "../components/useVisual";
 import { useCopy } from "../lib/copy";
 import { arr, fill, fmt, isNum, signed, DASH, type Num } from "../lib/format";
@@ -67,9 +69,10 @@ export function heatRange(
 const alertType = (level?: string) =>
   (
     ({
-      red: "error",
+      // Alert levels are statuses: never the red/green of up and down.
+      red: "warning",
       amber: "warning",
-      green: "success",
+      green: "info",
       gray: "info",
     }) as const
   )[level as "red"] ?? "info";
@@ -170,19 +173,22 @@ function SentimentBody({ s }: { s: SentimentSummary }) {
           name: copy.sent_histPath,
           type: "line",
           showSymbol: false,
+          // The historical median is the benchmark: gray, dashed.
           data: arr(sig?.path),
-          lineStyle: { type: "dashed" },
+          lineStyle: { type: "dashed", color: v.series[4] },
+          itemStyle: { color: v.series[4] },
         },
         {
           name: copy.sent_curPath,
           type: "line",
           showSymbol: false,
           data: arr(sig?.cur_path),
-          lineStyle: { width: 3 },
+          lineStyle: { width: 3, color: v.primary },
+          itemStyle: { color: v.primary },
         },
       ],
     };
-  }, [sig, copy]);
+  }, [sig, copy, v]);
 
   const kpis: KpiItem[] = [
     {
@@ -222,7 +228,7 @@ function SentimentBody({ s }: { s: SentimentSummary }) {
     isNum(value) && value < 20
       ? v.primary
       : isNum(value) && value > 80
-        ? v.danger
+        ? v.orange
         : v.text;
 
   return (
@@ -275,11 +281,15 @@ function SentimentBody({ s }: { s: SentimentSummary }) {
           extra={
             sig && (
               <span className="mm-muted">
-                {fill(copy.sent_processNote, {
-                  n: sig.hist_n ?? DASH,
-                  med: signed(sig.hist_med20, 2),
-                  win: fmt(sig.hist_win20, 0),
-                })}
+                {rich(
+                  fill(copy.sent_processNote, {
+                    n: sig.hist_n ?? DASH,
+                    med: sx(
+                      isNum(sig.hist_med20) ? +sig.hist_med20.toFixed(2) : null,
+                    ),
+                    win: fmt(sig.hist_win20, 0),
+                  }),
+                )}
               </span>
             )
           }
@@ -295,7 +305,14 @@ function SentimentBody({ s }: { s: SentimentSummary }) {
           {arr(s.alerts).map((a, i) => (
             <Alert
               key={i}
-              style={{ marginBottom: 8 }}
+              // The most severe level keeps its weight with a strong-orange
+              // border: a status, so not red (docs/charts.md).
+              style={{
+                marginBottom: 8,
+                ...(a.level === "red"
+                  ? { borderColor: v.alert, borderWidth: 2 }
+                  : {}),
+              }}
               type={alertType(a.level)}
               title={a.title}
               description={stripTags(a.body)}
@@ -332,7 +349,7 @@ function SentimentBody({ s }: { s: SentimentSummary }) {
                     size="small"
                     format={() => fmt(x, 0)}
                     strokeColor={
-                      isNum(x) && (x > 85 || x < 15) ? v.danger : undefined
+                      isNum(x) && (x > 85 || x < 15) ? v.alert : undefined
                     }
                   />
                 ),

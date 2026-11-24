@@ -162,9 +162,10 @@ test("the fragility column is a progress bar coloured by tone", async () => {
     (
       bar(name).querySelector(".ant-progress-track") as HTMLElement
     ).style.getPropertyValue("--progress-line-stroke-color");
-  expect(color("Frag95")).toBe("#ff4d4f");
-  expect(color("Frag80")).toBe("#faad14");
-  expect(["#ff4d4f", "#faad14"]).not.toContain(color("Frag50"));
+  // Fragility is a status, not a sign: strong orange and amber, never red.
+  expect(color("Frag95")).toBe("#d46b08");
+  expect(color("Frag80")).toBe("#d48806");
+  expect(["#d46b08", "#d48806"]).not.toContain(color("Frag50"));
   // A full bar is the worst value, not a success: it keeps its number and gets no success styling.
   // A score out of 100, not a percentage.
   expect(bar("Frag100").textContent).toBe("100");

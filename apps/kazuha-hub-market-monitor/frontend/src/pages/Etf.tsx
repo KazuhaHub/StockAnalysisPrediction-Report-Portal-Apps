@@ -16,6 +16,8 @@ import { Dashboard } from "../components/Dashboard";
 import { EChart } from "../components/EChart";
 import { KpiRow, type KpiItem } from "../components/Kpi";
 import { RowTable } from "../components/RowTable";
+import { Signed } from "../components/Signed";
+import { shown } from "../lib/status";
 import { useVisual } from "../components/useVisual";
 import { useCopy, type Copy } from "../lib/copy";
 import { useRowValues } from "../lib/hooks";
@@ -106,12 +108,7 @@ function EtfBody({
     const extra = rowCats.filter((x) => !known.includes(x)).sort();
     return [...known, ...extra].map((x) => ({ value: x, label: x }));
   }, [e.broad?.cats, rowCats]);
-  const lightColor = (
-    { red: v.danger, amber: v.warning, green: v.success } as Record<
-      string,
-      string
-    >
-  )[e.health?.light ?? ""];
+  const lightColor = v.status[e.health?.light ?? ""];
 
   const flowOption = useMemo(() => {
     const dates = arr(s.dates);
@@ -185,21 +182,26 @@ function EtfBody({
                   }
                 : { value: x, itemStyle: { color } };
             }),
+          // Bars are red or green by sign; the legend swatch is neutral.
+          itemStyle: { color: v.series[4] },
         },
         {
           name: copy.etf_ma20,
           type: "line",
           showSymbol: false,
           data: arr(s.nf_ma20).slice(a),
-          lineStyle: { type: "dashed", color: v.orange },
+          lineStyle: { width: 1, color: v.ma[20] },
+          itemStyle: { color: v.ma[20] },
         },
         {
           name: copy.etf_index,
           type: "line",
           yAxisIndex: 1,
           showSymbol: false,
+          // The index is the reference line: gray, on the right axis.
           data: arr(s.idx).slice(a),
-          lineStyle: { color: v.primary },
+          lineStyle: { width: 1.5, color: v.series[4] },
+          itemStyle: { color: v.series[4] },
         },
       ],
     };
@@ -233,17 +235,38 @@ function EtfBody({
       xAxis: { type: "value", name: copy.unit_yi },
       yAxis: { type: "category", data: catRows.map((x) => x.name).reverse() },
       series: [
+        // Both are net flows: each bar is red for inflow, green for outflow.
+        // The two windows differ by fill: last 20 days solid, year to date a
+        // lighter fill with an outline (the legend shows the fill, in gray).
         {
           name: copy.etf_last20,
           type: "bar",
-          data: catRows.map((x) => x.cum20).reverse(),
-          itemStyle: { color: v.danger },
+          data: catRows
+            .map((x) => ({
+              value: x.cum20,
+              itemStyle: { color: x.cum20 < 0 ? v.down : v.up },
+            }))
+            .reverse(),
+          itemStyle: { color: v.series[4] },
         },
         {
           name: copy.etf_ytd,
           type: "bar",
-          data: catRows.map((x) => x.ytd).reverse(),
-          itemStyle: { color: v.primary, opacity: 0.6 },
+          data: catRows
+            .map((x) => {
+              const c = x.ytd < 0 ? v.down : v.up;
+              return {
+                value: x.ytd,
+                itemStyle: {
+                  color: c,
+                  opacity: 0.35,
+                  borderColor: c,
+                  borderWidth: 1,
+                },
+              };
+            })
+            .reverse(),
+          itemStyle: { color: v.series[4], opacity: 0.35 },
         },
       ],
     }),
@@ -258,38 +281,39 @@ function EtfBody({
         ? {
             // Not one day's flow: say how many trading days it covers.
             value: `${signed(c.last_merged, 1)} ${copy.unit_yi}`,
+            color: v.sign(shown(c.last_merged, 1)),
             note: fill(copy.etf_merged, { n: c.last_span }),
           }
         : {
             value: isNum(c.last_nf)
               ? `${signed(c.last_nf, 1)} ${copy.unit_yi}`
               : DASH,
-            color: isNum(c.last_nf)
-              ? c.last_nf >= 0
-                ? v.up
-                : v.down
-              : undefined,
+            color: v.sign(shown(c.last_nf, 1)),
           }),
     },
     {
       key: "5",
       title: copy.etf_last5,
       value: isNum(c.last5) ? `${signed(c.last5, 0)} ${copy.unit_yi}` : DASH,
+      color: v.sign(shown(c.last5, 0)),
     },
     {
       key: "20",
       title: copy.etf_last20,
       value: isNum(c.last20) ? `${signed(c.last20, 0)} ${copy.unit_yi}` : DASH,
+      color: v.sign(shown(c.last20, 0)),
     },
     {
       key: "y",
       title: copy.etf_ytd,
       value: isNum(c.ytd) ? `${signed(c.ytd, 0)} ${copy.unit_yi}` : DASH,
+      color: v.sign(shown(c.ytd, 0)),
     },
     {
       key: "i",
       title: copy.etf_idx20,
       value: isNum(c.idx_20d) ? `${signed(c.idx_20d, 2)}%` : DASH,
+      color: v.sign(shown(c.idx_20d, 2)),
     },
     {
       key: "h",
@@ -324,19 +348,13 @@ function EtfBody({
     sorted(
       `${copy.etf_last20} (${copy.unit_yi})`,
       "cum20",
-      (x) => (
-        <span
-          style={{ color: isNum(x) ? (x >= 0 ? v.up : v.down) : undefined }}
-        >
-          {signed(x, 1)}
-        </span>
-      ),
+      (x) => <Signed value={x} digits={1} />,
       130,
     ),
     sorted(
       `${copy.etf_ytd} (${copy.unit_yi})`,
       "cum_ytd",
-      (x) => signed(x, 1),
+      (x) => <Signed value={x} digits={1} />,
       130,
     ),
   ];
@@ -396,10 +414,11 @@ function EtfBody({
               </div>
               <Tag
                 color={
+                  // A signed reading: positive red, negative green.
                   isNum(item.s) && item.s < 0
-                    ? "error"
+                    ? "success"
                     : isNum(item.s) && item.s > 0
-                      ? "success"
+                      ? "error"
                       : "default"
                 }
               >

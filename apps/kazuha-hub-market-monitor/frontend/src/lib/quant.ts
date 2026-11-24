@@ -174,17 +174,25 @@ export type QuantSummary = {
 export function sg(v: Num): string {
   return isNum(v) ? (v > 0 ? "+" : "") + String(v) : DASH;
 }
+/** A signed number as rich-text markup (components/Rich.tsx): red with "+"
+ * above zero, green below, plain at zero, the dash when missing. */
+export function sx(v: Num): string {
+  if (!isNum(v)) return DASH;
+  if (v === 0) return String(v);
+  return v > 0 ? `[[up:+${v}]]` : `[[down:${v}]]`;
+}
 /** Plain number as written, or the dash. */
 export function nv(v: Num): string {
   return isNum(v) ? String(v) : DASH;
 }
 
 /** antd Tag colour of a state code: ok / warn / cold / bad / neutral. */
+// State tags are statuses, not signs: never red or green (docs/charts.md).
 export const TAG_COLOR: Record<string, string> = {
-  cold: "processing",
-  bad: "error",
+  cold: "cyan",
+  bad: "purple",
   warn: "warning",
-  ok: "success",
+  ok: "processing",
   neutral: "default",
 };
 
@@ -195,12 +203,16 @@ export function tagText(copy: Copy, code: string): string {
 }
 
 /** The sub-state of a state label, by the Chinese words the pipeline writes. */
-export type Tone = "info" | "danger" | "warning" | "success";
+export type Tone = "info" | "danger" | "warning" | "success" | "neutral";
+/** One tone per state, shared by the chart bands, the table text and the
+ * state tags (TAG_COLOR by code): 出清 cyan, 确认/修复 blue, 熊市/下跌 purple,
+ * 警戒/过热 amber, 常规 gray (docs/charts.md). */
 export function stateTone(state: string): Tone {
-  if (state.includes("出清") || state.includes("确认区")) return "info";
+  if (state.includes("出清")) return "info";
   if (state.includes("熊市") || state.includes("下跌")) return "danger";
   if (state.includes("警戒") || state.includes("过热")) return "warning";
-  return "success";
+  if (state.includes("确认") || state.includes("修复")) return "success";
+  return "neutral";
 }
 
 const FSM_PREFIXES = [
@@ -302,11 +314,22 @@ type TipParam = {
 const dot = (color: unknown, glyph: string) =>
   `<span style="color:${escapeHtml(color)}">${glyph}</span>`;
 
+/** How a signal marker looks, so the tooltip draws the same ▲/▼ in the
+ * signal's colour (a hollow marker's fill is the surface colour). */
+export type MarkOf = (
+  name: string,
+) => { color: string; glyph: string } | undefined;
+const fired = (copy: Copy, p: TipParam, markOf?: MarkOf) => {
+  const m = markOf?.(p.seriesName);
+  return `${dot(m?.color ?? p.color, m?.glyph ?? "◆")} ${escapeHtml(fill(copy.q_tipFired, { name: p.seriesName }))}`;
+};
+
 /** Tooltip of the main chart: the day's state block from `dayinfo`, then the series. */
 export function mainTooltip(
   copy: Copy,
   dayinfo: QuantSummary["dayinfo"],
   params: TipParam[],
+  markOf?: MarkOf,
 ): string {
   if (!params.length) return "";
   const head = `<b>${escapeHtml(params[0].axisValue)}</b>`;
@@ -330,10 +353,9 @@ export function mainTooltip(
   const rows = params.map((p) => {
     if (p.seriesName === copy.q_sSwitch) {
       const st = Array.isArray(p.value) ? p.value[2] : "";
-      return `${dot(p.color, "▲")} ${escapeHtml(fill(copy.q_tipSwitch, { st: String(st) }))}`;
+      return `${dot(p.color, "│")} ${escapeHtml(fill(copy.q_tipSwitch, { st: String(st) }))}`;
     }
-    if (p.seriesType === "scatter")
-      return `${dot(p.color, "◆")} ${escapeHtml(fill(copy.q_tipFired, { name: p.seriesName }))}`;
+    if (p.seriesType === "scatter") return fired(copy, p, markOf);
     return `${dot(p.color, "●")} ${escapeHtml(p.seriesName)}: ${p.value == null ? DASH : escapeHtml(p.value)}`;
   });
   return head + info + rows.join("<br/>");
@@ -344,13 +366,14 @@ export function seriesTooltip(
   copy: Copy,
   params: TipParam[],
   percent: string[],
+  markOf?: MarkOf,
 ): string {
   if (!params.length) return "";
   const rows = params
     .filter((p) => p.seriesType === "scatter" || p.value != null)
     .map((p) =>
       p.seriesType === "scatter"
-        ? `${dot(p.color, "◆")} ${escapeHtml(fill(copy.q_tipFired, { name: p.seriesName }))}`
+        ? fired(copy, p, markOf)
         : `${dot(p.color, "●")} ${escapeHtml(p.seriesName)}: ${escapeHtml(p.value)}${
             percent.includes(p.seriesName) ? "%" : ""
           }`,
