@@ -1,0 +1,12 @@
+{
+  "app_id": "kazuha-hub-market-monitor",
+  "version": "0.1.0-beta.9",
+  "commit": "3f00f496e7b952da38e967bd5b15969b1019537f",
+  "run_url": "https://github.com/KazuhaHub/StockAnalysisPrediction-Report-Portal-Apps/actions/runs/45349723265",
+  "package_oci": {
+    "repository": "ghcr.io/kazuhahub/portal-apps/kazuha-hub-market-monitor",
+    "digest": "sha256:c6805bee089aaae4a9c40242d9b04ab30d6155e2b37ce83aac7e80f05635a75c"
+  },
+  "package_sha256": "8ea31401bee862a2829e8c2c0c42e09d7aeb21280436315e2b52db49655bd36b",
+  "notes": "Every page uses one panel layout: short panels pair up at equal height, long tables such as the per-ETF detail run full width at the bottom. Run now asks next to its button on the admin page."
+}
