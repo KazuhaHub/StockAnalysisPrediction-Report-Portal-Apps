@@ -37,8 +37,11 @@ def _from_market_data(upto=None):
 
 def _from_data_server(upto=None):
     m = mcpc.MCP(mcpc.SERVER_URL).init()
+    # previous_day is strictly before its date; ask for the day after so the
+    # answer includes upto, like the store's calendar.
+    day = date.fromisoformat(upto) if upto else date.today()
     r = m.call("query_trading_calendar", {"action": "previous_day",
-                                         "date": upto or date.today().isoformat()})
+                                         "date": (day + timedelta(days=1)).isoformat()})
     for k in ("previous_trading_day", "date", "trade_date", "previous_day", "prev_date"):
         v = r.get(k)
         if v:
@@ -54,7 +57,8 @@ def _from_data_server(upto=None):
 def expected_asof(asof, today=None):
     """ASOF 应该等于的交易日：今天（含）之前最近的交易日；但今天本身是交易日、
     而库里还没有今天的 K 线时（收盘前、或当晚 marketdata 还没跑），上一个交易日
-    也算新鲜。定时任务在次日凌晨跑，那时「今天」已经换了，这条放宽碰不到它。"""
+    也算新鲜。定时任务在次日 00:50 跑（周二到周六），那时「今天」本身是交易日
+    而它的 K 线当然还没有，靠的正是这条放宽：不能删。"""
     today = today or date.today()
     cur = last_trading_day(today.isoformat())
     if asof == cur or cur != today.isoformat():
