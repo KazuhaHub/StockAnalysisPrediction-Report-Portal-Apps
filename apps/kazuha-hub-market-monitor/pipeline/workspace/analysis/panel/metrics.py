@@ -71,14 +71,17 @@ def load():
 
 
 def sse_daily(sse_flow):
-    """沪市宽基逐日合计与该日的跨度。一天里多数基金的变化都跨了多个交易日
-    （那几天整体缺份额）时，这天的合计是合并值，span 取这些基金的最大跨度；
-    个别基金某天没出现在交易所名单里（停牌等）不会让整天变成合并值。"""
+    """沪市宽基逐日合计与该日的跨度。一天的流入金额里多半来自跨了多个交易日
+    的变化（那几天整体缺份额）时，这天的合计是合并值，span 取这些基金的最大
+    跨度；按金额而不是只数算，一只大基金缺一天也会让这天成为合并值，而一只
+    小基金某天没出现在交易所名单里（停牌等）不会。"""
     if "span" not in sse_flow.columns:          # 旧版 flow.parquet：全当单日
         sse_flow = sse_flow.assign(span=1)
     g = sse_flow.groupby("date")
     multi = sse_flow["span"] > 1
-    share = multi.groupby(sse_flow["date"]).mean()
+    weight = sse_flow["flow"].abs()
+    share = (weight.where(multi, 0).groupby(sse_flow["date"]).sum()
+             / weight.groupby(sse_flow["date"]).sum().replace(0, np.nan)).fillna(multi.groupby(sse_flow["date"]).mean())
     widest = sse_flow["span"].where(multi).groupby(sse_flow["date"]).max()
     span = widest.where(share > 0.5, 1).fillna(1).astype(int)
     return g["flow"].sum(), span

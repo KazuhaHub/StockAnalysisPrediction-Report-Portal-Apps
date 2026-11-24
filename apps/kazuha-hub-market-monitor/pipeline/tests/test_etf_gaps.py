@@ -147,6 +147,9 @@ class DailyTotal(unittest.TestCase):
         self.assertEqual(span[d], 1)
         f["span"] = [5, 5, 5, 1]
         self.assertEqual(metrics.sse_daily(f)[1][d], 5)
+        # Weighed by money: one heavyweight's multi-day change merges the day.
+        f["span"], f["flow"] = [1, 1, 1, 4], [1.0, 1.0, 1.0, 500.0]
+        self.assertEqual(metrics.sse_daily(f)[1][d], 4)
 
 
 @unittest.skipIf(pd is None, "pandas not installed")
