@@ -20,7 +20,9 @@ export function Signed({
 }) {
   const v = useVisual();
   if (!isNum(value)) return <>{DASH}</>;
-  const x = value * scale;
+  // Sign and colour follow the shown (rounded) value: 0.04 at one digit is
+  // a plain "0.0".
+  const x = Number((value * scale).toFixed(digits));
   return (
     <span style={{ color: v.sign(x) }}>{`${signed(x, digits)}${suffix}`}</span>
   );

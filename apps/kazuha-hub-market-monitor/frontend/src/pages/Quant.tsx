@@ -29,6 +29,7 @@ import {
   rebase,
   seriesTooltip,
   sg,
+  sx,
   stateTone,
   tagText,
   type HistRow,
@@ -135,14 +136,14 @@ function statLine(
   yh: QuantStat,
 ) {
   return fill(copy[key], {
-    a: nv(all.cagr),
-    add: nv(all.dd),
+    a: sx(all.cagr),
+    add: sx(all.dd),
     ac: nv(all.calmar),
-    h: nv(hold.cagr),
-    hdd: nv(hold.dd),
+    h: sx(hold.cagr),
+    hdd: sx(hold.dd),
     hc: nv(hold.calmar),
-    y: nv(y.ret),
-    yh: nv(yh.ret),
+    y: sx(y.ret),
+    yh: sx(yh.ret),
   });
 }
 
@@ -329,17 +330,16 @@ function QuantBody({ d }: { d: QuantSummary }) {
     n: mon.hist.length,
     total: nv(mon.tdN),
   });
-  const toneColor = (state: string) => {
-    const t = stateTone(state);
-    // State text is a status: never red or green (docs/charts.md).
-    return t === "info"
-      ? v.cyan
-      : t === "danger"
-        ? v.purple
-        : t === "warning"
-          ? v.orange
-          : v.primary;
-  };
+  // Statuses, never red or green (docs/charts.md); the chart bands and the
+  // state tags use the same tones.
+  const toneColor = (state: string) =>
+    ({
+      info: v.cyan,
+      danger: v.purple,
+      warning: v.orange,
+      success: v.primary,
+      neutral: v.textMuted,
+    })[stateTone(state)];
 
   // ---- daily state table ----
   const rowsAsc = useMemo(
@@ -460,37 +460,33 @@ function QuantBody({ d }: { d: QuantSummary }) {
     rot: number;
     hollow: boolean;
     tag: string;
+    size: number;
   };
   const BULL = { color: v.up, symbol: "triangle", rot: 0, hollow: false };
   // A drawn ▼, not a rotated triangle: the legend ignores symbol rotation and
   // would show a bearish signal as ▲.
   const BEAR = { color: v.down, symbol: "path://M0,0 L10,0 L5,9 Z", rot: 0 };
   const SIG_STYLE: Record<string, SigStyle> = {
-    "M1 过热": { ...BEAR, hollow: true, tag: "M1" },
-    "M2 背离": { ...BEAR, hollow: true, tag: "M2" },
-    "M3 破位": { ...BEAR, hollow: false, tag: "M3" },
-    "M4 二波失败": { ...BEAR, hollow: false, tag: "M4" },
-    "V 底部确认": { ...BULL, tag: "V" },
-    微盘过热: { ...BEAR, hollow: true, tag: copy.q_tagOver },
-    资金退潮: { ...BEAR, hollow: false, tag: copy.q_tagOut },
+    "M1 过热": { ...BEAR, hollow: true, tag: "M1", size: 14 },
+    "M2 背离": { ...BEAR, hollow: true, tag: "M2", size: 9 },
+    "M3 破位": { ...BEAR, hollow: false, tag: "M3", size: 11 },
+    "M4 二波失败": { ...BEAR, hollow: false, tag: "M4", size: 15 },
+    "V 底部确认": { ...BULL, tag: "V", size: 13 },
+    微盘过热: { ...BEAR, hollow: true, tag: copy.q_tagOver, size: 13 },
+    资金退潮: { ...BEAR, hollow: false, tag: copy.q_tagOut, size: 12 },
+  };
+  const markOf = (name: string) => {
+    const st = SIG_STYLE[name];
+    return st
+      ? { color: st.color, glyph: st.color === v.down ? "▼" : "▲" }
+      : undefined;
   };
   const SIG_COLOR: Record<string, string> = Object.fromEntries(
     Object.entries(SIG_STYLE).map(([k, x]) => [k, x.color]),
   );
   const sigColor = (name: string, fallback: string) =>
     SIG_COLOR[name] ?? fallback;
-  const stateColor = (st: string) =>
-    (
-      ({
-        熊市确认: v.purple,
-        下跌中: v.purple,
-        顶部警戒: v.orange,
-        过热: v.orange,
-        出清区: v.series[6],
-        确认区: v.series[6],
-        修复中: v.cyan,
-      }) as Record<string, string>
-    )[st] ?? v.textMuted;
+  const stateColor = toneColor;
   const scatterOf = (list: SignalSeries[], yAxisIndex?: number) =>
     arr(list).map((s) => {
       const st = SIG_STYLE[s.name];
@@ -502,8 +498,10 @@ function QuantBody({ d }: { d: QuantSummary }) {
         data: s.pts,
         symbol: st?.symbol ?? s.sym,
         symbolRotate: st?.rot ?? s.rot,
-        symbolSize: 12,
+        // Sizes differ so two signals on one day stay visible (M2 nests in M1).
+        symbolSize: st?.size ?? 12,
         z: 12,
+        labelLayout: { hideOverlap: true },
         itemStyle: st?.hollow
           ? { color: v.surface, borderColor: color, borderWidth: 2 }
           : { color, borderColor: v.surface, borderWidth: 1 },
@@ -531,6 +529,7 @@ function QuantBody({ d }: { d: QuantSummary }) {
             copy,
             d.dayinfo,
             Array.isArray(params) ? params : [params],
+            markOf,
           ),
       },
       legend,
@@ -707,9 +706,12 @@ function QuantBody({ d }: { d: QuantSummary }) {
     tooltip: {
       trigger: "axis",
       formatter: (params: Parameters<typeof seriesTooltip>[1]) =>
-        seriesTooltip(copy, Array.isArray(params) ? params : [params], [
-          copy.q_sPos,
-        ]),
+        seriesTooltip(
+          copy,
+          Array.isArray(params) ? params : [params],
+          [copy.q_sPos],
+          markOf,
+        ),
     },
     legend,
     xAxis: xAxis(dates, true),
@@ -767,7 +769,12 @@ function QuantBody({ d }: { d: QuantSummary }) {
       tooltip: {
         trigger: "axis",
         formatter: (params: Parameters<typeof seriesTooltip>[1]) =>
-          seriesTooltip(copy, Array.isArray(params) ? params : [params], []),
+          seriesTooltip(
+            copy,
+            Array.isArray(params) ? params : [params],
+            [],
+            markOf,
+          ),
       },
       legend,
       xAxis: xAxis(d.dmw),
@@ -821,9 +828,12 @@ function QuantBody({ d }: { d: QuantSummary }) {
       tooltip: {
         trigger: "axis",
         formatter: (params: Parameters<typeof seriesTooltip>[1]) =>
-          seriesTooltip(copy, Array.isArray(params) ? params : [params], [
-            copy.q_sMshare,
-          ]),
+          seriesTooltip(
+            copy,
+            Array.isArray(params) ? params : [params],
+            [copy.q_sMshare],
+            markOf,
+          ),
       },
       legend,
       xAxis: xAxis(d.dmw, true),
@@ -886,9 +896,9 @@ function QuantBody({ d }: { d: QuantSummary }) {
     ? fill(copy.q_stCapped, { why: capWhy, pos: S.pos })
     : fill(copyText(copy, `q_stNext${Math.min(Math.max(S.stage, 0), 3)}`), {
         bq: nv(S.bq),
-        rep: sg(S.rep),
+        rep: sx(S.rep),
         band: S.band,
-        px60: sg(S.px60),
+        px60: sx(S.px60),
         hold: nv(S.holdN),
       });
   const stepNote = fill(copy.q_stNow, {
@@ -922,10 +932,10 @@ function QuantBody({ d }: { d: QuantSummary }) {
     : copy.q_deepNot;
   const msigNote = fill(copy.q_msigNote, {
     n: nv(ds.n),
-    med60: sg(ds.med60),
+    med60: sx(ds.med60),
     win60: nv(ds.win60),
     n60: nv(ds.n60),
-    med120: sg(ds.med120),
+    med120: sx(ds.med120),
     win120: nv(ds.win120),
     start: ds.lastStart ?? DASH,
     len: nv(ds.lastLen),
@@ -1003,49 +1013,49 @@ function QuantBody({ d }: { d: QuantSummary }) {
     delisted: nv(d.delisted?.used),
     spV: fill(copy.q_spV, {
       n: nv(vs.all.n),
-      med: sg(vs.all.med),
+      med: sx(vs.all.med),
       win: nv(vs.all.win),
       on: nv(vs.out.n),
       ow: nv(vs.out.win),
     }),
     spFlow: fill(copy.q_spFlow, {
       n: nv(f.n),
-      med: sg(f.med),
+      med: sx(f.med),
       win: nv(f.win),
     }),
     spDeep: fill(copy.q_spDeep, {
       n: nv(ds.n),
-      med60: sg(ds.med60),
+      med60: sx(ds.med60),
       win60: nv(ds.win60),
       n60: nv(ds.n60),
-      med120: sg(ds.med120),
+      med120: sx(ds.med120),
       win120: nv(ds.win120),
     }),
-    hold1: nv(st.hold.cagr),
-    hold2: nv(st.hold.dd),
+    hold1: sx(st.hold.cagr),
+    hold2: sx(st.hold.dd),
     hold3: nv(st.hold.calmar),
-    hold4: nv(st.y26h.ret),
-    st1: nv(st.all.cagr),
-    st2: nv(st.all.dd),
+    hold4: sx(st.y26h.ret),
+    st1: sx(st.all.cagr),
+    st2: sx(st.all.dd),
     st3: nv(st.all.calmar),
-    st4: nv(st.y26.ret),
-    out1: nv(st.out.cagr),
-    out2: nv(st.out.dd),
+    st4: sx(st.y26.ret),
+    out1: sx(st.out.cagr),
+    out2: sx(st.out.dd),
     out3: nv(st.out.calmar),
-    mh1: sg(ms.hold.cagr),
-    mh2: nv(ms.hold.dd),
+    mh1: sx(ms.hold.cagr),
+    mh2: sx(ms.hold.dd),
     mh3: nv(ms.hold.calmar),
-    mh4: sg(ms.y24H.ret),
-    mh5: sg(ms.y26H.ret),
-    ms1: sg(ms.all.cagr),
-    ms2: nv(ms.all.dd),
+    mh4: sx(ms.y24H.ret),
+    mh5: sx(ms.y26H.ret),
+    ms1: sx(ms.all.cagr),
+    ms2: sx(ms.all.dd),
     ms3: nv(ms.all.calmar),
-    ms4: sg(ms.y24.ret),
-    ms5: sg(ms.y26.ret),
-    mo1: sg(ms.out.cagr),
-    mo2: nv(ms.out.dd),
+    ms4: sx(ms.y24.ret),
+    ms5: sx(ms.y26.ret),
+    mo1: sx(ms.out.cagr),
+    mo2: sx(ms.out.dd),
     mo3: nv(ms.out.calmar),
-    mo4: `${sg(ms.outH.cagr)}${copy.q_perYear} · Calmar ${nv(ms.outH.calmar)}`,
+    mo4: `${sx(ms.outH.cagr)}${copy.q_perYear} · Calmar ${nv(ms.outH.calmar)}`,
   };
   void locale;
 
@@ -1184,7 +1194,7 @@ function QuantBody({ d }: { d: QuantSummary }) {
           />
           <div className="mm-note">{rich(stepNote)}</div>
           <div className="mm-muted">
-            {statLine(copy, "q_stStat", st.all, st.hold, st.y26, st.y26h)}
+            {rich(statLine(copy, "q_stStat", st.all, st.hold, st.y26, st.y26h))}
           </div>
           {chart(copy.q_stTitle, stepOption, 320, arr(d.dmain).length > 0)}
         </Panel>
@@ -1209,7 +1219,7 @@ function QuantBody({ d }: { d: QuantSummary }) {
                 fill(copy.q_mg1Detail, {
                   px: nv(MS.px),
                   ma: nv(MS.ma200),
-                  d: sg(MS.dma200),
+                  d: sx(MS.dma200),
                   below: MS.bear
                     ? fill(copy.q_mg1Below, { n: nv(MS.belowDays) })
                     : "",
@@ -1222,7 +1232,7 @@ function QuantBody({ d }: { d: QuantSummary }) {
               title={copy.q_mg2}
               value={MS.over ? copy.q_mg2On : copy.q_mg2Off}
             >
-              {fill(copy.q_mg2Detail, { b: nv(d.mb), d: sg(d.md60) })}
+              {rich(fill(copy.q_mg2Detail, { b: nv(d.mb), d: sx(d.md60) }))}
             </Gate>
             <Gate tone="out" title={copy.q_mg3} value={`${MS.pos}%`}>
               {(MS.bear
@@ -1235,7 +1245,7 @@ function QuantBody({ d }: { d: QuantSummary }) {
           </div>
           <div className="mm-note">{rich(mstepNote)}</div>
           <div className="mm-muted">
-            {statLine(copy, "q_msStat", ms.all, ms.hold, ms.y26, ms.y26H)}
+            {rich(statLine(copy, "q_msStat", ms.all, ms.hold, ms.y26, ms.y26H))}
           </div>
           {chart(copy.q_msTitle, mstepOption, 320, arr(d.dmw).length > 0)}
         </Panel>

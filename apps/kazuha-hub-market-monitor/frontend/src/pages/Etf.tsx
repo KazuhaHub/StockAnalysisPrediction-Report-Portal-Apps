@@ -287,11 +287,7 @@ function EtfBody({
             value: isNum(c.last_nf)
               ? `${signed(c.last_nf, 1)} ${copy.unit_yi}`
               : DASH,
-            color: isNum(c.last_nf)
-              ? c.last_nf >= 0
-                ? v.up
-                : v.down
-              : undefined,
+            color: v.sign(c.last_nf),
           }),
     },
     {

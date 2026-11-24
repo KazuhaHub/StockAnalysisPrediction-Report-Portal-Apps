@@ -142,7 +142,7 @@ function labelColor(label: string | undefined): string {
         低估: "cyan",
         合理: "default",
         高估: "gold",
-        显著高估: "orange",
+        显著高估: "orange-inverse",
         分歧过大: "purple",
         单一方法参考: "geekblue",
         数据不足: "default",

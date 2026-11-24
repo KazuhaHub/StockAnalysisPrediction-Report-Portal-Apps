@@ -66,12 +66,18 @@ sign, so it is never red or green. `v.status` / `v.statusTag` in
 
 - failed / off / neutral: gray; watch or warning: amber; usable or
   opportunity: blue; the most severe warning: strong orange (`v.alert`).
-- Margin: 高危 and 临界 strong orange, 关注 and 潜伏 amber, 已去杠杆 blue,
-  安全 gray.
+- Margin: 高危 and 临界 strong orange (solid tag), 关注 and 潜伏 amber, 已去杠杆
+  blue, 安全 gray.
 - Valuation: 显著低估 blue, 低估 cyan, 合理 gray, 高估 amber, 显著高估 strong
-  orange.
-- Quant states: 风险 purple (the bear band), 警戒 amber, 机会 blue, 出清 cyan,
-  常规 gray. ETF 信号状态: 失效 gray, 观察 amber, 可用 blue.
+  orange (solid tag).
+- Quant states, one tone shared by the chart bands, the table text and the
+  tags (`stateTone` in lib/quant.ts): 熊市/下跌 purple, 警戒/过热 amber, 出清
+  cyan, 确认/修复 blue, 常规 gray. ETF 信号状态: 失效 gray, 观察 amber, 可用
+  blue.
+- The most severe level is a solid tag (`orange-inverse`) or a strong-orange
+  border, a warning an outlined amber tag, so the two read apart.
+- Signed numbers inside running text use the rich-text markup
+  `[[up:+1.2]]` / `[[down:-1.2]]` (`sx` in lib/quant.ts).
 - Valuation quadrants: 便宜好公司 blue, 优质但贵 amber, 价值陷阱 purple, 又贵又差
   strong orange. Check boxes and run results: passed blue, failed strong
   orange. A percentile heat map (not a sign) runs blue to amber.

@@ -119,7 +119,7 @@ function stateColor(state: string | undefined): string {
     (
       {
         // Statuses, not signs (docs/charts.md): never red or green.
-        临界: "orange",
+        临界: "orange-inverse",
         潜伏: "gold",
         已去杠杆: "processing",
         安全: "default",
@@ -128,8 +128,9 @@ function stateColor(state: string | undefined): string {
   );
 }
 const levelColor = (level: string | undefined) =>
-  (({ 高危: "orange", 关注: "gold" }) as Record<string, string>)[level ?? ""] ??
-  "default";
+  (({ 高危: "orange-inverse", 关注: "gold" }) as Record<string, string>)[
+    level ?? ""
+  ] ?? "default";
 
 function redIf(cond: boolean, v: Visual, text: string) {
   // A warning highlight, not a sign: strong orange, never red.
@@ -299,7 +300,7 @@ function MarginBody({
               itemStyle: {
                 color: {
                   临界: v.alert,
-                  潜伏: v.orange,
+                  潜伏: v.purple,
                   已去杠杆: v.primary,
                   安全: v.series[4],
                 }[key],
@@ -402,7 +403,13 @@ function MarginBody({
             status="normal"
             format={(p) => `${p}`}
             aria-label={copy.col_frag}
-            strokeColor={fragTone(x) ? v[fragTone(x)!] : undefined}
+            strokeColor={
+              fragTone(x) === "danger"
+                ? v.alert
+                : fragTone(x)
+                  ? v.orange
+                  : undefined
+            }
           />
         ) : (
           DASH
@@ -446,7 +453,13 @@ function MarginBody({
       copy.col_resCnt,
       "res_cnt",
       (x) =>
-        isNum(x) && x >= 2 ? <Tag color="orange">{x}</Tag> : x ? x : DASH,
+        isNum(x) && x >= 2 ? (
+          <Tag color="orange-inverse">{x}</Tag>
+        ) : x ? (
+          x
+        ) : (
+          DASH
+        ),
       80,
     ),
   ];

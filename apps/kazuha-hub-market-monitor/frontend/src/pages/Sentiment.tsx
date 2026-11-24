@@ -4,6 +4,8 @@ import { Panel, Panels } from "../components/Panels";
 import { Dashboard } from "../components/Dashboard";
 import { EChart } from "../components/EChart";
 import { KpiRow, type KpiItem } from "../components/Kpi";
+import { sx } from "../lib/quant";
+import { rich } from "../components/Rich";
 import { useVisual } from "../components/useVisual";
 import { useCopy } from "../lib/copy";
 import { arr, fill, fmt, isNum, signed, DASH, type Num } from "../lib/format";
@@ -279,11 +281,15 @@ function SentimentBody({ s }: { s: SentimentSummary }) {
           extra={
             sig && (
               <span className="mm-muted">
-                {fill(copy.sent_processNote, {
-                  n: sig.hist_n ?? DASH,
-                  med: signed(sig.hist_med20, 2),
-                  win: fmt(sig.hist_win20, 0),
-                })}
+                {rich(
+                  fill(copy.sent_processNote, {
+                    n: sig.hist_n ?? DASH,
+                    med: sx(
+                      isNum(sig.hist_med20) ? +sig.hist_med20.toFixed(2) : null,
+                    ),
+                    win: fmt(sig.hist_win20, 0),
+                  }),
+                )}
               </span>
             )
           }
@@ -299,7 +305,14 @@ function SentimentBody({ s }: { s: SentimentSummary }) {
           {arr(s.alerts).map((a, i) => (
             <Alert
               key={i}
-              style={{ marginBottom: 8 }}
+              // The most severe level keeps its weight with a strong-orange
+              // border: a status, so not red (docs/charts.md).
+              style={{
+                marginBottom: 8,
+                ...(a.level === "red"
+                  ? { borderColor: v.alert, borderWidth: 2 }
+                  : {}),
+              }}
               type={alertType(a.level)}
               title={a.title}
               description={stripTags(a.body)}
