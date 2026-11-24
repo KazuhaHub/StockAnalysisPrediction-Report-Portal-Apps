@@ -1,0 +1,12 @@
+{
+  "app_id": "kazuha-hub-market-monitor",
+  "version": "0.1.0-beta.11",
+  "commit": "07027681d29f899c3dfdad870310bd27f9798774",
+  "run_url": "https://github.com/KazuhaHub/StockAnalysisPrediction-Report-Portal-Apps/actions/runs/45376348384",
+  "package_oci": {
+    "repository": "ghcr.io/kazuhahub/portal-apps/kazuha-hub-market-monitor",
+    "digest": "sha256:e7ab7817ef5fd0472187fb53a06c9c945798998dadb45c9390439449c2408603"
+  },
+  "package_sha256": "565a8b5d96b90d5d0d0196c4e280149dd046fa8503a65b12c76ce48500020617",
+  "notes": "ETF flows: days the app missed are backfilled from the exchange, and a change that still spans several trading days is shown as merged and left out of single-day statistics."
+}
