@@ -139,3 +139,36 @@
 .mm-admin-log:focus-visible {
   outline: 2px solid var(--ant-color-primary, #1677ff);
 }
+
+/* Panels (components/Panels.tsx): the cards of a row stretch to the row's
+   height, so a pair never ends in ragged bottoms. */
+.mm-panels {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.mm-panel-col {
+  display: flex;
+}
+
+.mm-panel-col > .mm-panel {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Run now confirm (Admin.tsx), anchored to its button. */
+.mm-confirm {
+  max-width: 320px;
+}
+
+.mm-confirm-title {
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.mm-confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 12px;
+}

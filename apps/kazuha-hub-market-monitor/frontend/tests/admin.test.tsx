@@ -231,6 +231,25 @@ test("Run now asks first, focuses Cancel, and posts one stable request id across
   );
 });
 
+test("Run now asks next to its button, not in a centred modal", async () => {
+  // The admin page is embedded in an iframe as tall as the page: a modal
+  // centred in that viewport can sit far below what the Portal page shows.
+  await mount(adminBackend(), admin);
+  fireEvent.click(
+    await screen.findByRole("button", { name: "Run now: margin" }),
+  );
+  const dialog = await screen.findByRole("dialog");
+  expect(dialog.closest(".ant-popover")).not.toBeNull();
+  expect(document.querySelector(".ant-modal")).toBeNull();
+  // Escape closes even with focus outside the popover, and focus returns
+  // to the button that opened it.
+  fireEvent.keyDown(document.body, { key: "Escape" });
+  await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  expect(document.activeElement).toBe(
+    screen.getByRole("button", { name: "Run now: margin" }),
+  );
+});
+
 test("cancelling Run now sends nothing, and the next dialog gets a new request id", async () => {
   const app = await mount(adminBackend(), admin);
   const open = async () => {

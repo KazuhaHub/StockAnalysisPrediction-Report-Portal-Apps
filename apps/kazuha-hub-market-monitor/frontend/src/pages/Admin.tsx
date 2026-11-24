@@ -7,7 +7,7 @@ import {
   Collapse,
   ConfigProvider,
   Empty,
-  Modal,
+  Popover,
   Space,
   Spin,
   Tag,
@@ -382,6 +382,7 @@ function RunNow({
   // tell a repeat of this click from a new one and never queues twice.
   const requestId = useRef<string | null>(null);
   const cancel = useRef<HTMLButtonElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
   const names = { job };
 
   const show = () => {
@@ -394,7 +395,21 @@ function RunNow({
     if (busy) return;
     requestId.current = null;
     setOpen(false);
+    trigger.current?.focus();
   };
+  // Escape closes from anywhere while open (focus can leave the popover when
+  // the confirm button disappears), and Cancel takes focus back after a try.
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") close();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  });
+  useEffect(() => {
+    if (open && !busy) cancel.current?.focus();
+  }, [open, busy, final]);
   const confirm = async () => {
     if (!requestId.current) return;
     setBusy(true);
@@ -424,24 +439,33 @@ function RunNow({
               : copy.admin_runFailed,
     );
   };
+  // Anchored to the button, not a centred modal: the Portal embeds this page
+  // in an iframe as tall as the page, so the iframe's viewport centre can be
+  // far below what the Portal page shows.
+  const title = fill(copy.admin_runNowTitle, names);
   return (
-    <>
-      <Button onClick={show} aria-label={`${copy.admin_runNow}: ${job}`}>
-        {copy.admin_runNow}
-      </Button>
-      <Modal
-        open={open}
-        title={fill(copy.admin_runNowTitle, names)}
-        onCancel={close}
-        mask={{ closable: !busy }}
-        keyboard={!busy}
-        closable={!busy}
-        destroyOnHidden
-        afterOpenChange={(visible) => {
-          if (visible) cancel.current?.focus();
-        }}
-        footer={
-          <Space wrap>
+    <Popover
+      open={open}
+      onOpenChange={(next) => {
+        if (!next) close();
+      }}
+      trigger="click"
+      placement="bottomRight"
+      destroyOnHidden
+      afterOpenChange={(visible) => {
+        if (visible) cancel.current?.focus();
+      }}
+      content={
+        <div
+          role="dialog"
+          aria-modal="false"
+          aria-label={title}
+          className="mm-confirm"
+        >
+          <div className="mm-confirm-title">{title}</div>
+          <p>{fill(copy.admin_runNowBody, names)}</p>
+          {error && <Alert type="error" showIcon title={error} role="alert" />}
+          <Space wrap className="mm-confirm-actions">
             <Button ref={cancel} onClick={close} disabled={busy} autoFocus>
               {copy.admin_cancel}
             </Button>
@@ -451,12 +475,19 @@ function RunNow({
               </Button>
             )}
           </Space>
-        }
+        </div>
+      }
+    >
+      <Button
+        ref={trigger}
+        onClick={() => (open ? close() : show())}
+        aria-label={`${copy.admin_runNow}: ${job}`}
+        aria-haspopup="dialog"
+        aria-expanded={open}
       >
-        <p>{fill(copy.admin_runNowBody, names)}</p>
-        {error && <Alert type="error" showIcon title={error} role="alert" />}
-      </Modal>
-    </>
+        {copy.admin_runNow}
+      </Button>
+    </Popover>
   );
 }
 

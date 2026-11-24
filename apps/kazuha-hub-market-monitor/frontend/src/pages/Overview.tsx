@@ -1,6 +1,7 @@
 import { useMemo } from "react";
-import { Alert, Button, Card, Col, Empty, Row, Space } from "antd";
+import { Alert, Button, Card, Empty, Space } from "antd";
 import { useAppNavigation } from "@portal-app/sdk/root-v2";
+import { Panel, Panels } from "../components/Panels";
 import { Dashboard, ROUTES } from "../components/Dashboard";
 import { EChart } from "../components/EChart";
 import { KpiRow, type KpiItem } from "../components/Kpi";
@@ -278,50 +279,44 @@ function OverviewBody({ r, asOf }: { r: RiskSummary; asOf: string }) {
           <Empty description={copy.noData} />
         )}
       </Card>
-      <Row gutter={[16, 16]}>
-        <Col xs={24} lg={12}>
-          <Card size="small" title={copy.ov_leverChart}>
-            {leverOption ? (
-              <EChart label={copy.ov_leverChart} option={leverOption} />
-            ) : (
-              <Empty description={copy.noData} />
-            )}
-          </Card>
-        </Col>
-        <Col xs={24} lg={6}>
-          <Card size="small" title={copy.ov_guarantee}>
-            {guaranteeOption ? (
-              <EChart label={copy.ov_guarantee} option={guaranteeOption} />
-            ) : (
-              <Empty description={copy.noData} />
-            )}
-          </Card>
-        </Col>
-        <Col xs={24} lg={6}>
-          <Card size="small" title={copy.ov_mech}>
-            {m ? (
-              <EChart label={copy.ov_mech} option={mechOption} />
-            ) : (
-              <Empty description={copy.noData} />
-            )}
-          </Card>
-        </Col>
-      </Row>
-      <Card size="small" title={copy.ov_dashboards}>
-        <Space wrap>
-          {ROUTES.filter((route) => route.path !== "/").map((route) => (
-            <Button
-              key={route.path}
-              disabled={!navigation.ready}
-              onClick={() => {
-                navigation.navigate(route.path);
-              }}
-            >
-              {copy[`nav_${route.key}`]}
-            </Button>
-          ))}
-        </Space>
-      </Card>
+      <Panels>
+        <Panel title={copy.ov_leverChart}>
+          {leverOption ? (
+            <EChart label={copy.ov_leverChart} option={leverOption} />
+          ) : (
+            <Empty description={copy.noData} />
+          )}
+        </Panel>
+        <Panel title={copy.ov_guarantee}>
+          {guaranteeOption ? (
+            <EChart label={copy.ov_guarantee} option={guaranteeOption} />
+          ) : (
+            <Empty description={copy.noData} />
+          )}
+        </Panel>
+        <Panel title={copy.ov_mech}>
+          {m ? (
+            <EChart label={copy.ov_mech} option={mechOption} />
+          ) : (
+            <Empty description={copy.noData} />
+          )}
+        </Panel>
+        <Panel kind="wide" title={copy.ov_dashboards}>
+          <Space wrap>
+            {ROUTES.filter((route) => route.path !== "/").map((route) => (
+              <Button
+                key={route.path}
+                disabled={!navigation.ready}
+                onClick={() => {
+                  navigation.navigate(route.path);
+                }}
+              >
+                {copy[`nav_${route.key}`]}
+              </Button>
+            ))}
+          </Space>
+        </Panel>
+      </Panels>
     </Space>
   );
 }

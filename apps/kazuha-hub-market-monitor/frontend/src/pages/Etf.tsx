@@ -1,10 +1,8 @@
 import { useMemo, useState } from "react";
 import {
   Card,
-  Col,
   Descriptions,
   Empty,
-  Row,
   Segmented,
   Select,
   Space,
@@ -13,6 +11,7 @@ import {
 } from "antd";
 import type { TableColumnsType } from "antd";
 import { ByteSearch } from "../components/ByteSearch";
+import { Panel, Panels } from "../components/Panels";
 import { Dashboard } from "../components/Dashboard";
 import { EChart } from "../components/EChart";
 import { KpiRow, type KpiItem } from "../components/Kpi";
@@ -299,126 +298,112 @@ function EtfBody({
           <Empty description={copy.noData} />
         )}
       </Card>
-      <Row gutter={[16, 16]}>
-        <Col xs={24} lg={10}>
-          <Card size="small" title={copy.etf_catTitle}>
-            {catRows.length ? (
-              <EChart
-                label={copy.etf_catTitle}
-                option={catOption}
-                height={330}
-              />
-            ) : (
-              <Empty description={copy.noData} />
-            )}
-          </Card>
-        </Col>
-        <Col xs={24} lg={14}>
-          <Card size="small" title={copy.etf_funds}>
-            <Space wrap style={{ marginBottom: 12 }}>
-              <ByteSearch
-                placeholder={copy.searchPlaceholder}
-                width={200}
-                onSearch={setSearch}
-              />
-              <Select
-                allowClear
-                placeholder={copy.etf_cat}
-                value={cat}
-                onChange={setCat}
-                style={{ width: 140 }}
-                options={catOptions}
-              />
-            </Space>
-            <RowTable<EtfRow>
-              module="etf"
-              date={date}
-              revision={revision}
-              columns={columns}
-              defaultSort="cum20"
-              q={search}
-              filters={filters}
-              scrollX={620}
-            />
-          </Card>
-        </Col>
-      </Row>
-      <Row gutter={[16, 16]}>
-        <Col xs={24} lg={12}>
-          <Card size="small" title={copy.etf_health} style={{ height: "100%" }}>
-            {arr(e.health?.items).length === 0 && (
-              <Empty description={copy.noData} />
-            )}
-            {arr(e.health?.items).map((item) => (
-              <div key={item.k} className="mm-health">
-                <div>
-                  <span>
-                    {item.k}: <b>{item.v}</b>
-                  </span>
-                  <div className="mm-muted">{item.note}</div>
-                </div>
-                <Tag
-                  color={
-                    isNum(item.s) && item.s < 0
-                      ? "error"
-                      : isNum(item.s) && item.s > 0
-                        ? "success"
-                        : "default"
-                  }
-                >
-                  {isNum(item.s) && item.s < 0
-                    ? copy.etf_negative
+      <Panels>
+        <Panel kind="wide" title={copy.etf_catTitle}>
+          {catRows.length ? (
+            <EChart label={copy.etf_catTitle} option={catOption} height={330} />
+          ) : (
+            <Empty description={copy.noData} />
+          )}
+        </Panel>
+        <Panel title={copy.etf_health}>
+          {arr(e.health?.items).length === 0 && (
+            <Empty description={copy.noData} />
+          )}
+          {arr(e.health?.items).map((item) => (
+            <div key={item.k} className="mm-health">
+              <div>
+                <span>
+                  {item.k}: <b>{item.v}</b>
+                </span>
+                <div className="mm-muted">{item.note}</div>
+              </div>
+              <Tag
+                color={
+                  isNum(item.s) && item.s < 0
+                    ? "error"
                     : isNum(item.s) && item.s > 0
-                      ? copy.etf_positive
-                      : copy.etf_neutral}
-                </Tag>
-              </div>
-            ))}
-          </Card>
-        </Col>
-        <Col xs={24} lg={12}>
-          <Card size="small" title={copy.etf_runs} style={{ height: "100%" }}>
-            <Table
+                      ? "success"
+                      : "default"
+                }
+              >
+                {isNum(item.s) && item.s < 0
+                  ? copy.etf_negative
+                  : isNum(item.s) && item.s > 0
+                    ? copy.etf_positive
+                    : copy.etf_neutral}
+              </Tag>
+            </div>
+          ))}
+        </Panel>
+        <Panel title={copy.etf_runs}>
+          <Table
+            size="small"
+            pagination={false}
+            rowKey="start"
+            dataSource={arr(e.runs_top).slice(0, 6)}
+            columns={[
+              { title: copy.etf_start, dataIndex: "start" },
+              { title: copy.etf_end, dataIndex: "end" },
+              { title: copy.etf_days, dataIndex: "days", align: "right" },
+              {
+                title: `${copy.etf_sum} (${copy.unit_yi})`,
+                dataIndex: "sum",
+                align: "right",
+                render: (x: Num) => fmt(x, 0),
+              },
+            ]}
+          />
+          {e.scope && (
+            <div className="mm-muted" style={{ marginTop: 8 }}>
+              {fill(copy.etf_scope, {
+                universe: e.scope.universe ?? DASH,
+                n: e.scope.n_codes ?? DASH,
+                note: e.scope.note ?? "",
+              })}
+            </div>
+          )}
+          {Object.keys(dh).length > 0 && (
+            <Descriptions
               size="small"
-              pagination={false}
-              rowKey="start"
-              dataSource={arr(e.runs_top).slice(0, 6)}
-              columns={[
-                { title: copy.etf_start, dataIndex: "start" },
-                { title: copy.etf_end, dataIndex: "end" },
-                { title: copy.etf_days, dataIndex: "days", align: "right" },
-                {
-                  title: `${copy.etf_sum} (${copy.unit_yi})`,
-                  dataIndex: "sum",
-                  align: "right",
-                  render: (x: Num) => fmt(x, 0),
-                },
-              ]}
+              column={2}
+              style={{ marginTop: 8 }}
+              items={Object.entries(dh).map(([key, value]) => ({
+                key,
+                label: dataDateLabel(copy, key.replace(/_last$/, "")),
+                children: value ?? DASH,
+              }))}
             />
-            {e.scope && (
-              <div className="mm-muted" style={{ marginTop: 8 }}>
-                {fill(copy.etf_scope, {
-                  universe: e.scope.universe ?? DASH,
-                  n: e.scope.n_codes ?? DASH,
-                  note: e.scope.note ?? "",
-                })}
-              </div>
-            )}
-            {Object.keys(dh).length > 0 && (
-              <Descriptions
-                size="small"
-                column={2}
-                style={{ marginTop: 8 }}
-                items={Object.entries(dh).map(([key, value]) => ({
-                  key,
-                  label: dataDateLabel(copy, key.replace(/_last$/, "")),
-                  children: value ?? DASH,
-                }))}
-              />
-            )}
-          </Card>
-        </Col>
-      </Row>
+          )}
+        </Panel>
+        <Panel kind="detail" title={copy.etf_funds}>
+          <Space wrap style={{ marginBottom: 12 }}>
+            <ByteSearch
+              placeholder={copy.searchPlaceholder}
+              width={200}
+              onSearch={setSearch}
+            />
+            <Select
+              allowClear
+              placeholder={copy.etf_cat}
+              value={cat}
+              onChange={setCat}
+              style={{ width: 140 }}
+              options={catOptions}
+            />
+          </Space>
+          <RowTable<EtfRow>
+            module="etf"
+            date={date}
+            revision={revision}
+            columns={columns}
+            defaultSort="cum20"
+            q={search}
+            filters={filters}
+            scrollX={620}
+          />
+        </Panel>
+      </Panels>
     </Space>
   );
 }

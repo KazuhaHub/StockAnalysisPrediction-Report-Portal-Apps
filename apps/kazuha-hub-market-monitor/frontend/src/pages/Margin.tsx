@@ -1,13 +1,10 @@
 import { useMemo, useState } from "react";
 import {
   Alert,
-  Card,
-  Col,
   Descriptions,
   Drawer,
   Empty,
   Progress,
-  Row,
   Segmented,
   Select,
   Space,
@@ -17,6 +14,7 @@ import {
 } from "antd";
 import type { TableColumnsType } from "antd";
 import { ByteSearch } from "../components/ByteSearch";
+import { Panel, Panels } from "../components/Panels";
 import { Dashboard } from "../components/Dashboard";
 import { EChart } from "../components/EChart";
 import { KpiRow } from "../components/Kpi";
@@ -471,117 +469,111 @@ function MarginBody({
   return (
     <Space orientation="vertical" size="middle" style={{ width: "100%" }}>
       <KpiRow items={kpis} />
-      <Row gutter={[16, 16]}>
-        <Col xs={24} lg={10}>
-          <Card
-            size="small"
-            title={histogram ? copy.margin_hist : copy.margin_quantiles}
-            extra={
-              <span className="mm-muted">
-                {histogram
-                  ? copy.margin_histNote
-                  : fill(copy.margin_over, {
-                      a: o.n_over8 ?? DASH,
-                      b: o.n_over10 ?? DASH,
-                    })}
-              </span>
-            }
-          >
-            <EChart
-              label={histogram ? copy.margin_hist : copy.margin_quantiles}
-              option={histogram ?? quantiles}
-              height={240}
+      <Panels>
+        <Panel
+          kind="wide"
+          title={histogram ? copy.margin_hist : copy.margin_quantiles}
+          extra={
+            <span className="mm-muted">
+              {histogram
+                ? copy.margin_histNote
+                : fill(copy.margin_over, {
+                    a: o.n_over8 ?? DASH,
+                    b: o.n_over10 ?? DASH,
+                  })}
+            </span>
+          }
+        >
+          <EChart
+            label={histogram ? copy.margin_hist : copy.margin_quantiles}
+            option={histogram ?? quantiles}
+            height={240}
+          />
+        </Panel>
+        <Panel title={copy.margin_states}>
+          <EChart
+            label={copy.margin_states}
+            option={stateOption}
+            height={240}
+          />
+        </Panel>
+        <Panel title={copy.margin_res}>
+          <EChart label={copy.margin_res} option={resOption} height={240} />
+        </Panel>
+        <Panel
+          kind="detail"
+          title={
+            <Space wrap>
+              <span>{fill(copy.margin_scan, { date })}</span>
+              <Segmented
+                size="small"
+                value={view}
+                onChange={setView}
+                options={[
+                  { label: copy.margin_viewLever, value: "lever" },
+                  { label: copy.margin_viewStruct, value: "struct" },
+                ]}
+              />
+            </Space>
+          }
+        >
+          <Space wrap style={{ marginBottom: 12 }}>
+            <ByteSearch
+              placeholder={copy.searchPlaceholder}
+              width={200}
+              onSearch={setSearch}
             />
-          </Card>
-        </Col>
-        <Col xs={24} lg={7}>
-          <Card size="small" title={copy.margin_states}>
-            <EChart
-              label={copy.margin_states}
-              option={stateOption}
-              height={240}
+            <Select
+              allowClear
+              placeholder={copy.col_state}
+              value={state}
+              onChange={setState}
+              style={{ width: 120 }}
+              options={valueOptions(copy, STATES)}
             />
-          </Card>
-        </Col>
-        <Col xs={24} lg={7}>
-          <Card size="small" title={copy.margin_res}>
-            <EChart label={copy.margin_res} option={resOption} height={240} />
-          </Card>
-        </Col>
-      </Row>
-      <Card
-        size="small"
-        title={
-          <Space wrap>
-            <span>{fill(copy.margin_scan, { date })}</span>
-            <Segmented
-              size="small"
-              value={view}
-              onChange={setView}
-              options={[
-                { label: copy.margin_viewLever, value: "lever" },
-                { label: copy.margin_viewStruct, value: "struct" },
-              ]}
+            <Select
+              allowClear
+              placeholder={copy.col_level}
+              value={level}
+              onChange={setLevel}
+              style={{ width: 110 }}
+              options={valueOptions(copy, LEVELS)}
+            />
+            <Select
+              allowClear
+              placeholder={copy.margin_mechanism}
+              value={mechanism}
+              onChange={setMechanism}
+              style={{ width: 170 }}
+              options={MECHANISMS.map((name) => ({
+                value: name,
+                label: copy[`mech_${name}`],
+              }))}
+            />
+            <Select
+              allowClear
+              placeholder={copy.col_tags}
+              value={tag}
+              onChange={setTag}
+              style={{ width: 150 }}
+              options={valueOptions(copy, TAGS)}
             />
           </Space>
-        }
-      >
-        <Space wrap style={{ marginBottom: 12 }}>
-          <ByteSearch
-            placeholder={copy.searchPlaceholder}
-            width={200}
-            onSearch={setSearch}
+          <RowTable<MarginRow>
+            module="margin"
+            date={date}
+            revision={revision}
+            columns={columns}
+            defaultSort="frag"
+            q={search}
+            filters={filters}
+            mechanism={mechanism}
+            scrollX={view === "lever" ? 1320 : 1480}
+            onSelect={setSelected}
           />
-          <Select
-            allowClear
-            placeholder={copy.col_state}
-            value={state}
-            onChange={setState}
-            style={{ width: 120 }}
-            options={valueOptions(copy, STATES)}
-          />
-          <Select
-            allowClear
-            placeholder={copy.col_level}
-            value={level}
-            onChange={setLevel}
-            style={{ width: 110 }}
-            options={valueOptions(copy, LEVELS)}
-          />
-          <Select
-            allowClear
-            placeholder={copy.margin_mechanism}
-            value={mechanism}
-            onChange={setMechanism}
-            style={{ width: 170 }}
-            options={MECHANISMS.map((name) => ({
-              value: name,
-              label: copy[`mech_${name}`],
-            }))}
-          />
-          <Select
-            allowClear
-            placeholder={copy.col_tags}
-            value={tag}
-            onChange={setTag}
-            style={{ width: 150 }}
-            options={valueOptions(copy, TAGS)}
-          />
-        </Space>
-        <RowTable<MarginRow>
-          module="margin"
-          date={date}
-          revision={revision}
-          columns={columns}
-          defaultSort="frag"
-          q={search}
-          filters={filters}
-          mechanism={mechanism}
-          scrollX={view === "lever" ? 1320 : 1480}
-          onSelect={setSelected}
-        />
-        <div className="mm-muted">{copy.margin_note}</div>
-      </Card>
+          <div className="mm-muted">{copy.margin_note}</div>
+        </Panel>
+      </Panels>
       <MarginDrawer
         code={selected?.code ?? null}
         fallback={selected}
