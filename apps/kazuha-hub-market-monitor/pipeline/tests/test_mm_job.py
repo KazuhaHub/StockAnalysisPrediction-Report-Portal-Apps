@@ -4,6 +4,7 @@ import json
 import math
 import os
 import socket
+import stat
 import sys
 import tempfile
 import time
@@ -123,21 +124,91 @@ class PrepareWork(unittest.TestCase):
         self.assertFalse(os.path.exists(os.path.join(e.work, "mm_job.py")))
         self.assertTrue(os.path.exists(os.path.join(e.work, "pkg", "tests", "fixture.json")))
 
-    def test_corrects_a_stale_venv_link(self):
+    def test_removes_a_venv_link_an_earlier_version_left(self):
+        # Up to 0.1.0-beta.5 this linked work/venv to the interpreter; the
+        # platform's data checkpoint refuses any symlink in the data root.
         e = Env(self)
         src = os.path.join(e.root, "src")
         os.makedirs(src)
         os.makedirs(e.work)
-        os.symlink("/nonexistent/venv", os.path.join(e.work, "venv"))
+        os.symlink(sys.prefix, os.path.join(e.work, "venv"))
         mm_job.prepare_work(src, e.work)
-        self.assertEqual(os.path.realpath(os.path.join(e.work, "venv")), os.path.realpath(sys.prefix))
+        self.assertFalse(os.path.lexists(os.path.join(e.work, "venv")))
 
-    def test_links_the_running_interpreter_as_the_pipeline_venv(self):
+    def test_removes_a_real_venv_and_the_ones_an_earlier_version_set_aside(self):
+        # A real venv holds symlinks (bin/python3); beta.5 and earlier renamed
+        # one found here to venv.replaced-<time>.
         e = Env(self)
         src = os.path.join(e.root, "src")
         os.makedirs(src)
+        os.makedirs(os.path.join(e.work, "venv", "bin"))
+        os.symlink(sys.executable, os.path.join(e.work, "venv", "bin", "python3"))
+        write(os.path.join(e.work, "venv.replaced-1700000000", "pyvenv.cfg"), "x")
+        write(os.path.join(e.work, "venvish", "keep"), "x")
         mm_job.prepare_work(src, e.work)
-        self.assertTrue(os.path.exists(os.path.join(e.work, "venv", "bin", "python3")))
+        self.assertEqual(sorted(os.listdir(e.work)), ["venvish"])
+
+    def test_unshares_hard_links_in_the_work_dir(self):
+        e = Env(self)
+        src = os.path.join(e.root, "src")
+        os.makedirs(src)
+        bars = os.path.join(e.work, "MarketData", "bars", "2024.parquet")
+        snap = os.path.join(e.work, "MarketData", "snapshots", "s1", "2024.parquet")
+        write(bars, "bars")
+        os.makedirs(os.path.dirname(snap))
+        os.link(bars, snap)
+        os.utime(bars, ns=(1_700_000_000_123_456_789, 1_700_000_000_123_456_789))
+        write(os.path.join(e.work, "MarketData", "x.parquet" + mm_job.UNSHARE_SUFFIX), "partial")
+        mm_job.prepare_work(src, e.work)
+        for path in (bars, snap):
+            self.assertEqual(os.stat(path).st_nlink, 1)
+            # publish() trusts output mtimes, so unsharing must keep them
+            self.assertEqual(os.stat(path).st_mtime_ns, 1_700_000_000_123_456_789)
+            with open(path, encoding="utf-8") as f:
+                self.assertEqual(f.read(), "bars")
+        self.assertEqual(sorted(os.listdir(os.path.join(e.work, "MarketData"))), ["bars", "snapshots"])
+
+    def test_a_failed_unshare_leaves_no_partial_copy(self):
+        e = Env(self)
+        a = os.path.join(e.work, "a")
+        write(a, "data")
+        os.link(a, os.path.join(e.work, "b"))
+        saved = mm_job.shutil.copy2
+
+        def broken(s, t):
+            with open(t, "w") as f:
+                f.write("par")
+            raise OSError(28, "No space left on device")
+        mm_job.shutil.copy2 = broken
+        self.addCleanup(setattr, mm_job.shutil, "copy2", saved)
+        with self.assertRaises(OSError):
+            mm_job.unshare_hard_links(e.work)
+        self.assertEqual(sorted(os.listdir(e.work)), ["a", "b"])
+
+    def test_leaves_nothing_the_data_checkpoint_refuses(self):
+        e = Env(self)
+        src = os.path.join(e.root, "src")
+        write(os.path.join(src, "margin_scan", "update.sh"), "#!/bin/sh\n")
+        os.makedirs(e.work)
+        os.symlink(sys.prefix, os.path.join(e.work, "venv"))
+        mm_job.prepare_work(src, e.work)
+        self.assertEqual(checkpoint_unsafe(e.root), [])
+
+
+def checkpoint_unsafe(root):
+    """Entries under root that the platform's data checkpoint refuses: any
+    symlink, socket, fifo or device, and regular files with more than one
+    link."""
+    bad = []
+    for top, dirs, files in os.walk(root):
+        for name in dirs + files:
+            path = os.path.join(top, name)
+            st = os.lstat(path)
+            if stat.S_ISDIR(st.st_mode):
+                continue
+            if not stat.S_ISREG(st.st_mode) or st.st_nlink > 1:
+                bad.append(os.path.relpath(path, root))
+    return sorted(bad)
 
 
 class JobEnv(unittest.TestCase):
@@ -147,6 +218,38 @@ class JobEnv(unittest.TestCase):
         env = mm_job.job_env("/w")
         self.assertEqual(env["MM_NO_HTML"], "1")
         self.assertEqual(env["TZ"], "Asia/Shanghai")
+
+    def test_runs_the_pipeline_on_this_interpreter_and_copies_snapshots(self):
+        env = mm_job.job_env("/w")
+        self.assertEqual(env["PY"], sys.executable)
+        # Hard-linked write-ahead snapshots would leave files with two links.
+        self.assertEqual(env["MD_SNAPSHOT_COPY"], "1")
+
+
+class NoVenvUnderTheDataRoot(unittest.TestCase):
+    """Job scripts must take the interpreter from $PY: nothing provides
+    /opt/daily-tasks/venv any more."""
+
+    def test_no_job_script_hard_codes_the_venv_interpreter(self):
+        pipeline = os.path.dirname(HERE)
+        offenders = []
+        for top, dirs, files in os.walk(pipeline):
+            dirs[:] = [d for d in dirs if d not in ("tests", "__pycache__")]
+            for name in files:
+                if not name.endswith((".py", ".sh")) or name in ("install.sh", "env.sh", "mm_job.py"):
+                    continue
+                path = os.path.join(top, name)
+                with open(path, encoding="utf-8") as f:
+                    for n, line in enumerate(f, 1):
+                        if name.endswith(".sh"):
+                            code, prose = line.split("#", 1)[0], False
+                        else:  # usage lines in docstrings name the interpreter
+                            code = line
+                            prose = code.lstrip().startswith(("/opt/daily-tasks/venv/bin/python3 ", "解释器"))
+                        if "venv/bin/python" in code and "${PY:-" not in code \
+                                and "os.environ.get(\"PY\"" not in code and not prose:
+                            offenders.append(f"{os.path.relpath(path, pipeline)}:{n}")
+        self.assertEqual(offenders, [])
 
 
 class Dispatch(unittest.TestCase):
@@ -605,6 +708,14 @@ class Run(unittest.TestCase):
         self.margin_script("mkdir -p out\ncp fixture.json out/payload.json\n")
         self.assertEqual(self.run_job("margin"), 0)
         self.assertEqual(sorted(self.e.outputs()), ["margin", "risk"])
+
+    def test_a_job_run_leaves_the_data_root_checkpoint_safe(self):
+        # The script hard-links a file, as the bar store's snapshots did.
+        self.margin_script("mkdir -p out\ncp fixture.json out/payload.json\nln out/payload.json out/linked.json\n")
+        os.makedirs(self.work)
+        os.symlink(sys.prefix, os.path.join(self.work, "venv"))
+        self.assertEqual(self.run_job("margin"), 0)
+        self.assertEqual(checkpoint_unsafe(self.data), [])
 
     def test_refuses_output_this_run_did_not_write(self):
         self.margin_script("exit 0\n")

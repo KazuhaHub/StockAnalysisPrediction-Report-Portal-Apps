@@ -27,7 +27,7 @@ import pandas as pd
 WS = "/opt/daily-tasks/workspace"
 BASE = f"{WS}/analysis/out/sentiment"
 REPORT = f"{WS}/reports/sentiment-monitor"
-PY = "/opt/daily-tasks/venv/bin/python3"
+PY = os.environ.get("PY", "/opt/daily-tasks/venv/bin/python3")
 
 os.makedirs(BASE, exist_ok=True)
 os.makedirs(f"{REPORT}/assets", exist_ok=True)
