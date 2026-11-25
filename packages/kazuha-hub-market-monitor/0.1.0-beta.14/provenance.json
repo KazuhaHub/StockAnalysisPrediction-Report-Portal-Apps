@@ -1,0 +1,12 @@
+{
+  "app_id": "kazuha-hub-market-monitor",
+  "version": "0.1.0-beta.14",
+  "commit": "b4fe28df872d64eb04b4656299fe69e2bc99a531",
+  "run_url": "https://github.com/KazuhaHub/StockAnalysisPrediction-Report-Portal-Apps/actions/runs/45514984090",
+  "package_oci": {
+    "repository": "ghcr.io/kazuhahub/portal-apps/kazuha-hub-market-monitor",
+    "digest": "sha256:12e35c41185d5f93eb2ff9721fb2790a865ce4aa809411ee0def311711cec904"
+  },
+  "package_sha256": "9435c56f115af6dbc08ae12ae21dbda0d5c181cebd8c7dcecdb03d60eaee7d50",
+  "notes": "Every tab works on a phone: module tabs swipe in one row, chart legends no longer cover the plots, wide tables become labelled cards with a sort control, and switches fold into a compact menu. Colours and data are unchanged."
+}
