@@ -1,0 +1,12 @@
+{
+  "app_id": "kazuha-hub-market-monitor",
+  "version": "0.1.0-beta.16",
+  "commit": "03528cdc56553d1e8f1885cd4f53e0226f7f448f",
+  "run_url": "https://github.com/KazuhaHub/StockAnalysisPrediction-Report-Portal-Apps/actions/runs/45943581649",
+  "package_oci": {
+    "repository": "ghcr.io/kazuhahub/portal-apps/kazuha-hub-market-monitor",
+    "digest": "sha256:d267585dbdfb691dcafc4c20a4626968df67df4c234998f510d6ee70e1c0d1c6"
+  },
+  "package_sha256": "83f068ddd10f753381c32ca313a6b4078c0a7a45b92a8a7537d8bb2f0906b5c1",
+  "notes": "Fixes the sentiment job being killed for memory after beta.15: the store coverage check now runs in a short-lived child process instead of holding about 425 MiB in the job runner."
+}
