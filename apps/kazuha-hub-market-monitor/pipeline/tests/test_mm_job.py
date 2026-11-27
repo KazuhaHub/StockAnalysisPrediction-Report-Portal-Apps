@@ -6,6 +6,7 @@ import os
 import shutil
 import socket
 import stat
+import subprocess
 import sys
 import tempfile
 import time
@@ -307,6 +308,18 @@ class StoreCoverage(unittest.TestCase):
         t["date"].append("2027-01-04")
         pq.write_table(pa.table(t), md)
         self.assertIsNone(mm_job.incomplete_store("quant", work))
+
+    def test_the_check_leaves_no_memory_in_the_job_process(self):
+        # 2026-11-27: reading the partition in mm_job itself kept ~425 MiB for
+        # the whole run, and sentiment's rebuild under it hit the 2 GiB limit.
+        work = self.store(21)
+        probe = ("import sys; sys.path.insert(0, sys.argv[1]); import mm_job; "
+                 "msg = mm_job.incomplete_store('sentiment', sys.argv[2]); "
+                 "assert msg and '21 stocks against 100' in msg, msg; "
+                 "assert 'pyarrow' not in sys.modules, 'pyarrow loaded in the job process'")
+        r = subprocess.run([sys.executable, "-c", probe, os.path.dirname(HERE), work],
+                           capture_output=True, text=True)
+        self.assertEqual(r.returncode, 0, r.stderr)
 
     def test_unreadable_or_young_store_does_not_block(self):
         self.assertIsNone(mm_job.incomplete_store("quant", tempfile.mkdtemp()))
