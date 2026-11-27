@@ -231,7 +231,8 @@ def bars_of(code: str, start=None, end=None) -> pd.DataFrame:
 
 
 # ---------------------------------------------------------------- 写
-def _new_partitions(df_new: pd.DataFrame, tag: str = "", protect: bool = True) -> tuple[dict, list]:
+def _new_partitions(df_new: pd.DataFrame, tag: str = "", protect: bool = True,
+                    snap: bool = True) -> tuple[dict, list]:
     """把新 bar 按年分组，逐分区与旧数据合并去重后原子写回。返回 (每年新增行数, 冲突年份)。
 
     **这是唯一的分区写入口**（`ingest`、扩池脚本、修复脚本都走它），所以三道防线
@@ -241,13 +242,16 @@ def _new_partitions(df_new: pd.DataFrame, tag: str = "", protect: bool = True) -
       ③ 写后比对指纹，再核一遍
     把防线放在调用方（比如只放在 `ingest`）的后果：扩池脚本直接调本函数、
     绕开 `ingest`，最大的那次写入恰好没有快照。
+
+    `snap=False` 只省掉①的快照、指纹比对照做：`update` 一晚分批写十来次，只在第一批
+    前拍一次，否则 SNAP_KEEP 份轮换会把"今晚开写之前"那份挤掉，回滚点就没了。
     """
     df_new = df_new.copy()
     df_new["date"] = df_new["date"].astype(str)
     df_new["_y"] = df_new["date"].str.slice(0, 4)
     years_want = sorted(df_new["_y"].unique())
     before = partition_stats(years_want) if protect else {}
-    if protect:
+    if protect and snap:
         snapshot(years_want, tag=tag or "write", quiet=True, stats=before)
     added, touched = {}, []
     for y, chunk in df_new.groupby("_y"):
@@ -580,7 +584,7 @@ def _stats_of(codes, years) -> dict:
 
 
 def ingest(records, source: str = "manual", quiet: bool = False,
-           protect: bool = True) -> dict:
+           protect: bool = True, snap: bool = True) -> dict:
     """通用写入：records 是 [{code,name,bars:[{d,o,h,l,c,v,amt,trd,f}], ...}, ...]。
 
     迁移旧缓存、导入外部 CSV 都走这里，保证磁盘格式只有一种。
@@ -622,7 +626,7 @@ def ingest(records, source: str = "manual", quiet: bool = False,
 
     # 快照 / 指纹 / 只增不减守卫都在 `_new_partitions` 里——它是唯一的分区写入口，
     # 扩池与修复脚本也走那里。放在这里只保护 `ingest` 一条路，等于白做。
-    added, years = _new_partitions(df, tag=source, protect=protect)
+    added, years = _new_partitions(df, tag=source, protect=protect, snap=snap)
 
     meta = _read_meta()
     st = meta.setdefault("stocks", {})
@@ -875,17 +879,18 @@ def _pick_probe(plan: list) -> int | None:
     return None
 
 
-def _collect(code: str, r: dict, st: dict, got: dict, warn: list) -> None:
-    """把一次抓取结果并进待写批次，并检查新旧衔接是否异常。"""
+def _collect(code: str, r: dict, st: dict, got: dict, warn: list) -> int:
+    """把一次抓取结果并进待写批次，并检查新旧衔接是否异常。有新 bar 返回 1，否则 0。"""
     bars = [b for b in r.get("bars") or [] if b["d"] > (st.get(code) or {}).get("last", "")]
     if not bars:
-        return
+        return 0
     got[code] = {"code": code, "name": r.get("name") or (st.get(code) or {}).get("name"),
                  "bars": bars}
     # 复权基准若被源改过，新旧衔接处会出现超出涨跌停的跳空
     prev = (st.get(code) or {}).get("last_close")
     if prev and bars[0].get("c") and abs(bars[0]["c"] / prev - 1) > 0.25:
         warn.append({"code": code, "last_close": prev, "new_close": bars[0]["c"]})
+    return 1
 
 
 def _read_pending() -> list[str]:
@@ -918,8 +923,34 @@ def _write_pending(lag: dict) -> None:
     os.replace(tmp, PENDING_UPDATE)
 
 
+# 边取边写的批量。2026-11-26 补跑在 4000/4392 只时撞上 4 小时上限被杀，攒到最后才写的
+# 结果是一根都没进库；现在每攒够这么多只就写一次，被杀最多丢最后一批，下一轮从断点续上。
+# 每批要重写当年分区（十几秒）；快照只在当晚第一批前拍一次（见 `_new_partitions` 的 snap）。
+FLUSH_EVERY = 1000
+
+
+def _flush(got: dict, quiet: bool, snap: bool = True) -> int:
+    """把攒下的这批写进库，并记下每只票的最后收盘价（下次跳空检查用）。返回新增行数。"""
+    if not got:
+        return 0
+    res = ingest(got.values(), source="stock-server/update", quiet=quiet, snap=snap)
+    m2 = _read_meta()
+    # 一次读回这批票的最后收盘价（不要一只一只读）
+    d = load(codes=list(got), columns=["code", "date", "close"], as_datetime=False)
+    if len(d):
+        last = d.sort_values("date").groupby("code")["close"].last()
+        for c, v in last.items():
+            m2["stocks"].setdefault(c, {})["last_close"] = float(v)
+    m2["date_range"] = _date_range(m2)
+    m2["n_bars"] = _n_bars()
+    _write_meta(m2)
+    got.clear()
+    return res["new"]
+
+
 def update(codes=None, workers: int = 6, end: str | None = None,
-           dry_run: bool = False, quiet: bool = False, limit: int | None = None) -> dict:
+           dry_run: bool = False, quiet: bool = False, limit: int | None = None,
+           flush_every: int = FLUSH_EVERY) -> dict:
     """增量：每只票从 `meta.last` 的次日补到 `end`（默认今天）。不重下历史。"""
     meta = _read_meta()
     st = meta.get("stocks") or {}
@@ -956,6 +987,8 @@ def update(codes=None, workers: int = 6, end: str | None = None,
     _ping()
     got, fail, warn, unsupported = {}, [], [], []
     ok_codes = set()                 # 这次明确抓取成功的票（含停牌返回空的）
+    n_with_bars, new_bars = 0, 0     # 跨批累计：got 每写一批就清空
+    n_flush = 0                      # 只有第一批写入前拍快照
     n_fetch_ok = 0
     t_begin = dt.datetime.now()
     t0 = time.time()
@@ -982,7 +1015,7 @@ def update(codes=None, workers: int = 6, end: str | None = None,
                              "\n稍后重试：python3 market_data.py update") from None
         n_fetch_ok += 1
         ok_codes.add(c0)
-        _collect(c0, r0, st, got, warn)
+        n_with_bars += _collect(c0, r0, st, got, warn)
 
     streak, thr_streak, max_streak = 0, 0, max(6, workers * 3)
     aborted = None
@@ -995,7 +1028,7 @@ def update(codes=None, workers: int = 6, end: str | None = None,
                 n_fetch_ok += 1
                 ok_codes.add(c)
                 streak = thr_streak = 0
-                _collect(c, r, st, got, warn)
+                n_with_bars += _collect(c, r, st, got, warn)
             except Exception as e:                           # noqa: BLE001
                 if _channel_unsupported(c, e):
                     # 通道不支持这只票：既不是失败也不进待补清单（否则每晚排最前、
@@ -1027,6 +1060,16 @@ def update(codes=None, workers: int = 6, end: str | None = None,
                         print(f"⚠ 连续 {streak} 只失败，判定为源端故障，提前收工"
                               f"（已处理 {n}/{len(rest)}）")
                         break
+            if len(got) >= flush_every:
+                # 写库在 try 之外：写入失败（只增不减守卫、磁盘满）不是"这只票抓取失败"，
+                # 不能混进熔断计数、更不能每抓一只就重试一次写。停掉剩下的抓取，原样抛出。
+                try:
+                    new_bars += _flush(got, quiet, snap=n_flush == 0)
+                    n_flush += 1
+                except BaseException:
+                    for f in futs:
+                        f.cancel()
+                    raise
             if not quiet and n % 200 == 0:
                 print(f"  {n}/{len(rest)} … {time.time()-t0:.0f}s", flush=True)
 
@@ -1035,7 +1078,7 @@ def update(codes=None, workers: int = 6, end: str | None = None,
            "unsupported": sorted(unsupported),
            "started": t_begin.isoformat(timespec="seconds"),
            "elapsed": round(time.time() - t0, 1),
-           "empty": max(0, len(plan) - len(got) - len(fail) - len(unsupported))}
+           "empty": max(0, len(plan) - n_with_bars - len(fail) - len(unsupported))}
     # 失败清单落盘：明天优先补它们，而不是从 000001 重新排、在同一段再撞一次。
     # 必须与旧清单合并——分批跑时后一段的空失败会覆盖前一段的，实测丢过 2 只。
     lag = {f["code"]: (st.get(f["code"]) or {}).get("last") or DEFAULT_START
@@ -1044,26 +1087,15 @@ def update(codes=None, workers: int = 6, end: str | None = None,
         if c not in lag and c in st:
             lag[c] = (st.get(c) or {}).get("last") or DEFAULT_START
     _write_pending(lag)
-    if got:
-        res = ingest(got.values(), source="stock-server/update", quiet=quiet)
-        out["new_bars"] = res["new"]
-        m2 = _read_meta()
-        # 一次读回所有更新过的票的最后收盘价，供下次做跳空检查（不要一只一只读）
-        d = load(codes=list(got), columns=["code", "date", "close"], as_datetime=False)
-        if len(d):
-            last = d.sort_values("date").groupby("code")["close"].last()
-            for c, v in last.items():
-                m2["stocks"].setdefault(c, {})["last_close"] = float(v)
-        m2["date_range"] = _date_range(m2)
-        m2["n_bars"] = _n_bars()
-        _write_meta(m2)
+    new_bars += _flush(got, quiet, snap=n_flush == 0)
+    out["new_bars"] = new_bars
     _log({"kind": "update",
           **{k: v for k, v in out.items() if k not in ("fail", "unsupported")},
           "fail_n": len(fail), "fail": fail[:20],
           "unsupported_n": len(unsupported), "unsupported": sorted(unsupported)[:20]})
     if not quiet:
         print(f"完成：{out['n_ok']} 只抓取成功、{out['n_fail']} 只失败；"
-              f"{len(got)} 只有新 bar，新增 {out['new_bars']:,} 行")
+              f"{n_with_bars} 只有新 bar，新增 {out['new_bars']:,} 行")
         if unsupported:
             print(f"跳过 {len(unsupported)} 只北交所票：MCP 通道取不到，需走 HTTP 通道"
                   "（README §4.1）")

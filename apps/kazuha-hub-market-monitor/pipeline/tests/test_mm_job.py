@@ -3,6 +3,7 @@ conversion of each module's output into a snapshot document."""
 import json
 import math
 import os
+import shutil
 import socket
 import stat
 import sys
@@ -250,6 +251,83 @@ class NoVenvUnderTheDataRoot(unittest.TestCase):
                                 and "os.environ.get(\"PY\"" not in code and not prose:
                             offenders.append(f"{os.path.relpath(path, pipeline)}:{n}")
         self.assertEqual(offenders, [])
+
+
+@needs_pyarrow
+class StoreCoverage(unittest.TestCase):
+    """2026-11-26: the night's update stopped at 1,196 stocks (5,144 the day
+    before) and quant still published from that half-written day. Jobs that read
+    the store refuse while its latest day is short of recent days, so the page
+    keeps the last complete result."""
+
+    def store(self, n_last, total=100, work=None, days=("2026-11-24", "2026-11-25"), year="2026"):
+        work = work or tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, work, True)
+        md = os.path.join(work, "MarketData")
+        codes = [f"6{i:05d}" for i in range(total)]
+        write(os.path.join(md, "meta.json"), {"stocks": {c: {} for c in codes}})
+        rows = [(c, d) for d in days for c in codes] + [(c, "2026-11-26") for c in codes[:n_last]]
+        os.makedirs(os.path.join(md, "bars"), exist_ok=True)
+        pq.write_table(pa.table({"code": [r[0] for r in rows], "date": [r[1] for r in rows]}),
+                       os.path.join(md, "bars", f"{year}.parquet"))
+        return work
+
+    def test_short_latest_day_blocks_store_readers(self):
+        work = self.store(21)                       # 2026-11-26: 21% of the day before
+        for job in ("quant", "sentiment"):
+            msg = mm_job.incomplete_store(job, work)
+            self.assertIn("2026-11-26", msg)
+            self.assertIn("21 stocks against 100", msg)
+
+    def test_a_late_kill_is_still_blocked(self):
+        # With saving as it goes, a run killed late leaves most of the day.
+        self.assertIsNotNone(mm_job.incomplete_store("quant", self.store(85)))
+
+    def test_complete_day_and_other_jobs_pass(self):
+        self.assertIsNone(mm_job.incomplete_store("quant", self.store(98)))
+        self.assertIsNone(mm_job.incomplete_store("quant", self.store(100)))
+        self.assertIsNone(mm_job.incomplete_store("etf", self.store(21)))
+        self.assertIsNone(mm_job.incomplete_store("marketdata", self.store(21)))
+
+    def test_compares_with_the_busiest_recent_day(self):
+        # A half-written day before it must not lower the bar.
+        work = self.store(60, days=("2026-11-24",))
+        md = os.path.join(work, "MarketData", "bars", "2026.parquet")
+        t = pq.read_table(md).to_pydict()
+        t["code"] += [f"6{i:05d}" for i in range(30)]
+        t["date"] += ["2026-11-25"] * 30
+        pq.write_table(pa.table(t), md)
+        self.assertIsNotNone(mm_job.incomplete_store("quant", work))
+
+    def test_ignores_stray_dates_outside_the_partition_year(self):
+        work = self.store(100)
+        md = os.path.join(work, "MarketData", "bars", "2026.parquet")
+        t = pq.read_table(md).to_pydict()
+        t["code"].append("600000")
+        t["date"].append("2027-01-04")
+        pq.write_table(pa.table(t), md)
+        self.assertIsNone(mm_job.incomplete_store("quant", work))
+
+    def test_unreadable_or_young_store_does_not_block(self):
+        self.assertIsNone(mm_job.incomplete_store("quant", tempfile.mkdtemp()))
+        self.assertIsNone(mm_job.incomplete_store("quant", self.store(5, days=())))
+
+    def test_run_refuses_before_starting_the_pipeline(self):
+        data = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, data, True)
+        work = self.store(21, work=os.path.join(data, "work"))
+        link = os.path.join(data, "prefix")
+        os.symlink(work, link)
+        calls = []
+        saved = (mm_job.prepare_work, mm_job.subprocess.call)
+        mm_job.prepare_work = lambda src, w: None
+        mm_job.subprocess.call = lambda *a, **k: calls.append(a) or 0
+        try:
+            code = mm_job.run("quant", "/src", data, tempfile.mkdtemp(), prefix_link=link)
+        finally:
+            mm_job.prepare_work, mm_job.subprocess.call = saved
+        self.assertEqual(code, mm_job.EXIT_STORE_INCOMPLETE)
+        self.assertEqual(calls, [])
 
 
 class Dispatch(unittest.TestCase):

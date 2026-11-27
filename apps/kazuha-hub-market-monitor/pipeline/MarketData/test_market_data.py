@@ -449,6 +449,82 @@ class T(unittest.TestCase):
         self.assertTrue(all(f["throttle"] for f in out["fail"]))
         self.assertEqual(len(md._read_pending()), 15)          # 失败清单落盘
 
+    def test_update_keeps_fetched_batches_when_killed(self):
+        """2026-11-26 生产事故：补跑在 4000/4392 只时撞上 4 小时上限被杀，
+        因为攒到最后才写，取到的 4000 只一根都没进库。现在边取边写，被杀也只丢最后一批。"""
+        md.ingest([rec(f"6000{i:02d}", [("2024-01-02", 1, 2, 0.5, 1.5)])
+                   for i in range(8)])
+
+        class Killed(BaseException):
+            pass
+
+        real_fetch, real_ping = md._fetch_range, md._ping
+        md._ping = lambda: None
+
+        def fake(c, s, e):
+            if c == "600006":
+                raise Killed()
+            return {"code": c, "name": c,
+                    "bars": [{"d": "2024-01-03", "o": 1, "h": 2, "l": 0.5, "c": 1.6,
+                              "v": 1, "amt": 1, "trd": 1, "f": 1}]}
+
+        md._fetch_range = fake
+        try:
+            with self.assertRaises(Killed):
+                md.update(end="2024-01-03", workers=1, quiet=True, flush_every=2)
+        finally:
+            md._fetch_range, md._ping = real_fetch, real_ping
+        st = md._read_meta()["stocks"]
+        done = sorted(c for c, v in st.items() if v.get("last") == "2024-01-03")
+        # 探针 600000 + 600001..600005 共 6 只，按每 2 只一批，前 3 批（6 只）都已落盘
+        self.assertEqual(done, [f"6000{i:02d}" for i in range(6)])
+        self.assertEqual(st["600007"]["last"], "2024-01-02")
+
+    def _bar_fetch(self, c, s, e):
+        return {"code": c, "name": c,
+                "bars": [{"d": "2024-01-03", "o": 1, "h": 2, "l": 0.5, "c": 1.6,
+                          "v": 1, "amt": 1, "trd": 1, "f": 1}]}
+
+    def test_update_write_failure_is_raised_not_counted_as_fetch_failures(self):
+        """写库失败（只增不减守卫、磁盘满）不能被当成"这只票抓取失败"吞掉、每只票重试一次写。"""
+        md.ingest([rec(f"6000{i:02d}", [("2024-01-02", 1, 2, 0.5, 1.5)])
+                   for i in range(8)])
+        real = (md._fetch_range, md._ping, md.ingest)
+        md._ping = lambda: None
+        md._fetch_range = self._bar_fetch
+        calls = []
+
+        def broken(*a, **k):
+            calls.append(1)
+            raise RuntimeError("写入后分区变小：2024 行 1,429→1,000")
+
+        md.ingest = broken
+        try:
+            with self.assertRaises(RuntimeError):
+                md.update(end="2024-01-03", workers=2, quiet=True, flush_every=2)
+        finally:
+            md._fetch_range, md._ping, md.ingest = real
+        self.assertEqual(len(calls), 1)
+
+    def test_update_snapshots_once_per_run_and_keeps_meta_across_batches(self):
+        md.ingest([rec(f"6000{i:02d}", [("2024-01-02", 1, 2, 0.5, 1.5)])
+                   for i in range(7)])
+        n0 = len(md.list_snapshots())
+        real_fetch, real_ping = md._fetch_range, md._ping
+        md._ping = lambda: None
+        md._fetch_range = self._bar_fetch
+        try:
+            out = md.update(end="2024-01-03", workers=3, quiet=True, flush_every=2)
+        finally:
+            md._fetch_range, md._ping = real_fetch, real_ping
+        self.assertEqual(len(md.list_snapshots()), n0 + 1)
+        self.assertEqual(out["new_bars"], 7)
+        self.assertEqual(out["empty"], 0)
+        st = md._read_meta()["stocks"]
+        for c, v in st.items():
+            self.assertEqual(v["last"], "2024-01-03", c)
+            self.assertAlmostEqual(v["last_close"], 1.6, places=5)
+
     def test_pending_list_runs_first(self):
         """没补上的票必须排最前，否则每天从 000001 重排、在同一段再撞一次限流。"""
         md.ingest([rec(f"6000{i:02d}", [("2024-01-02", 1, 2, 0.5, 1.5)])

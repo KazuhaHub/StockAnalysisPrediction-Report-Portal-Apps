@@ -200,7 +200,9 @@ calendar and publish HTML to nginx.
 Exit codes: the pipeline's own non-zero code, passed through; 2 usage; 91
 output missing; 92 output not written by this run; 93 environment (the
 `/opt/daily-tasks` link, or the data server's port is taken or it did not
-start). The data server logs to `/data/work/stock_server/server.log`.
+start); 94 store incomplete (quant and sentiment refuse while the store's
+latest day has fewer than 97% of the stocks of the busiest of the five days
+before it, so the page keeps the last complete result). The data server logs to `/data/work/stock_server/server.log`.
 
 Deployment constraint: one `/data` has one runner. Clearing stale locks
 assumes no other container or hand-run pipeline script writes the same work

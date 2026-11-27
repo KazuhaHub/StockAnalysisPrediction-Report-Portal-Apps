@@ -45,6 +45,7 @@ HISTORY_FORMAT = "market-monitor.history/1"
 EXIT_OUTPUT_MISSING = 91
 EXIT_NOT_REFRESHED = 92
 EXIT_ENVIRONMENT = 93
+EXIT_STORE_INCOMPLETE = 94
 HERE = os.path.dirname(os.path.abspath(__file__))
 PREFIX_LINK = "/opt/daily-tasks"
 SITE_DIR = os.path.join(HERE, "pysite")
@@ -641,6 +642,56 @@ def publish(job, work, out_dir, exit_code=0, started=None):
     return 0
 
 
+# Jobs that compute straight from the store's latest day. Panorama checks the
+# store itself (check_freshness.py); margin falls back to other bar sources.
+STORE_READERS = ("quant", "sentiment")
+# The store's latest day must carry about as many stocks as the busiest of the
+# days before it. A complete day moves by a few dozen stocks (suspensions,
+# listings). 2026-11-26 had 1,196 against 5,144 the day before after the night's
+# update stopped early, and quant published from it. Since the update now saves
+# as it goes, a run killed late leaves a day at 80-90%, so a fixed share of the
+# store (panorama's 60%) would let it through: compare with recent days instead.
+STORE_MIN_VS_RECENT = 0.97
+STORE_RECENT_DAYS = 5
+
+
+def store_day_counts(md_home):
+    """{day: stocks with a bar} for the newest partition's days, oldest first.
+    Days are read as text and kept to the partition's own year."""
+    import pyarrow as pa
+    import pyarrow.compute as pc
+    import pyarrow.parquet as pq
+
+    bars = os.path.join(md_home, "bars")
+    parts = sorted(n for n in os.listdir(bars) if len(n) == 12 and n[:4].isdigit() and n.endswith(".parquet"))
+    year = parts[-1][:4]
+    t = pq.read_table(os.path.join(bars, parts[-1]), columns=["code", "date"])
+    day = pc.utf8_slice_codeunits(pc.cast(t["date"], pa.string()), 0, 10)
+    t = pa.table({"code": t["code"], "day": day}).filter(pc.starts_with(day, year))
+    g = t.group_by("day").aggregate([("code", "count_distinct")])
+    return dict(sorted(zip(g["day"].to_pylist(), g["code_count_distinct"].to_pylist())))
+
+
+def incomplete_store(job, work):
+    """Why the job must not run on the store as it is, or None. An unreadable
+    store, or one too young to compare, is left for the job itself to report."""
+    if job not in STORE_READERS:
+        return None
+    try:
+        counts = store_day_counts(os.path.join(work, "MarketData"))
+    except Exception:  # noqa: BLE001
+        return None
+    days = list(counts)
+    if len(days) < 2:
+        return None
+    last, n = days[-1], counts[days[-1]]
+    recent = max(counts[d] for d in days[-1 - STORE_RECENT_DAYS:-1])
+    if n >= STORE_MIN_VS_RECENT * recent:
+        return None
+    return (f"store incomplete: {last} has bars for {n} stocks against {recent} on recent days "
+            f"({n / recent:.0%}); the night's update did not finish, so the last complete result stays")
+
+
 def run(job, src, data_dir, out_dir, prefix_link=PREFIX_LINK):
     work = os.path.join(data_dir, "work")
     os.makedirs(work, exist_ok=True)
@@ -650,6 +701,10 @@ def run(job, src, data_dir, out_dir, prefix_link=PREFIX_LINK):
     prepare_work(src, work)
     report_unsafe(data_dir)
     clear_stale_locks(work)
+    reason = incomplete_store(job, work)
+    if reason:
+        print(f"[mm_job] {job}: {reason}", file=sys.stderr)
+        return EXIT_STORE_INCOMPLETE
     cwd, command, _, needs_server = JOBS[job]
     command = [part.format(py=sys.executable) for part in command]
     env = job_env(work)
