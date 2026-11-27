@@ -180,6 +180,18 @@
         "repository": "ghcr.io/kazuhahub/portal-apps/kazuha-hub-market-monitor",
         "digest": "sha256:4be7bccbba7432fbf0850d77d3b56be9350551f6634c3a0519e39ba59e82e1a2"
       }
+    },
+    {
+      "app_id": "kazuha-hub-market-monitor",
+      "publisher_id": "kazuha-hub",
+      "version": "0.1.0-beta.16",
+      "descriptor_sha256": "0dc35d0830775e90a1dc82b00be61ed29456ce80148c6a13f0cd45e839bceac3",
+      "descriptor_url": "https://raw.githubusercontent.com/KazuhaHub/StockAnalysisPrediction-Report-Portal-Apps/e3f02c789bd4ac92418f9dda39b85b806086de72/packages/kazuha-hub-market-monitor/0.1.0-beta.16/descriptor.json",
+      "signature_url": "https://raw.githubusercontent.com/KazuhaHub/StockAnalysisPrediction-Report-Portal-Apps/e3f02c789bd4ac92418f9dda39b85b806086de72/packages/kazuha-hub-market-monitor/0.1.0-beta.16/descriptor.sig",
+      "package_oci": {
+        "repository": "ghcr.io/kazuhahub/portal-apps/kazuha-hub-market-monitor",
+        "digest": "sha256:d267585dbdfb691dcafc4c20a4626968df67df4c234998f510d6ee70e1c0d1c6"
+      }
     }
   ]
 }
