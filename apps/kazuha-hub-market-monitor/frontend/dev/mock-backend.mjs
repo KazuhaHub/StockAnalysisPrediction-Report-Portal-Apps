@@ -139,31 +139,81 @@ export function parseRowQuery(params, module = "margin") {
   return out;
 }
 
-const SAMPLE_RUNS = [
-  ["margin", "succeeded", "schedule"],
-  ["etf", "succeeded", "schedule"],
-  ["panorama", "failed", "manual"],
-  ["sentiment", "running", "schedule"],
-  ["marketdata", "queued", "platform"],
-].map(([job, status, source], i) => ({
-  id: `sample-${i}`,
-  job,
-  source,
-  status,
-  attempt: 1,
-  queued_at: new Date(Date.now() - (i + 1) * 3_600_000).toISOString(),
-  started_at:
-    status === "queued"
-      ? undefined
-      : new Date(Date.now() - (i + 1) * 3_500_000).toISOString(),
-  finished_at:
-    status === "succeeded" || status === "failed"
-      ? new Date(Date.now() - i * 3_000_000).toISOString()
-      : undefined,
-  exit_code: status === "failed" ? 1 : 0,
-  error: status === "failed" ? "exit_status" : undefined,
-  installed: status === "succeeded" ? [`${job}/2026-11-20`] : undefined,
-}));
+// Sample runs as the Go service reports them (service/progress.go): the
+// marketdata run advances with the clock and, for 40 s of every 3 minutes,
+// waits for its data source, so the demo shows the progress bar moving.
+const DEMO_START = Date.now();
+const iso = (ms) => new Date(ms).toISOString();
+const MIN = 60_000;
+const sampleRuns = (now = Date.now()) => {
+  const mdStart = DEMO_START - 40 * MIN;
+  const elapsed = (now - mdStart) / 1000;
+  const total = 4393;
+  const done = Math.min(total, Math.floor(elapsed * 0.5));
+  const cycle = Math.floor((now - DEMO_START) / 1000) % 180;
+  const waiting = cycle >= 140 ? iso(now + (180 - cycle) * 1000) : undefined;
+  const done_at = (min) => iso(DEMO_START - min * MIN);
+  const run = (id, job, source, status, extra) => ({
+    id,
+    job,
+    source,
+    status,
+    attempt: 1,
+    exit_code: 0,
+    ...extra,
+  });
+  return [
+    run("sample-quant", "quant", "schedule", "queued", {
+      queued_at: done_at(5),
+    }),
+    run("sample-marketdata", "marketdata", "manual", "running", {
+      queued_at: iso(mdStart),
+      started_at: iso(mdStart),
+      progress: { done, total, waiting_until: waiting },
+    }),
+    run("sample-sentiment", "sentiment", "manual", "failed", {
+      queued_at: done_at(70),
+      started_at: done_at(70),
+      finished_at: done_at(69),
+      exit_code: 1,
+      error: "exit_status",
+      reason: "out_of_memory",
+      reason_detail:
+        "面板重建失败：sentiment_build.py 被信号 9 终止（多半是内存超限被 OOM 杀掉）",
+    }),
+    run("sample-margin", "margin", "schedule", "failed", {
+      queued_at: done_at(220),
+      started_at: done_at(220),
+      finished_at: done_at(218),
+      exit_code: 1,
+      error: "exit_status",
+      reason: "quality_gate",
+      reason_detail:
+        "质量闸门 A 中止：基准日行情覆盖 2879 只 < 前一日 3723 只的 98%，疑似抓数残缺",
+    }),
+    run("sample-panorama", "panorama", "schedule", "succeeded", {
+      queued_at: done_at(300),
+      started_at: done_at(300),
+      finished_at: done_at(296),
+      installed: ["panorama/2026-11-26"],
+    }),
+    run("sample-etf", "etf", "schedule", "succeeded", {
+      queued_at: done_at(400),
+      started_at: done_at(400),
+      finished_at: done_at(399),
+      installed: ["etf/2026-11-26"],
+    }),
+  ];
+};
+// Median of recent successful runs, as the service reports it.
+const SAMPLE_TYPICAL = {
+  etf: 70,
+  margin: 150,
+  marketdata: 9000,
+  panorama: 240,
+  quant: 420,
+  sentiment: 720,
+};
 
 const WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
 const DAY_AFTER = ["Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -177,10 +227,19 @@ const slot = (days, hour, minute = 0, fallback = false) => ({
 const SAMPLE_JOBS = {
   etf: [slot(DAY_AFTER, 8)],
   margin: [slot(WEEKDAYS, 9), slot(WEEKDAYS, 9, 50, true)],
-  marketdata: [slot(WEEKDAYS, 21), slot(WEEKDAYS, 23, 30, true)],
-  panorama: [slot(DAY_AFTER, 0, 50)],
-  quant: [slot(DAY_AFTER, 1), slot(DAY_AFTER, 3, 0, true)],
-  sentiment: [slot(DAY_AFTER, 0, 40)],
+  marketdata: [
+    slot(WEEKDAYS, 21),
+    slot(WEEKDAYS, 23, 30, true),
+    slot(DAY_AFTER, 2, 0, true),
+    slot(DAY_AFTER, 5, 0, true),
+  ],
+  panorama: [slot(DAY_AFTER, 0, 50), slot(DAY_AFTER, 6, 10, true)],
+  quant: [
+    slot(DAY_AFTER, 1),
+    slot(DAY_AFTER, 3, 0, true),
+    slot(DAY_AFTER, 6, 30, true),
+  ],
+  sentiment: [slot(DAY_AFTER, 0, 40), slot(DAY_AFTER, 6, 0, true)],
 };
 
 const DAY_NAMES = [
@@ -263,7 +322,7 @@ export function createMockBackend(dir) {
           exit_code: 0,
           ...run,
         }))
-      : SAMPLE_RUNS;
+      : sampleRuns();
     return [...manual.values()].reverse().concat(indexed);
   };
 
@@ -279,6 +338,7 @@ export function createMockBackend(dir) {
           schedule,
           next_run: nextRun(schedule),
           last_run: runs.find((run) => run.job === name) ?? null,
+          typical_seconds: SAMPLE_TYPICAL[name],
         })),
       });
     }

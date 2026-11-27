@@ -5,6 +5,8 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { expect, test, vi } from "vitest";
 import { mount, ok, type Handler, type Request } from "./harness";
 import { backend } from "./fixtures";
@@ -493,4 +495,285 @@ test("the dev mock serves admin routes only to the admin view and runs once per 
     404,
   );
   expect(handle("/v1/runs", "GET", "", true).status).toBe(404);
+});
+
+function jobsWith(name: string, last: unknown, typical?: number) {
+  return {
+    time_zone: "Asia/Shanghai",
+    jobs: [
+      {
+        name,
+        schedule: [],
+        last_run: last,
+        ...(typical ? { typical_seconds: typical } : {}),
+      },
+    ],
+  };
+}
+
+function liveBackend(
+  jobsBody: () => unknown,
+  runs: () => unknown[],
+): { handler: Handler; count: () => number } {
+  let n = 0;
+  const base = adminBackend();
+  return {
+    count: () => n,
+    handler: (path, params, request) => {
+      if (path === "/v1/admin/jobs") {
+        n++;
+        return ok(jobsBody());
+      }
+      if (path === "/v1/admin/runs") return ok({ runs: runs() });
+      return base(path, params, request);
+    },
+  };
+}
+
+const NOW = Date.parse("2026-11-27T02:29:05Z");
+
+test("a counting run shows a progress bar, the count and the time left", async () => {
+  vi.useFakeTimers({ shouldAdvanceTime: true, now: NOW });
+  try {
+    const live = run({
+      id: "run-md",
+      job: "marketdata",
+      status: "running",
+      started_at: "2026-11-27T01:49:05Z", // 40 minutes before NOW
+      finished_at: undefined,
+      installed: undefined,
+      progress: { done: 1200, total: 4800 },
+    });
+    const { handler } = liveBackend(
+      () => jobsWith("marketdata", live),
+      () => [live],
+    );
+    await mount(handler, admin);
+    const bar = await screen.findByRole("progressbar", {
+      name: "marketdata progress",
+    });
+    expect(bar.getAttribute("aria-valuenow")).toBe("25");
+    const row = bar.closest(".mm-admin-job") as HTMLElement;
+    expect(within(row).getByText("1,200 of 4,800 done")).toBeTruthy();
+    expect(within(row).getByText("Running for 40 min")).toBeTruthy();
+    // 40 minutes for a quarter: two hours to go.
+    expect(within(row).getByText("About 2 h 0 min left")).toBeTruthy();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test("a run without counts is measured against its usual duration", async () => {
+  vi.useFakeTimers({ shouldAdvanceTime: true, now: NOW });
+  try {
+    const live = run({
+      id: "run-s",
+      job: "sentiment",
+      status: "running",
+      started_at: "2026-11-27T02:26:05Z", // 3 minutes
+      finished_at: undefined,
+    });
+    const { handler } = liveBackend(
+      () => jobsWith("sentiment", live, 12 * 60),
+      () => [live],
+    );
+    await mount(handler, admin);
+    const bar = await screen.findByRole("progressbar", {
+      name: "sentiment progress",
+    });
+    expect(bar.getAttribute("aria-valuenow")).toBe("25");
+    const row = bar.closest(".mm-admin-job") as HTMLElement;
+    expect(within(row).getByText("Usually takes 12 min")).toBeTruthy();
+    expect(within(row).getByText("About 9 min left")).toBeTruthy();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test("a run past its usual duration says so instead of a negative estimate", async () => {
+  vi.useFakeTimers({ shouldAdvanceTime: true, now: NOW });
+  try {
+    const live = run({
+      id: "run-s",
+      job: "sentiment",
+      status: "running",
+      started_at: "2026-11-27T02:09:05Z", // 20 minutes
+      finished_at: undefined,
+    });
+    const { handler } = liveBackend(
+      () => jobsWith("sentiment", live, 12 * 60),
+      () => [live],
+    );
+    await mount(handler, admin);
+    expect(await screen.findByText(enUS.admin_overTypical)).toBeTruthy();
+    expect(screen.queryByText(/left$/)).toBeNull();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test("a run waiting for its data source counts down to the retry", async () => {
+  vi.useFakeTimers({ shouldAdvanceTime: true, now: NOW });
+  try {
+    const live = run({
+      id: "run-md",
+      job: "marketdata",
+      status: "running",
+      started_at: "2026-11-27T01:49:05Z",
+      finished_at: undefined,
+      progress: {
+        done: 800,
+        total: 4800,
+        waiting_until: "2026-11-27T02:30:05Z",
+      },
+    });
+    const { handler } = liveBackend(
+      () => jobsWith("marketdata", live),
+      () => [live],
+    );
+    await mount(handler, admin);
+    expect(
+      await screen.findByText("Data source unavailable, retrying in 1 min"),
+    ).toBeTruthy();
+    await vi.advanceTimersByTimeAsync(31_000);
+    expect(
+      await screen.findByText("Data source unavailable, retrying in 29 s"),
+    ).toBeTruthy();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test("a failed run shows its reason in words and the log line behind it", async () => {
+  const failed = run({
+    id: "run-oom",
+    job: "sentiment",
+    status: "failed",
+    exit_code: 1,
+    error: "exit_status",
+    installed: undefined,
+    reason: "out_of_memory",
+    reason_detail: "面板重建失败：sentiment_build.py 被信号 9 终止",
+  });
+  const { handler } = liveBackend(
+    () => jobsWith("sentiment", failed),
+    () => [failed],
+  );
+  await mount(handler, admin);
+  const row = (await screen.findByRole("list", { name: "sentiment" })).closest(
+    ".mm-admin-job",
+  ) as HTMLElement;
+  expect(within(row).getByText(enUS.reason_out_of_memory)).toBeTruthy();
+  expect(
+    within(row).getByText("面板重建失败：sentiment_build.py 被信号 9 终止"),
+  ).toBeTruthy();
+  expect(within(row).queryByText("exit_status")).toBeNull();
+  const history = document.querySelector(".mm-admin-runs") as HTMLElement;
+  expect(within(history).getByText(enUS.reason_out_of_memory)).toBeTruthy();
+});
+
+test("the page refreshes itself while a run is active and stops once none is", async () => {
+  vi.useFakeTimers({ shouldAdvanceTime: true, now: NOW });
+  try {
+    let status = "running";
+    const current = () =>
+      run({
+        id: "run-s",
+        job: "sentiment",
+        status,
+        started_at: "2026-11-27T02:26:05Z",
+        finished_at: status === "running" ? undefined : "2026-11-27T02:30:00Z",
+      });
+    const live = liveBackend(
+      () => jobsWith("sentiment", current(), 600),
+      () => [current()],
+    );
+    await mount(live.handler, admin);
+    await screen.findByRole("progressbar", { name: "sentiment progress" });
+    const first = live.count();
+    status = "succeeded";
+    await vi.advanceTimersByTimeAsync(15_000);
+    await waitFor(() => expect(live.count()).toBe(first + 1));
+    await waitFor(() => expect(screen.queryByRole("progressbar")).toBeNull());
+    await vi.advanceTimersByTimeAsync(45_000);
+    expect(live.count()).toBe(first + 1);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test("every failure reason has words in every language", () => {
+  const reasons = [
+    "timeout",
+    "interrupted",
+    "out_of_memory",
+    "store_incomplete",
+    "quality_gate",
+    "source_unavailable",
+    "output_missing",
+    "not_refreshed",
+    "environment",
+    "output_invalid",
+    "service_error",
+    "unknown",
+  ];
+  for (const copy of [enUS, zhCN, zhTW] as Record<string, string>[])
+    for (const r of reasons) expect(copy[`reason_${r}`], r).toBeTruthy();
+});
+
+test("the running status icon spins, except with reduced motion", async () => {
+  const live = run({ status: "running", finished_at: undefined });
+  const { handler } = liveBackend(
+    () => jobsWith("margin", live),
+    () => [live],
+  );
+  await mount(handler, admin);
+  const tags = await screen.findAllByText("Running");
+  for (const tag of tags)
+    expect(
+      (tag.closest(".ant-tag") as HTMLElement).querySelector("svg.mm-spin"),
+    ).not.toBeNull();
+  const css = readFileSync(
+    resolve(import.meta.dirname, "../src/style.css"),
+    "utf8",
+  );
+  expect(css).toMatch(/\.mm-spin\s*\{[^}]*animation:[^}]*mm-spin/);
+  expect(css).toMatch(
+    /@media \(prefers-reduced-motion: reduce\)\s*\{[^@]*\.mm-spin\s*\{\s*animation:\s*none/,
+  );
+});
+
+test("one failed refresh keeps the page and its live refresh going", async () => {
+  vi.useFakeTimers({ shouldAdvanceTime: true, now: NOW });
+  try {
+    let n = 0;
+    const live = run({
+      id: "run-s",
+      job: "sentiment",
+      status: "running",
+      started_at: "2026-11-27T02:26:05Z",
+      finished_at: undefined,
+    });
+    const base = adminBackend();
+    const handler: Handler = (path, params, request) => {
+      if (path === "/v1/admin/jobs")
+        return ++n === 2
+          ? { status: 409, body: { error: "unavailable" } }
+          : ok(jobsWith("sentiment", live, 600));
+      if (path === "/v1/admin/runs") return ok({ runs: [live] });
+      return base(path, params, request);
+    };
+    await mount(handler, admin);
+    await screen.findByRole("progressbar", { name: "sentiment progress" });
+    await vi.advanceTimersByTimeAsync(15_000);
+    await waitFor(() => expect(n).toBe(2));
+    expect(screen.queryByText(enUS.admin_loadFailed)).toBeNull();
+    expect(
+      screen.getByRole("progressbar", { name: "sentiment progress" }),
+    ).toBeTruthy();
+    await vi.advanceTimersByTimeAsync(15_000);
+    await waitFor(() => expect(n).toBe(3));
+  } finally {
+    vi.useRealTimers();
+  }
 });

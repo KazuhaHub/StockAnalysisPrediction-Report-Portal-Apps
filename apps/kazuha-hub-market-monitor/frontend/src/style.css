@@ -178,6 +178,39 @@
   gap: 4px 12px;
 }
 
+.mm-admin-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 8px;
+  max-width: 560px;
+}
+
+.mm-admin-progress .ant-progress {
+  margin: 0;
+}
+
+.mm-admin-waiting {
+  margin-top: 4px;
+}
+
+.mm-admin-reason {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 6px;
+  min-width: 0;
+}
+
+.mm-admin-reason-words {
+  color: var(--ant-color-error-text, #cf1322);
+}
+
+.mm-admin-reason-detail {
+  font-size: 12px;
+  opacity: 0.85;
+}
+
 .mm-admin-detail {
   min-width: 0;
 }
@@ -826,5 +859,24 @@
 @media (prefers-reduced-motion: reduce) {
   .mm-scroll-row {
     scroll-behavior: auto;
+  }
+}
+
+/* The running status icon turns, like antd's own spinners; still when the
+   viewer asks for reduced motion. */
+.mm-spin {
+  animation: mm-spin 1s linear infinite;
+  transform-origin: 50% 50%;
+}
+
+@keyframes mm-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mm-spin {
+    animation: none;
   }
 }
