@@ -929,6 +929,52 @@ def _write_pending(lag: dict) -> None:
 FLUSH_EVERY = 1000
 
 
+# 数据源中断时的等待节奏（秒）：先快后慢，最后按 5 分钟一轮一直等，直到恢复或时间用完。
+# 一次短暂抖动几秒就接上；2026-11-26 那种隧道断开重连（约 10 分钟）也能在当晚续上。
+RETRY_BACKOFF = (5, 10, 30, 60, 120, 300)
+# update 自己的时间预算，比服务给 marketdata 的上限（6 小时）留出写库和收尾的余量。
+# 剩余时间不够再等一轮就收工，把剩下的交给下一个补跑时段，而不是等到被强制结束。
+UPDATE_BUDGET_S = 5 * 3600          # 6 小时上限里还要留 update.sh 等锁（≤15 分钟）和收尾 check
+_sleep = time.sleep
+_now = time.time
+
+
+def _update_budget() -> float:
+    try:
+        return float(os.environ.get("MD_UPDATE_BUDGET_S") or UPDATE_BUDGET_S)
+    except ValueError:
+        return UPDATE_BUDGET_S
+
+
+def _wait_for_source(probe: tuple, deadline: float, quiet: bool, level: int = 0) -> int | None:
+    """按 RETRY_BACKOFF 等数据源恢复，用探针票试，从第 `level` 档开始。
+    恢复时返回下一次该从哪一档等起；下一次等待会越过 deadline 时返回 None。"""
+    code, s, e = probe
+    i = level
+    try:
+        max_waits = int(os.environ.get("MD_UPDATE_MAX_WAITS") or -1)   # 测试用：0 = 不等
+    except ValueError:
+        max_waits = -1
+    tries = 0
+    while True:
+        wait = RETRY_BACKOFF[min(i, len(RETRY_BACKOFF) - 1)]
+        if _now() + wait > deadline or 0 <= max_waits <= tries:
+            return None
+        tries += 1
+        print(f"⏸ 数据源不可用，{wait}s 后重试（第 {i + 1} 次）", flush=True)
+        _sleep(wait)
+        try:
+            _fetch_range(code, s, e)
+        except Exception as err:                             # noqa: BLE001
+            _log({"kind": "update_wait", "probe": code, "attempt": i + 1,
+                  "reason": repr(err)[:160]})
+            i += 1
+            continue
+        print(f"▶ 数据源已恢复（等待 {i + 1} 次），继续", flush=True)
+        _log({"kind": "update_resume", "probe": code, "attempts": i + 1})
+        return i + 1
+
+
 def _flush(got: dict, quiet: bool, snap: bool = True) -> int:
     """把攒下的这批写进库，并记下每只票的最后收盘价（下次跳空检查用）。返回新增行数。"""
     if not got:
@@ -985,96 +1031,140 @@ def update(codes=None, workers: int = 6, end: str | None = None,
                 "fail": [], "unsupported": [], "aborted": None}
 
     _ping()
-    got, fail, warn, unsupported = {}, [], [], []
+    got, fail_by, warn, unsupported = {}, {}, [], []
     ok_codes = set()                 # 这次明确抓取成功的票（含停牌返回空的）
     n_with_bars, new_bars = 0, 0     # 跨批累计：got 每写一批就清空
     n_flush = 0                      # 只有第一批写入前拍快照
     n_fetch_ok = 0
     t_begin = dt.datetime.now()
     t0 = time.time()
+    deadline = _now() + _update_budget()
+    retries = 0
+    level = 0                        # 等待从哪一档开始：探针好了、可一轮下来一只都没抓到时不回到 5 秒
 
     # 探针：整源不可用时（源端报错、被限流），别把 1500 只票逐个试一遍。
     # 实测一次全量"逐个失败"能烧掉几小时，而库里数据其实一根都没变。
     # 探针必须是通道取得到的票（_pick_probe），否则一只北交所代码就能让整轮中止。
-    rest = list(plan)
+    # 探针失败不再立刻收工：按 RETRY_BACKOFF 等数据源恢复（2026-11-26 隧道断了约
+    # 10 分钟就重连了），等不到、或剩余时间不够再等一轮，才收工交给下一个补跑时段。
     pi = _pick_probe(plan)
-    if pi is not None:
-        c0, s0, e0 = rest.pop(pi)
+    probe = plan[pi] if pi is not None else None
+    if probe is not None:
+        c0, s0, e0 = probe
         try:
             r0 = _fetch_range(c0, s0, e0)
         except Exception as e:                               # noqa: BLE001
             thr = _is_throttle(e)
             _log({"kind": "update_abort", "probe": c0, "reason": repr(e)[:160],
                   "throttled": thr, "n_targets": len(plan)})
-            if thr:
-                raise SystemExit(
-                    f"服务端持续限流（{c0} 重试 {_THROTTLE_RETRIES} 次仍被拒），本次更新已中止；"
-                    f"库里数据未改动。\n当前请求间隔已放到 {_PACE['gap']:.1f} 秒。"
-                    "稍后重试，或降并发：python3 market_data.py update --workers 2") from None
-            raise SystemExit(f"数据源不可用（{str(e)[:120]}），本次更新已中止；库里数据未改动。"
-                             "\n稍后重试：python3 market_data.py update") from None
-        n_fetch_ok += 1
-        ok_codes.add(c0)
-        n_with_bars += _collect(c0, r0, st, got, warn)
-
-    streak, thr_streak, max_streak = 0, 0, max(6, workers * 3)
-    aborted = None
-    with ThreadPoolExecutor(max_workers=workers) as ex:
-        futs = {ex.submit(_fetch_range, c, s, e): (c, s) for c, s, e in rest}
-        for n, fu in enumerate(as_completed(futs), 1):
-            c, s = futs[fu]
-            try:
-                r = fu.result()
-                n_fetch_ok += 1
-                ok_codes.add(c)
-                streak = thr_streak = 0
-                n_with_bars += _collect(c, r, st, got, warn)
-            except Exception as e:                           # noqa: BLE001
-                if _channel_unsupported(c, e):
-                    # 通道不支持这只票：既不是失败也不进待补清单（否则每晚排最前、
-                    # 永远补不上），更不能算进熔断——它说明不了源端状态。
-                    unsupported.append(c)
-                    continue
-                thr = _is_throttle(e)
-                fail.append({"code": c, "err": repr(e)[:120], "throttle": thr})
+            level = _wait_for_source(probe, deadline, quiet)
+            if level is None:
                 if thr:
-                    # 限流有明确原因、也会自己恢复，不能当"源端故障"熔断——那正是
-                    # 连续四晚在 0005xx 收工的机制。但连续这么多只重试后仍被拒，
-                    # 说明当晚配额确实用完了，收工并把清单留给明天。
-                    streak = 0
-                    thr_streak += 1
-                    if thr_streak >= max_streak * 2:
-                        aborted = "throttled"
-                        for f in futs:
-                            f.cancel()
-                        print(f"⚠ 连续 {thr_streak} 只重试 {_THROTTLE_RETRIES} 次后仍被限流，"
-                              f"当晚配额已尽，收工（已处理 {n}/{len(rest)}）")
-                        break
-                else:
-                    thr_streak = 0
-                    streak += 1
-                    if streak >= max_streak:
-                        aborted = "source"
-                        for f in futs:
-                            f.cancel()
-                        print(f"⚠ 连续 {streak} 只失败，判定为源端故障，提前收工"
-                              f"（已处理 {n}/{len(rest)}）")
-                        break
-            if len(got) >= flush_every:
-                # 写库在 try 之外：写入失败（只增不减守卫、磁盘满）不是"这只票抓取失败"，
-                # 不能混进熔断计数、更不能每抓一只就重试一次写。停掉剩下的抓取，原样抛出。
-                try:
-                    new_bars += _flush(got, quiet, snap=n_flush == 0)
-                    n_flush += 1
-                except BaseException:
+                    raise SystemExit(
+                        f"服务端持续限流（{c0} 重试 {_THROTTLE_RETRIES} 次仍被拒），本次更新已中止；"
+                        f"库里数据未改动。\n当前请求间隔已放到 {_PACE['gap']:.1f} 秒。"
+                        "稍后重试，或降并发：python3 market_data.py update --workers 2") from None
+                raise SystemExit(f"数据源不可用（{str(e)[:120]}），本次更新已中止；库里数据未改动。"
+                                 "\n稍后重试：python3 market_data.py update") from None
+            retries += 1
+        else:
+            n_fetch_ok += 1
+            ok_codes.add(c0)
+            n_with_bars += _collect(c0, r0, st, got, warn)
+
+    max_streak = max(6, workers * 3)
+    unsupported_set: set = set()
+    while True:
+        ok_before = n_fetch_ok
+        rest = [p for p in plan if p[0] not in ok_codes and p[0] not in unsupported_set]
+        streak, thr_streak, aborted = 0, 0, None
+        with ThreadPoolExecutor(max_workers=workers) as ex:
+            futs = {ex.submit(_fetch_range, c, s, e): (c, s) for c, s, e in rest}
+            for n, fu in enumerate(as_completed(futs), 1):
+                c, s = futs[fu]
+                if _now() > deadline:
+                    # 时间预算用完：不再取新的，已取到的落盘后收工，别等到被强制结束。
+                    aborted = "deadline"
                     for f in futs:
                         f.cancel()
-                    raise
-            if not quiet and n % 200 == 0:
-                print(f"  {n}/{len(rest)} … {time.time()-t0:.0f}s", flush=True)
+                    print(f"⚠ 时间预算用完，停止抓取（已处理 {n}/{len(rest)}），剩下的交给下一个补跑时段",
+                          flush=True)
+                    break
+                try:
+                    r = fu.result()
+                    n_fetch_ok += 1
+                    ok_codes.add(c)
+                    fail_by.pop(c, None)
+                    streak = thr_streak = 0
+                    n_with_bars += _collect(c, r, st, got, warn)
+                except Exception as e:                       # noqa: BLE001
+                    if _channel_unsupported(c, e):
+                        # 通道不支持这只票：既不是失败也不进待补清单（否则每晚排最前、
+                        # 永远补不上），更不能算进熔断——它说明不了源端状态。
+                        if c not in unsupported_set:
+                            unsupported_set.add(c)
+                            unsupported.append(c)
+                        continue
+                    thr = _is_throttle(e)
+                    fail_by[c] = {"code": c, "err": repr(e)[:120], "throttle": thr}
+                    if thr:
+                        # 限流有明确原因、也会自己恢复，不能当"源端故障"熔断——那正是
+                        # 连续四晚在 0005xx 收工的机制。但连续这么多只重试后仍被拒，
+                        # 说明配额确实用完了：停下来退避等待，再不行才收工。
+                        streak = 0
+                        thr_streak += 1
+                        if thr_streak >= max_streak * 2:
+                            aborted = "throttled"
+                            for f in futs:
+                                f.cancel()
+                            print(f"⚠ 连续 {thr_streak} 只重试 {_THROTTLE_RETRIES} 次后仍被限流"
+                                  f"（已处理 {n}/{len(rest)}）", flush=True)
+                            break
+                    else:
+                        thr_streak = 0
+                        streak += 1
+                        if streak >= max_streak:
+                            aborted = "source"
+                            for f in futs:
+                                f.cancel()
+                            print(f"⚠ 连续 {streak} 只失败，判定为源端故障"
+                                  f"（已处理 {n}/{len(rest)}）", flush=True)
+                            break
+                if len(got) >= flush_every:
+                    # 写库在 try 之外：写入失败（只增不减守卫、磁盘满）不是"这只票抓取失败"，
+                    # 不能混进熔断计数、更不能每抓一只就重试一次写。停掉剩下的抓取，原样抛出。
+                    try:
+                        new_bars += _flush(got, quiet, snap=n_flush == 0)
+                        n_flush += 1
+                    except BaseException:
+                        for f in futs:
+                            f.cancel()
+                        raise
+                if not quiet and n % 200 == 0:
+                    print(f"  {n}/{len(rest)} … {time.time()-t0:.0f}s", flush=True)
+        if aborted is None:
+            break
+        # 已抓到的先落盘：等待期间被杀也不丢。
+        if got:
+            new_bars += _flush(got, quiet, snap=n_flush == 0)
+            n_flush += 1
+        if aborted == "deadline":
+            break
+        if n_fetch_ok > ok_before and aborted != "throttled":
+            # 这一轮有进展：下次中断重新从 5 秒等起。限流例外：配额将尽时还会漏过几只，
+            # 每次都退回 5 秒就成了整晚高频重试，正是共享服务器上要避免的压力。
+            level = 0
+        nxt = None if probe is None else _wait_for_source(probe, deadline, quiet, level)
+        if nxt is None:
+            print("⚠ 数据源没有恢复、或剩余时间不够再等一轮，提前收工，剩下的交给下一个补跑时段",
+                  flush=True)
+            break
+        level = nxt
+        retries += 1
 
+    fail = list(fail_by.values())
     out = {"n_targets": len(plan), "n_ok": n_fetch_ok, "n_fail": len(fail),
-           "new_bars": 0, "fail": fail, "warn": warn, "aborted": aborted,
+           "new_bars": 0, "fail": fail, "warn": warn, "aborted": aborted, "retries": retries,
            "unsupported": sorted(unsupported),
            "started": t_begin.isoformat(timespec="seconds"),
            "elapsed": round(time.time() - t0, 1),

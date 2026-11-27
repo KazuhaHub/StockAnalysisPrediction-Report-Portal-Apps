@@ -46,7 +46,14 @@ fi
   # 库里 update 默认 end=今天：周六手跑一次，4,276 只票全被判成待更新，每只都去
   # 源端要周末的 K 线、拿回 0 行，实测白烧 2.4 小时额度（2026-11-14 踩到）。
   # 换成最近交易日后，周末/节假日一轮几秒收工；顺带能一次补齐落下的多天。
-  LAST=$("$PY" trading_day.py 2>/dev/null | tail -1)
+  # 18:00 之前（夜里 02:00、05:00 的补跑）今天还没收盘或行情还没出：终点只到昨天
+  # 为止的最近交易日。否则全市场每只都会被排进去要今天的 K 线，白跑三个多小时，
+  # 开盘后还可能把盘中半根 bar 写进库、再也不会重取。
+  UPTO=()
+  if (( 10#$(date +%H) < 18 )); then
+    UPTO=("$(date -d yesterday +%F)")
+  fi
+  LAST=$("$PY" trading_day.py ${UPTO[@]+"${UPTO[@]}"} 2>/dev/null | tail -1)
   if [[ -n "$LAST" ]]; then
     END_ARGS=(--end "$LAST")
     echo "== 终点：最近交易日 $LAST"

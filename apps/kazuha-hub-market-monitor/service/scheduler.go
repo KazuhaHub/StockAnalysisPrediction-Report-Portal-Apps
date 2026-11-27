@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"log"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -47,6 +48,9 @@ import (
 
 const (
 	catchUpWindow = 20 * time.Hour
+	// fallbackLookback is how far back a fallback slot looks for a run of its
+	// job that succeeded or is still going.
+	fallbackLookback = 12 * time.Hour
 	// scheduleZone is the time zone of every slot: exchange time.
 	scheduleZone = "Asia/Shanghai"
 )
@@ -70,8 +74,18 @@ func DefaultSlots() []Slot {
 	return []Slot{
 		{Job: "marketdata", Days: weekdays, Hour: 21},
 		{Job: "marketdata", Days: weekdays, Hour: 23, Minute: 30, Fallback: true},
+		// Further catch-ups through the night: each resumes where the last
+		// run stopped (the update saves as it goes) and runs only if no
+		// marketdata run since the evening succeeded or is still going.
+		{Job: "marketdata", Days: dayAfter, Hour: 2, Fallback: true},
+		{Job: "marketdata", Days: dayAfter, Hour: 5, Fallback: true},
 		{Job: "sentiment", Days: dayAfter, Hour: 0, Minute: 40},
 		{Job: "panorama", Days: dayAfter, Hour: 0, Minute: 50},
+		// The bar readers refuse a half-written store (exit 94, or panorama's
+		// own check); once a late catch-up completes it they run again here,
+		// before the market opens.
+		{Job: "sentiment", Days: dayAfter, Hour: 6, Fallback: true},
+		{Job: "panorama", Days: dayAfter, Hour: 6, Minute: 10, Fallback: true},
 		{Job: "etf", Days: dayAfter, Hour: 8},
 		{Job: "margin", Days: weekdays, Hour: 9},
 		{Job: "margin", Days: weekdays, Hour: 9, Minute: 50, Fallback: true},
@@ -79,6 +93,7 @@ func DefaultSlots() []Slot {
 		// take three hours; the single worker runs it after marketdata anyway.
 		{Job: "quant", Days: dayAfter, Hour: 1},
 		{Job: "quant", Days: dayAfter, Hour: 3, Fallback: true},
+		{Job: "quant", Days: dayAfter, Hour: 6, Minute: 30, Fallback: true},
 	}
 }
 
@@ -162,21 +177,54 @@ func taskID(job string, t time.Time) string {
 // a run of the job queued earlier that day succeeded or is pending, or, when
 // catching up, the job ran at all that day.
 func (s *Scheduler) skipFallback(job string, t time.Time, catchUp bool) bool {
-	day := time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, s.loc)
+	// A fallback backs up every run of the job in the hours before it, not
+	// only the same calendar day: the 02:00 marketdata catch-up backs up the
+	// evening's 21:00 and 23:30 runs.
+	since := t.Add(-fallbackLookback)
+	fresh := s.lastBarsUpdate(job)
+	// A bar update still going at a reader's catch-up: queue the reader, the
+	// single worker runs it once the update is done.
+	if !catchUp && slices.Contains(barConsumers, job) && s.active("marketdata") {
+		return false
+	}
 	for _, run := range s.runner.runsOf(job) {
 		q, ok := s.runTime(run)
-		if !ok || q.Before(day) || !q.Before(t) {
+		if !ok || q.Before(since) || !q.Before(t) {
 			continue
 		}
 		if catchUp {
 			return true
 		}
 		switch run.Status {
-		case "succeeded", "queued", "running":
+		case "queued", "running":
 			return true
+		case "succeeded":
+			// A bar reader that succeeded before the night's last marketdata
+			// update finished computed on the day before: run it again.
+			if started, err := time.Parse(time.RFC3339Nano, run.StartedAt); err != nil || !started.Before(fresh) {
+				return true
+			}
 		}
 	}
 	return false
+}
+
+// lastBarsUpdate is when the latest successful marketdata run finished, for
+// a job that reads the bar store; the zero time otherwise or when none did.
+func (s *Scheduler) lastBarsUpdate(job string) time.Time {
+	var latest time.Time
+	if !slices.Contains(barConsumers, job) {
+		return latest
+	}
+	for _, run := range s.runner.runsOf("marketdata") {
+		if run.Status != "succeeded" {
+			continue
+		}
+		if f, err := time.Parse(time.RFC3339Nano, run.FinishedAt); err == nil && f.After(latest) {
+			latest = f
+		}
+	}
+	return latest
 }
 
 // runTime is when a run counts as having been started: a scheduled run at

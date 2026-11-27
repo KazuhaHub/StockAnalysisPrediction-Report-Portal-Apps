@@ -17,6 +17,7 @@ import unittest
 
 TMP = tempfile.mkdtemp(prefix="market_data_test_")
 os.environ["MARKET_DATA_HOME"] = TMP          # 必须在 import 之前设，模块级常量会读它
+os.environ["MD_UPDATE_MAX_WAITS"] = "0"       # 默认不等数据源恢复：熔断用例照旧立刻收工
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import market_data as md                      # noqa: E402
@@ -524,6 +525,133 @@ class T(unittest.TestCase):
         for c, v in st.items():
             self.assertEqual(v["last"], "2024-01-03", c)
             self.assertAlmostEqual(v["last_close"], 1.6, places=5)
+
+    def _with_clock(self, budget):
+        """假时钟：_sleep 只推进时间不真等，update 的时间预算按它算。"""
+        clock = {"t": 1000.0}
+        slept = []
+        real = (md._sleep, md._now, os.environ.get("MD_UPDATE_BUDGET_S"),
+                os.environ.get("MD_UPDATE_MAX_WAITS"))
+        md._now = lambda: clock["t"]
+
+        def sleep(s):
+            slept.append(s)
+            clock["t"] += s
+
+        md._sleep = sleep
+        os.environ["MD_UPDATE_BUDGET_S"] = str(budget)
+        os.environ["MD_UPDATE_MAX_WAITS"] = "-1"
+
+        def restore():
+            md._sleep, md._now = real[0], real[1]
+            for k, v in (("MD_UPDATE_BUDGET_S", real[2]), ("MD_UPDATE_MAX_WAITS", real[3])):
+                if v is None:
+                    os.environ.pop(k, None)
+                else:
+                    os.environ[k] = v
+
+        self.addCleanup(restore)
+        return slept
+
+    def test_update_waits_with_backoff_and_resumes_when_the_source_returns(self):
+        """2026-11-26：隧道断了约 10 分钟就重连了，可熔断后直接收工、整晚没补完。
+        现在按 5s、10s、30s… 等数据源恢复，恢复后接着补剩下的票。"""
+        md.ingest([rec(f"6000{i:02d}", [("2024-01-02", 1, 2, 0.5, 1.5)])
+                   for i in range(16)])
+        slept = self._with_clock(3600)
+        state = {"down": False, "probes": 0}
+        real_fetch, real_ping = md._fetch_range, md._ping
+        md._ping = lambda: None
+
+        def fake(c, s, e):
+            if c == "600003":
+                state["down"] = True           # 第 4 只起数据源断开
+            if state["down"]:
+                if slept and len(slept) >= 2:  # 第二次等待之后恢复
+                    state["down"] = False
+                else:
+                    raise RuntimeError("数据源报错：connection reset")
+            return self._bar_fetch(c, s, e)
+
+        md._fetch_range = fake
+        try:
+            out = md.update(end="2024-01-03", workers=1, quiet=True)
+        finally:
+            md._fetch_range, md._ping = real_fetch, real_ping
+        self.assertEqual(slept, [5, 10])
+        self.assertIsNone(out["aborted"])
+        self.assertEqual(out["retries"], 1)
+        self.assertEqual(out["n_fail"], 0)
+        st = md._read_meta()["stocks"]
+        self.assertTrue(all(v["last"] == "2024-01-03" for v in st.values()))
+
+    def test_update_gives_up_when_the_next_wait_would_pass_its_budget(self):
+        md.ingest([rec(f"6000{i:02d}", [("2024-01-02", 1, 2, 0.5, 1.5)])
+                   for i in range(16)])
+        slept = self._with_clock(5 + 10 + 30 + 60 + 1)
+        real_fetch, real_ping = md._fetch_range, md._ping
+        md._ping = lambda: None
+
+        def fake(c, s, e):
+            if c in ("600000", "600001"):
+                return self._bar_fetch(c, s, e)
+            raise RuntimeError("数据源报错：connection reset")
+
+        md._fetch_range = fake
+        try:
+            out = md.update(end="2024-01-03", workers=1, quiet=True)
+        finally:
+            md._fetch_range, md._ping = real_fetch, real_ping
+        self.assertEqual(slept, [5, 10, 30, 60])
+        self.assertEqual(out["aborted"], "source")
+        st = md._read_meta()["stocks"]
+        self.assertEqual(st["600001"]["last"], "2024-01-03")   # 等待前抓到的已落盘
+
+    def test_update_stops_fetching_when_its_budget_runs_out_mid_round(self):
+        """评审指出：预算只在等待前检查，一轮补抓可能一直跑到被 6 小时上限强制结束。"""
+        md.ingest([rec(f"6000{i:02d}", [("2024-01-02", 1, 2, 0.5, 1.5)])
+                   for i in range(10)])
+        self._with_clock(100)
+        clock_bump = {"n": 0}
+        real_fetch, real_ping, real_now = md._fetch_range, md._ping, md._now
+        md._ping = lambda: None
+
+        def fake(c, s, e):
+            clock_bump["n"] += 1
+            return self._bar_fetch(c, s, e)
+
+        md._fetch_range = fake
+        base = md._now()
+        md._now = lambda: base + (60 if clock_bump["n"] <= 4 else 200)
+        try:
+            out = md.update(end="2024-01-03", workers=1, quiet=True)
+        finally:
+            md._fetch_range, md._ping, md._now = real_fetch, real_ping, real_now
+        self.assertEqual(out["aborted"], "deadline")
+        st = md._read_meta()["stocks"]
+        done = [c for c, v in st.items() if v["last"] == "2024-01-03"]
+        self.assertTrue(0 < len(done) < 10, done)     # 停下前抓到的已落盘
+
+    def test_update_waits_when_the_probe_fails_at_the_start(self):
+        md.ingest([rec(f"6000{i:02d}", [("2024-01-02", 1, 2, 0.5, 1.5)])
+                   for i in range(3)])
+        slept = self._with_clock(3600)
+        real_fetch, real_ping = md._fetch_range, md._ping
+        md._ping = lambda: None
+
+        def fake(c, s, e):
+            if not slept:
+                raise RuntimeError("数据源报错：connection reset")
+            return self._bar_fetch(c, s, e)
+
+        md._fetch_range = fake
+        try:
+            out = md.update(end="2024-01-03", workers=1, quiet=True)
+        finally:
+            md._fetch_range, md._ping = real_fetch, real_ping
+        self.assertEqual(slept, [5])
+        self.assertIsNone(out["aborted"])
+        self.assertEqual(out["new_bars"], 3)
 
     def test_pending_list_runs_first(self):
         """没补上的票必须排最前，否则每天从 000001 重排、在同一段再撞一次限流。"""
