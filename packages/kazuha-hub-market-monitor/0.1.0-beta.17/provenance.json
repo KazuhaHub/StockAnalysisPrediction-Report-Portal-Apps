@@ -1,0 +1,12 @@
+{
+  "app_id": "kazuha-hub-market-monitor",
+  "version": "0.1.0-beta.17",
+  "commit": "83d4876ab7568dd3946a5619a68cdd63da83d26e",
+  "run_url": "https://github.com/KazuhaHub/StockAnalysisPrediction-Report-Portal-Apps/actions/runs/45949732721",
+  "package_oci": {
+    "repository": "ghcr.io/kazuhahub/portal-apps/kazuha-hub-market-monitor",
+    "digest": "sha256:8bad52a1930820a1d4469a711a50f13c5affb3401b10df3423a19f695fa9d3c4"
+  },
+  "package_sha256": "d0336e6e9607adffbd0d9700dbb66f10a260a5121790cc0a76a419136036a4ff",
+  "notes": "Admin page: progress bar with count, elapsed time and estimate for running jobs, a countdown while the data source is down, failure reasons in plain words with the log line behind them, auto-refresh while jobs run, and a spinning running icon."
+}
