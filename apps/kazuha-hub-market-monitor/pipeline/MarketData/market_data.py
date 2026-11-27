@@ -946,6 +946,14 @@ def _update_budget() -> float:
         return UPDATE_BUDGET_S
 
 
+PROGRESS_EVERY = 100
+
+
+def _progress(done: int, total: int) -> None:
+    """管理页读这一行画进度条（service/progress.go）；quiet 时也打。"""
+    print(f"##progress {min(done, total)}/{total}", flush=True)
+
+
 def _wait_for_source(probe: tuple, deadline: float, quiet: bool, level: int = 0) -> int | None:
     """按 RETRY_BACKOFF 等数据源恢复，用探针票试，从第 `level` 档开始。
     恢复时返回下一次该从哪一档等起；下一次等待会越过 deadline 时返回 None。"""
@@ -962,6 +970,7 @@ def _wait_for_source(probe: tuple, deadline: float, quiet: bool, level: int = 0)
             return None
         tries += 1
         print(f"⏸ 数据源不可用，{wait}s 后重试（第 {i + 1} 次）", flush=True)
+        print(f"##waiting {int(_now() + wait)}", flush=True)
         _sleep(wait)
         try:
             _fetch_range(code, s, e)
@@ -1074,9 +1083,15 @@ def update(codes=None, workers: int = 6, end: str | None = None,
 
     max_streak = max(6, workers * 3)
     unsupported_set: set = set()
+
+    def done_n() -> int:
+        return len(ok_codes) + len(fail_by) + len(unsupported_set)
+
     while True:
         ok_before = n_fetch_ok
         rest = [p for p in plan if p[0] not in ok_codes and p[0] not in unsupported_set]
+        # 每轮开头报一次：等待之后的第一行进度也让管理页不再显示"等待中"。
+        _progress(done_n(), len(plan))
         streak, thr_streak, aborted = 0, 0, None
         with ThreadPoolExecutor(max_workers=workers) as ex:
             futs = {ex.submit(_fetch_range, c, s, e): (c, s) for c, s, e in rest}
@@ -1140,8 +1155,11 @@ def update(codes=None, workers: int = 6, end: str | None = None,
                         for f in futs:
                             f.cancel()
                         raise
+                if n % PROGRESS_EVERY == 0:
+                    _progress(done_n(), len(plan))
                 if not quiet and n % 200 == 0:
                     print(f"  {n}/{len(rest)} … {time.time()-t0:.0f}s", flush=True)
+        _progress(done_n(), len(plan))
         if aborted is None:
             break
         # 已抓到的先落盘：等待期间被杀也不丢。

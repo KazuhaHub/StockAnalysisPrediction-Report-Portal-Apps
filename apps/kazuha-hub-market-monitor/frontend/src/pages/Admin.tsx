@@ -8,6 +8,7 @@ import {
   ConfigProvider,
   Empty,
   Popover,
+  Progress,
   Space,
   Spin,
   Tag,
@@ -32,6 +33,8 @@ import { useMediaQuery } from "../lib/hooks";
 // admin-surface assertion; this page only decides what to draw.
 
 const HISTORY_STEP = 20;
+// While a run is queued or running the page fetches jobs and runs again this often.
+const LIVE_REFRESH_MS = 15_000;
 const WEEKDAYS = [
   "Sunday",
   "Monday",
@@ -57,10 +60,14 @@ function useAdminResource<T>(path: string, revision: number) {
     const abort = new AbortController();
     get<T>(path, {}, abort.signal).then((result) => {
       if (abort.signal.aborted) return;
-      setState(
+      // A failed refresh keeps what is shown (and so the live refresh going);
+      // only a first load that fails shows the error.
+      setState((current) =>
         result.status === "ok"
           ? { phase: "ok", data: result.data }
-          : { phase: "error" },
+          : current.phase === "ok"
+            ? current
+            : { phase: "error" },
       );
     });
     return () => abort.abort();
@@ -112,6 +119,161 @@ export function formatSlot(slot: AdminSlot, locale: string): string {
   return `${days} ${pad(slot.hour)}:${pad(slot.minute)}`;
 }
 
+/** "2 h 5 min", "9 min" or "29 s". */
+export function formatDuration(seconds: number, copy: Copy): string {
+  const sec = Math.max(0, Math.round(seconds));
+  if (sec < 60) return fill(copy.dur_s, { s: sec });
+  if (sec < 3600) return fill(copy.dur_m, { m: Math.round(sec / 60) });
+  let h = Math.floor(sec / 3600);
+  let m = Math.round((sec % 3600) / 60);
+  if (m === 60) {
+    h += 1;
+    m = 0;
+  }
+  return fill(copy.dur_hm, { h, m });
+}
+
+const isActive = (run: AdminRun | null | undefined) =>
+  run?.status === "running" || run?.status === "queued";
+
+/** The current time, ticking every second while `on`. */
+function useNow(on: boolean) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!on) return;
+    setNow(Date.now());
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [on]);
+  return now;
+}
+
+/**
+ * How far a running run is. A job that reports counts is measured by them;
+ * any other against how long its recent successful runs took.
+ */
+function RunProgress({ run, typical }: { run: AdminRun; typical?: number }) {
+  const { copy, locale } = useCopy();
+  const running = run.status === "running";
+  const now = useNow(running);
+  const reduce = usePrefersReducedMotion();
+  if (run.status === "queued")
+    return (
+      <div className="mm-muted mm-admin-progress">{copy.admin_queuedWait}</div>
+    );
+  if (!running) return null;
+  const started = run.started_at ? Date.parse(run.started_at) : NaN;
+  const elapsed = Number.isNaN(started)
+    ? 0
+    : Math.max(0, (now - started) / 1000);
+  const p = run.progress;
+  const facts: string[] = [];
+  let percent: number | null = null;
+  let waiting: string | null = null;
+  if (p && p.total > 0) {
+    percent = Math.round((p.done / p.total) * 100);
+    facts.push(
+      fill(copy.admin_progressCount, {
+        done: p.done.toLocaleString(locale),
+        total: p.total.toLocaleString(locale),
+      }),
+    );
+    facts.push(
+      fill(copy.admin_elapsed, { time: formatDuration(elapsed, copy) }),
+    );
+    const until = p.waiting_until ? Date.parse(p.waiting_until) : NaN;
+    if (!Number.isNaN(until)) {
+      const left = (until - now) / 1000;
+      waiting =
+        left >= 1
+          ? fill(copy.admin_waiting, { time: formatDuration(left, copy) })
+          : copy.admin_waitingNow;
+    } else if (p.done > 0 && p.done < p.total) {
+      const left = (elapsed * (p.total - p.done)) / p.done;
+      facts.push(fill(copy.admin_eta, { time: formatDuration(left, copy) }));
+    }
+  } else {
+    facts.push(
+      fill(copy.admin_elapsed, { time: formatDuration(elapsed, copy) }),
+    );
+    if (typical && typical > 0) {
+      facts.push(
+        fill(copy.admin_typical, { time: formatDuration(typical, copy) }),
+      );
+      if (elapsed < typical) {
+        percent = Math.round((elapsed / typical) * 100);
+        facts.push(
+          fill(copy.admin_eta, {
+            time: formatDuration(typical - elapsed, copy),
+          }),
+        );
+      } else {
+        percent = 99;
+        facts.push(copy.admin_overTypical);
+      }
+    }
+  }
+  return (
+    <div className="mm-admin-progress">
+      {percent !== null && (
+        <div
+          role="progressbar"
+          aria-label={fill(copy.admin_progressLabel, { job: run.job })}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={percent}
+        >
+          <Progress
+            percent={percent}
+            size="small"
+            status={reduce ? "normal" : "active"}
+            aria-hidden
+          />
+        </div>
+      )}
+      <span className="mm-muted mm-admin-run-line">
+        {facts.map((f) => (
+          <span key={f}>{f}</span>
+        ))}
+      </span>
+      {waiting && (
+        <Alert
+          type="warning"
+          showIcon
+          title={waiting}
+          className="mm-admin-waiting"
+        />
+      )}
+    </div>
+  );
+}
+
+/** Why a run failed, in words, with the log line behind it; the bare code for an older backend. */
+function FailureReasonLine({ run }: { run: AdminRun }) {
+  const { copy } = useCopy();
+  if (run.reason) {
+    const words =
+      (copy as Record<string, string>)[`reason_${run.reason}`] ??
+      copy.reason_unknown;
+    return (
+      <span className="mm-admin-reason">
+        <span className="mm-admin-reason-words">{words}</span>
+        {run.reason_detail && (
+          <code className="mm-admin-code mm-admin-reason-detail">
+            {run.reason_detail}
+          </code>
+        )}
+      </span>
+    );
+  }
+  if (!run.error) return null;
+  return (
+    <span>
+      {copy.run_error} <code className="mm-admin-code">{run.error}</code>
+    </span>
+  );
+}
+
 const STATUS_TONE: Record<string, string> = {
   succeeded: "success",
   failed: "error",
@@ -149,7 +311,7 @@ function StatusIcon({ status }: { status: string }) {
       );
     case "running":
       return (
-        <svg {...common}>
+        <svg {...common} className="mm-spin">
           <path d="M6 1.5a4.5 4.5 0 1 0 4.5 4.5" />
         </svg>
       );
@@ -236,6 +398,14 @@ export function AdminPage() {
   });
   const zone =
     jobs.state.phase === "ok" ? jobs.state.data.time_zone : "Asia/Shanghai";
+  const live =
+    jobs.state.phase === "ok" &&
+    jobs.state.data.jobs.some((job) => isActive(job.last_run));
+  useEffect(() => {
+    if (!live) return;
+    const id = setInterval(() => setRevision((n) => n + 1), LIVE_REFRESH_MS);
+    return () => clearInterval(id);
+  }, [live]);
   return (
     <div className="mm">
       <Space orientation="vertical" size="middle" style={{ width: "100%" }}>
@@ -345,15 +515,19 @@ function JobRow({
                   locale,
                   zone,
                 )}
-                {last.error && (
-                  <code className="mm-admin-code"> {last.error}</code>
-                )}
               </>
             ) : (
               copy.admin_never
             )}
           </span>
         </div>
+        {last && isActive(last) && (
+          <RunProgress run={last} typical={job.typical_seconds} />
+        )}
+        {last &&
+          (last.status === "failed" || last.status === "interrupted") && (
+            <FailureReasonLine run={last} />
+          )}
       </div>
       <RunNow job={job.name} onQueued={onQueued} />
     </div>
@@ -545,13 +719,10 @@ function RunList({ runs, zone }: { runs: AdminRun[]; zone: string }) {
           <span>
             {copy.run_attempt} {run.attempt}
           </span>
-          {run.error && (
-            <span>
-              {copy.run_error}{" "}
-              <code className="mm-admin-code">{run.error}</code>
-            </span>
-          )}
         </span>
+        {(run.status === "failed" || run.status === "interrupted") && (
+          <FailureReasonLine run={run} />
+        )}
       </div>
     ),
     children: <RunDetail run={run} />,

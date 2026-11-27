@@ -585,6 +585,44 @@ class T(unittest.TestCase):
         st = md._read_meta()["stocks"]
         self.assertTrue(all(v["last"] == "2024-01-03" for v in st.values()))
 
+    def test_update_reports_progress_and_waits_for_the_admin_page(self):
+        """管理页的进度条读日志里的 ##progress / ##waiting 行，quiet 时也要打。"""
+        import contextlib
+        import io
+        md.ingest([rec(f"6000{i:02d}", [("2024-01-02", 1, 2, 0.5, 1.5)])
+                   for i in range(16)])
+        slept = self._with_clock(3600)
+        state = {"down": False}
+        real_fetch, real_ping = md._fetch_range, md._ping
+        md._ping = lambda: None
+
+        def fake(c, s, e):
+            if c == "600003":
+                state["down"] = True
+            if state["down"]:
+                if slept:
+                    state["down"] = False
+                else:
+                    raise RuntimeError("数据源报错：connection reset")
+            return self._bar_fetch(c, s, e)
+
+        md._fetch_range = fake
+        buf = io.StringIO()
+        try:
+            with contextlib.redirect_stdout(buf):
+                md.update(end="2024-01-03", workers=1, quiet=True)
+        finally:
+            md._fetch_range, md._ping = real_fetch, real_ping
+        marks = [ln for ln in buf.getvalue().splitlines() if ln.startswith("##")]
+        progress = [tuple(map(int, ln.split()[1].split("/"))) for ln in marks if ln.startswith("##progress ")]
+        self.assertEqual(progress[0], (1, 16))                 # 开头的探针票已算完成
+        self.assertEqual(progress[-1], (16, 16))
+        self.assertEqual([d for d, _ in progress], sorted(d for d, _ in progress))
+        self.assertIn("##waiting 1005", marks)                 # 假时钟从 1000 起，先等 5 秒
+        # 恢复后新一轮立刻报进度，管理页不会一直停在"等待中"。
+        after = marks[marks.index("##waiting 1005") + 1:]
+        self.assertTrue(after and after[0].startswith("##progress "), after)
+
     def test_update_gives_up_when_the_next_wait_would_pass_its_budget(self):
         md.ingest([rec(f"6000{i:02d}", [("2024-01-02", 1, 2, 0.5, 1.5)])
                    for i in range(16)])

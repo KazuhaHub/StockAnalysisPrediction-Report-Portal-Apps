@@ -118,7 +118,31 @@ export type AdminRun = {
   exit_code: number;
   error?: string;
   installed?: string[];
+  /** Set while the run is running and the job reports counts. */
+  progress?: AdminProgress;
+  /** Set once the run failed: a closed set of reasons, and the log line that shows it. */
+  reason?: FailureReason;
+  reason_detail?: string;
 };
+export type AdminProgress = {
+  done: number;
+  total: number;
+  /** While the job waits for its data source: when it tries again. */
+  waiting_until?: string;
+};
+export type FailureReason =
+  | "timeout"
+  | "interrupted"
+  | "out_of_memory"
+  | "store_incomplete"
+  | "quality_gate"
+  | "source_unavailable"
+  | "output_missing"
+  | "not_refreshed"
+  | "environment"
+  | "output_invalid"
+  | "service_error"
+  | "unknown";
 export type AdminSlot = {
   days: string[];
   hour: number;
@@ -130,6 +154,8 @@ export type AdminJob = {
   schedule: AdminSlot[];
   next_run?: string;
   last_run: AdminRun | null;
+  /** Median duration of recent successful runs, in seconds. */
+  typical_seconds?: number;
 };
 export type AdminJobs = { time_zone: string; jobs: AdminJob[] };
 export type AdminRuns = { runs: AdminRun[] };

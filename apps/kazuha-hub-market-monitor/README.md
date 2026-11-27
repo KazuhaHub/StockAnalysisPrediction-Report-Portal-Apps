@@ -46,8 +46,15 @@ schedule in Beijing time, next run and last run (status as icon, word and
 colour), a *Run now* button behind a confirmation dialog (focus starts on
 Cancel; one `request_id` per opened dialog, reused for retries), and a *Run
 history* list whose rows expand, animated unless reduced motion is requested,
-to the run's log tail. Preview it with `?surface=admin` (below); the mock serves
-the admin routes only for that view, like the service.
+to the run's log tail. A running job shows a progress bar: by count when the
+job prints `##progress <done>/<total>` lines (marketdata, every 100 stocks, plus
+`##waiting <unix seconds>` while it waits for its source), otherwise against
+the median of its last five successful runs (`typical_seconds`). A failed run
+shows one of a closed set of reasons (`reason`, translated on the page) and the
+log line behind it (`reason_detail`); `service/progress.go` derives both from
+the log, so the run index keeps its shape. The page refreshes every 15 s while
+a run is queued or running. Preview it with `?surface=admin` (below); the mock
+serves the admin routes only for that view, like the service.
 
 Open `http://127.0.0.1:5173/`. `dev/host.html` is a stand-in host using the
 SDK's `createBridgeHost` in a sandboxed frame; `?path=/margin&dark=1&locale=en-US`
@@ -91,8 +98,8 @@ socket:
 | `GET /v1/margin/rows?mechanism=<name>[\|<name>]` | viewer | margin only: keep rows matching any named passive-selling mechanism (`res2`, `pledge`, `unlock`, `cb`, `block`); an unknown or repeated name is a 400 |
 | `GET /v1/{module}/rows/{code}?date=` | viewer | one row and its detail |
 | `GET /v1/{module}/history/dates`, `history`, `compare`, `streak`, `counts` | viewer | cross-day queries over the history files (margin, panorama, etf; 404 for risk and sentiment); one at a time, 4 s limit, bounds in [docs/store-v2.md](docs/store-v2.md) |
-| `GET /v1/admin/jobs` | admin view | each job: schedule slots, next run, last run |
-| `GET /v1/admin/runs` | admin view | full run history with source (`schedule`, `bootstrap`, `manual`, `platform`), attempt, error code and installed outputs |
+| `GET /v1/admin/jobs` | admin view | each job: schedule slots, next run, last run, `typical_seconds` |
+| `GET /v1/admin/runs` | admin view | full run history with source (`schedule`, `bootstrap`, `manual`, `platform`), attempt, error code, installed outputs, `progress` while running and `reason`/`reason_detail` once failed |
 | `GET /v1/admin/runs/{id}/log` | admin view | last 64 KiB of the run's log, with a `truncated` flag |
 | `POST /v1/admin/jobs/{job}/run` | admin view | Run now: body `{"request_id": "<uuid>"}`; 202 `{run, duplicate}` |
 

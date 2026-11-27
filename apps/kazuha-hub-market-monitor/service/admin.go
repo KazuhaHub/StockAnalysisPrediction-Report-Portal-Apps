@@ -39,6 +39,10 @@ type AdminRun struct {
 	ExitCode   int      `json:"exit_code"`
 	Error      string   `json:"error,omitempty"`
 	Installed  []string `json:"installed,omitempty"`
+	// Progress is set while the run is running, Reason once it failed.
+	Progress     *AdminProgress `json:"progress,omitempty"`
+	Reason       string         `json:"reason,omitempty"`
+	ReasonDetail string         `json:"reason_detail,omitempty"`
 }
 
 // runSource derives who started a run from its task ID: the scheduler uses
@@ -81,6 +85,8 @@ type jobView struct {
 	Schedule []slotView `json:"schedule"`
 	NextRun  string     `json:"next_run,omitempty"`
 	LastRun  *AdminRun  `json:"last_run"`
+	// TypicalSeconds is how long recent successful runs took, 0 if unknown.
+	TypicalSeconds int `json:"typical_seconds,omitempty"`
 }
 
 func (s *server) adminRead(w http.ResponseWriter, r *http.Request) {
@@ -96,7 +102,11 @@ func (s *server) adminRead(w http.ResponseWriter, r *http.Request) {
 		runs := s.runner.allRuns()
 		out := make([]AdminRun, len(runs))
 		for i, run := range runs {
-			out[i] = adminRunOf(run)
+			if i < reasonedRuns || run.Status == "running" {
+				out[i] = s.adminRunView(run)
+			} else {
+				out[i] = adminRunOf(run)
+			}
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"runs": out})
 	case len(parts) == 3 && parts[0] == "runs" && parts[2] == "log":
@@ -139,8 +149,9 @@ func (s *server) adminJobs(w http.ResponseWriter) {
 			view.NextRun = next.Format(time.RFC3339)
 		}
 		if runs := s.runner.runsOf(name); len(runs) > 0 {
-			last := adminRunOf(runs[0])
+			last := s.adminRunView(runs[0])
 			view.LastRun = &last
+			view.TypicalSeconds = typicalSeconds(runs)
 		}
 		jobs = append(jobs, view)
 	}
