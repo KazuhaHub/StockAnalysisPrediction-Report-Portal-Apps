@@ -672,14 +672,28 @@ def store_day_counts(md_home):
     return dict(sorted(zip(g["day"].to_pylist(), g["code_count_distinct"].to_pylist())))
 
 
+def store_day_counts_isolated(md_home, timeout=600):
+    """store_day_counts in a short-lived child. Reading the partition in this
+    process kept ~425 MiB for the whole run, and the job's own pipeline runs
+    under it inside the same 2 GiB limit."""
+    code = ("import json, sys; sys.path.insert(0, sys.argv[1]); import mm_job; "
+            "print(json.dumps(mm_job.store_day_counts(sys.argv[2])))")
+    r = subprocess.run([sys.executable, "-P", "-c", code, HERE, md_home],
+                       capture_output=True, text=True, timeout=timeout, check=True)
+    return json.loads(r.stdout)
+
+
 def incomplete_store(job, work):
     """Why the job must not run on the store as it is, or None. An unreadable
     store, or one too young to compare, is left for the job itself to report."""
     if job not in STORE_READERS:
         return None
     try:
-        counts = store_day_counts(os.path.join(work, "MarketData"))
-    except Exception:  # noqa: BLE001
+        counts = store_day_counts_isolated(os.path.join(work, "MarketData"))
+    except Exception as e:  # noqa: BLE001
+        err = (getattr(e, "stderr", None) or "").strip().splitlines()[-1:]
+        print(f"[mm_job] store coverage check skipped: {type(e).__name__} {' '.join(err)}".rstrip(),
+              file=sys.stderr)
         return None
     days = list(counts)
     if len(days) < 2:
