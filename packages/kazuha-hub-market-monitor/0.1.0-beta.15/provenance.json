@@ -1,0 +1,12 @@
+{
+  "app_id": "kazuha-hub-market-monitor",
+  "version": "0.1.0-beta.15",
+  "commit": "54df842380b05f71706fe30d31d69e299861bb0b",
+  "run_url": "https://github.com/KazuhaHub/StockAnalysisPrediction-Report-Portal-Apps/actions/runs/45924181899",
+  "package_oci": {
+    "repository": "ghcr.io/kazuhahub/portal-apps/kazuha-hub-market-monitor",
+    "digest": "sha256:4be7bccbba7432fbf0850d77d3b56be9350551f6634c3a0519e39ba59e82e1a2"
+  },
+  "package_sha256": "21bdea3bad1d57e2914410c5ae134d698f09afee53e97f14d002daa64c7541f1",
+  "notes": "\u591c\u95f4\u884c\u60c5\u66f4\u65b0\u4e0d\u518d\u56e0\u6570\u636e\u6e90\u4e2d\u65ad\u800c\u6574\u665a\u4e22\u5931\uff1a\u8fb9\u53d6\u8fb9\u5b58\uff0c\u6bcf 1000 \u53ea\u5b58\u4e00\u6b21\uff1b\u6570\u636e\u6e90\u4e2d\u65ad\u65f6\u6309 5 \u79d2\u300110 \u79d2\u300130 \u79d2\u30011 \u5206\u949f\u30012 \u5206\u949f\u30015 \u5206\u949f\u9010\u6b65\u7b49\u5f85\u540e\u7ee7\u7eed\uff1b\u884c\u60c5\u6700\u957f\u53ef\u8dd1 6 \u5c0f\u65f6\uff0c\u5e76\u5728 23:30\u300102:00\u300105:00 \u81ea\u52a8\u63a5\u7740\u8865\u3002\u884c\u60c5\u5e93\u5f53\u5929\u4e0d\u5b8c\u6574\u65f6\uff0c\u91cf\u5316\u4e0e\u60c5\u7eea\u4e0d\u518d\u53d1\u5e03\u534a\u6210\u54c1\uff0c\u4fdd\u7559\u4e0a\u4e00\u4efd\u5b8c\u6574\u7ed3\u679c\uff0c\u8865\u9f50\u540e\u5728\u65e9\u4e0a 06:00 \u81f3 06:30 \u91cd\u65b0\u8ba1\u7b97\u3002The nightly bar update now saves every 1,000 stocks, waits out source outages with backoff (5 s to 5 min) and resumes, may run 6 hours, and catches up at 23:30, 02:00 and 05:00. Quant and sentiment no longer publish from a half-written day; they keep the last complete result and run again at 06:00-06:30 once the store is complete."
+}
