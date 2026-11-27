@@ -43,7 +43,7 @@ func jobSpecs() []JobSpec {
 		return JobSpec{Name: name, Command: []string{python, entry, name}, Timeout: timeout}
 	}
 	return []JobSpec{
-		spec("marketdata", 4*time.Hour),
+		spec("marketdata", 6*time.Hour),
 		spec("sentiment", 90*time.Minute),
 		spec("panorama", 2*time.Hour),
 		spec("etf", 90*time.Minute),

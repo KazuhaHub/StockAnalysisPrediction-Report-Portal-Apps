@@ -98,10 +98,18 @@ socket:
 
 **Schedule.** The platform cannot yet originate tasks for a managed backend
 (its `tasks/background` route is not reachable from a networkless container),
-so the service keeps the pipeline's timetable itself, in Beijing time: marketdata Mon–Fri 21:00 with a 23:30 fallback; sentiment
-00:40, panorama 00:50 and ETF 08:00 Tue–Sat; margin Mon–Fri 09:00 with a 09:50
-fallback; quant Tue–Sat 01:00 with a 03:00 fallback, after the night's marketdata. A fallback runs only when no run of the job queued earlier that day
-(scheduled or manual) succeeded or is pending. Each occurrence is one run with task ID
+so the service keeps the pipeline's timetable itself, in Beijing time: marketdata Mon–Fri 21:00 with
+fallbacks at 23:30 and, Tue–Sat, 02:00 and 05:00 (each resumes where the last run stopped: the update
+saves every 1,000 stocks); sentiment 00:40 and panorama 00:50 Tue–Sat with fallbacks at 06:00 and
+06:10; ETF 08:00 Tue–Sat; margin Mon–Fri 09:00 with a 09:50 fallback; quant Tue–Sat 01:00 with
+fallbacks at 03:00 and 06:30. A fallback runs only when no run of the job queued in the 12 hours before
+it (scheduled or manual) succeeded or is pending; for sentiment, panorama and quant a success counts only
+if it started after the latest successful marketdata run finished, so a reader that ran on the day before
+runs again once a late catch-up completes the store. Before 18:00 a marketdata run updates only up to the
+previous trading day. Marketdata may run 6 hours; inside a run, when the quote source drops, the update
+waits 5 s, 10 s, 30 s, 60 s, 2 min, then every 5 min, probing one stock, and carries on when it answers;
+it stops fetching after 5 hours (MD_UPDATE_BUDGET_S), saves what it has and leaves the rest to the next
+catch-up. Jobs run one at a time, so a long late catch-up delays the morning's ETF and margin runs. Each occurrence is one run with task ID
 `schedule/<job>/<YYYY-MM-DDTHH:MM>`, so ticks and restarts never repeat it; on
 start, each slot's latest occurrence in the past 20 hours runs once if it never
 did.
@@ -200,7 +208,9 @@ calendar and publish HTML to nginx.
 Exit codes: the pipeline's own non-zero code, passed through; 2 usage; 91
 output missing; 92 output not written by this run; 93 environment (the
 `/opt/daily-tasks` link, or the data server's port is taken or it did not
-start). The data server logs to `/data/work/stock_server/server.log`.
+start); 94 store incomplete (quant and sentiment refuse while the store's
+latest day has fewer than 97% of the stocks of the busiest of the five days
+before it, so the page keeps the last complete result). The data server logs to `/data/work/stock_server/server.log`.
 
 Deployment constraint: one `/data` has one runner. Clearing stale locks
 assumes no other container or hand-run pipeline script writes the same work

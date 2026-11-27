@@ -137,6 +137,81 @@ func TestFallbackSlotRunsOnlyIfTheDaysPrimaryDidNotSucceed(t *testing.T) {
 	}
 }
 
+func TestNightCatchUpsBackUpTheEveningMarketdataRuns(t *testing.T) {
+	// 2026-11-26: the 21:00 update stopped early and the 23:30 fallback was
+	// killed. The catch-ups after midnight look back over the evening, not
+	// only their own calendar day.
+	for name, c := range map[string]struct {
+		evening string
+		want    string
+	}{
+		"evening failed":    {"failed", "marketdata"},
+		"evening succeeded": {"succeeded", ""},
+		"evening running":   {"running", ""},
+	} {
+		now := at(time.Monday, 21, 0).Add(10 * time.Second)
+		s, r := schedulerFor(t, &now)
+		s.lastTick = at(time.Monday, 20, 59)
+		first := s.Tick()
+		if submitted(first) != "marketdata" {
+			t.Fatalf("%s: 21:00 %q", name, submitted(first))
+		}
+		r.update(first[0].ID, func(run *Run) { run.Status = c.evening })
+		now = at(time.Tuesday, 2, 0).Add(10 * time.Second)
+		s.lastTick = at(time.Tuesday, 1, 59)
+		if got := submitted(s.Tick()); got != c.want {
+			t.Errorf("%s: 02:00 %q, want %q", name, got, c.want)
+		}
+	}
+}
+
+func TestReaderCatchUpRerunsAfterALateBarsUpdate(t *testing.T) {
+	// The 21:00 update fails, quant succeeds at 01:00 on the day before, a
+	// later catch-up completes the store: quant's 06:30 catch-up runs again.
+	// Without a later bar update, the 01:00 success stands.
+	for name, late := range map[string]string{"late update": "succeeded", "update still running": "running", "no update": ""} {
+		lateUpdate := late != ""
+		now := at(time.Monday, 21, 0).Add(10 * time.Second)
+		s, r := schedulerFor(t, &now)
+		s.lastTick = at(time.Monday, 20, 59)
+		md := s.Tick()
+		r.update(md[0].ID, func(run *Run) { run.Status = "failed" })
+		now = at(time.Tuesday, 1, 0).Add(10 * time.Second)
+		s.lastTick = at(time.Tuesday, 0, 59)
+		q := s.Tick()
+		if submitted(q) != "quant" {
+			t.Fatalf("%s: 01:00 %q", name, submitted(q))
+		}
+		r.update(q[0].ID, func(run *Run) {
+			run.Status = "succeeded"
+			run.StartedAt = at(time.Tuesday, 1, 0).UTC().Format(time.RFC3339Nano)
+		})
+		if lateUpdate {
+			now = at(time.Tuesday, 5, 0).Add(10 * time.Second)
+			s.lastTick = at(time.Tuesday, 4, 59)
+			lateRun := s.Tick()
+			if submitted(lateRun) != "marketdata" {
+				t.Fatalf("%s: 05:00 %q", name, submitted(lateRun))
+			}
+			r.update(lateRun[0].ID, func(run *Run) {
+				run.Status = late
+				if late == "succeeded" {
+					run.FinishedAt = at(time.Tuesday, 5, 40).UTC().Format(time.RFC3339Nano)
+				}
+			})
+		}
+		now = at(time.Tuesday, 6, 30).Add(10 * time.Second)
+		s.lastTick = at(time.Tuesday, 6, 29)
+		want := ""
+		if lateUpdate {
+			want = "quant"
+		}
+		if got := submitted(s.Tick()); got != want {
+			t.Errorf("%s: 06:30 %q, want %q", name, got, want)
+		}
+	}
+}
+
 func TestSchedulerOccurrencesSurviveARestart(t *testing.T) {
 	now := at(time.Monday, 21, 0).Add(30 * time.Second)
 	s, r := schedulerFor(t, &now)
@@ -170,10 +245,15 @@ func TestDefaultSlotsMatchThePipelineTimers(t *testing.T) {
 		"margin FriMonThuTueWed 09:50",
 		"marketdata FriMonThuTueWed 21:00",
 		"marketdata FriMonThuTueWed 23:30",
+		"marketdata FriSatThuTueWed 02:00",
+		"marketdata FriSatThuTueWed 05:00",
 		"panorama FriSatThuTueWed 00:50",
+		"panorama FriSatThuTueWed 06:10",
 		"quant FriSatThuTueWed 01:00",
 		"quant FriSatThuTueWed 03:00",
+		"quant FriSatThuTueWed 06:30",
 		"sentiment FriSatThuTueWed 00:40",
+		"sentiment FriSatThuTueWed 06:00",
 	}
 	if strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Fatalf("slots:\n%s", strings.Join(got, "\n"))
